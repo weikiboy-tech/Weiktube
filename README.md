@@ -20,6 +20,47 @@ für Abos/Playlists ist separat; die öffentliche APK-Veröffentlichung erweiter
 keine Google-Cloud-Testnutzerfreigaben. Deren öffentlicher Freigabestatus ist nicht
 verifiziert. Weiktube ist ein eigenständiges Projekt, keine offizielle YouTube-App.
 
+### 🧪 Experimental Software – We don't give a fuck (mostly)
+
+Weiktube ist ein unabhängiges, experimentelles Hobbyprojekt und kein fertig
+ausgereiftes kommerzielles Produkt. **Production ready? Absolutely fucking not.**
+Built with curiosity, questionable decisions and an unreasonable amount of debugging.
+
+> Weiktube ist experimentelle Software. Bugs sind keine Überraschung, sondern Teil
+> des Erlebnisses. Kommentare funktionieren nicht? Uns doch egal.
+
+**Known bugs? Yes. Do we care? Depends on the bug.** Ja, wir wissen, dass Bugs
+existieren. Nein, wir werden nicht jeden winzigen Schönheitsfehler bis zur Rente
+wegpolieren. Solange Videos laufen und die App ihren Hauptzweck erfüllt, sind wir
+erst mal glücklich. Der schiefe Pixel darf vorerst mietfrei wohnen.
+
+- Kommentare hinzufügen funktioniert nicht? Bei dieser Komfortfunktion geben wir
+  ehrlich gesagt **0 Fick** auf einen perfekten YouTube-Nachbau.
+- Irgendein YouTube-Feature fehlt? Willkommen bei experimenteller Software.
+  Die Vollständigkeitsabteilung besteht aus einem leeren Stuhl.
+- Gestern ging's, heute nicht mehr? YouTube hat vermutlich wieder irgendwas
+  geändert. Überraschung, wir stehen nicht auf deren Verteiler.
+
+Wer eine perfekte App erwartet, ist hier eindeutig falsch. Wer eine experimentelle
+YouTube-Alternative mit eingebautem AdBlock-Tab ausprobieren möchte: herzlich willkommen.
+Den tatsächlichen Filterumfang findest du unter [Adblock und Datenschutz](#adblock-und-datenschutz);
+YouTube-Werbung ist davon ausgenommen.
+**Bug reports are welcome. Whether we fix them is another story.**
+
+**😂 Bitcoin-Miner-Easter-Egg:**
+
+„Wir haben übrigens unser Bestes gegeben, damit der eingebaute Bitcoin-Miner
+möglichst wenig RAM verbraucht. 😉“
+
+**Das ist ein Witz. Weiktube enthält keinen Bitcoin-Miner.** Keine Mining-Funktion,
+kein heimlicher Nebenjob für dein Handy. Der Miner existiert ausschließlich in
+diesem schlechten Witz.
+
+**Wo der Spaß aufhört:** Sicherheitslücken, Datenschutzfehler, Datenverlust und
+schwerwiegende Defekte nehmen wir ausdrücklich ernst. Bitte melden. Das
+„juckt uns nicht“ gilt für harmlose Macken und fehlende Komfortfunktionen – nicht
+für deine Daten, deine Sicherheit oder eine App, die ihren Hauptzweck nicht erfüllt.
+
 ## Vorherige Entwicklungsschritte
 
 ### Website-Anmeldung aus 1.3.1
