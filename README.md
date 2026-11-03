@@ -1,4 +1,12 @@
-# Weiktube 1.2.3
+# Weiktube 1.2.4-home-test
+
+Dieser Entwicklungsstand ergänzt ausschließlich den ausdrücklichen
+[Homepage-Verbindungstest](HOME-CONNECTION-TEST.md) unter „Du / Konto“. Player und
+bisherige Startseite bleiben erhalten. Eine echte Google-Anmeldung und der
+personalisierte Home-Abruf sind noch nicht auf dem Zielgerät bestätigt; die neue
+Datenquelle ist deshalb noch nicht an die native Startseite angeschlossen.
+
+## Erhaltener Ausgangsstand 1.2.3
 
 Der separate GeckoView-Test wurde zurückgenommen. Die Original-App und ihre APK
 sind unverändert erhalten. Sicherung, Dateivergleich und die konkrete Grenze der

@@ -139,7 +139,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                 when (a.tab) {
                     2 -> SettingsScreen(prefs, model, a, shieldsOnly = true)
                     3 -> SubscriptionsScreen(a.subscriptionFeed, a.youtubeAccount, a::openVideo, a::openAccountUrl)
-                    4 -> AccountScreen(a.youtubeAccount, a::openAccountUrl)
+                    4 -> AccountScreen(a.youtubeAccount, a::openAccountUrl, homeConnection = { HomeConnectionEntry(a, a.youtubeAccount) })
                     5 -> SettingsScreen(prefs, model, a)
                     6 -> HistoryScreen(prefs, model, a)
                     else -> {

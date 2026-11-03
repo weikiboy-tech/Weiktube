@@ -224,6 +224,7 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent.createChooser(choices.first(), "Extern öffnen").putExtra(Intent.EXTRA_INITIAL_INTENTS, choices.drop(1).toTypedArray()))
     }
     fun clearWebData() {
+        com.weiktube.home.HomeEngine.clearIfInitialized(this)
         hideFullscreen()
         browser.closeSearch(); shorts?.closeSearch()
         browser.pauseMedia(); shorts?.pauseMedia(); player.close()

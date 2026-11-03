@@ -1,21 +1,22 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 android {
     namespace = "com.weiktube.app"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.weiktube.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.2.3"
+        versionCode = 7
+        versionName = "1.2.4-home-test"
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
+    packaging { jniLibs { useLegacyPackaging = true } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -23,6 +24,7 @@ android {
 }
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 dependencies {
+    implementation(project(":home-data"))
     testImplementation("org.json:json:20240303")
     implementation(platform("androidx.compose:compose-bom:2025.02.00"))
     implementation("androidx.activity:activity-compose:1.10.1")
@@ -37,6 +39,14 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:22.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     testImplementation("junit:junit:4.13.2")
+}
+tasks.register("exportHomeConnectionApk") {
+    dependsOn("assembleDebug")
+    val sourceApk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
+    val exported = rootProject.layout.projectDirectory.file("Weiktube-Home-Test.apk")
+    inputs.file(sourceApk)
+    outputs.file(exported)
+    doLast { sourceApk.get().asFile.copyTo(exported.asFile, overwrite = true) }
 }
 tasks.register("exportWeiktubeApk") {
     dependsOn("assembleDebug")
