@@ -49,6 +49,15 @@ class OriginalHomeController(
     private lateinit var autofill: OriginalHomeAutofill
     private lateinit var autofillButton: Button
     private val autofillActions: LinearLayout
+    private lateinit var accountStrip: LinearLayout
+    private lateinit var accountHost: TextView
+    private lateinit var accountExit: Button
+    private val accountSetup = WebsiteAccountSetup(
+        { HomeEngine.websiteSetupPresented(activity) },
+        { HomeEngine.recordWebsiteSetupPresented(activity) },
+    )
+    private var presentationCheckPosted = false
+    private var accountLoadError = false
     private var autofillRevision = 0
     private val autofillLoading = mutableSetOf<GeckoSession>()
     private var runtime: GeckoRuntime? = null
@@ -87,19 +96,34 @@ class OriginalHomeController(
     init {
         root = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(18, 18, 18)) }
         val toolbar = LinearLayout(activity).apply { gravity = Gravity.CENTER_VERTICAL; importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS }
-        listOf("‹" to { if (!back()) onExit() }, "Home" to { goHome() }, "Konto" to { account() },
+        listOf("‹" to { if (!back()) onExit() }, "Home" to { goHome() }, "Konto" to { openWebsiteAccount() },
             "Test" to { panel.visibility = if (panel.visibility == View.VISIBLE) View.GONE else View.VISIBLE },
             "×" to { onExit() }).forEach { (label, action) -> toolbar.addView(button(label, action), LinearLayout.LayoutParams(0, dp(46), 1f)) }
         if (!embedded) root.addView(toolbar)
         origin = label("Gecko · Webseite wird vorbereitet …", 12f)
         if (!embedded) root.addView(origin)
+        accountHost = label("YouTube-Anmeldung wird geöffnet …", 12f).apply { maxLines = 2 }
+        accountExit = button("Später") { cancelWebsiteAccountSetup() }
+        accountStrip = LinearLayout(activity).apply {
+            gravity = Gravity.CENTER_VERTICAL; visibility = View.GONE
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+            addView(accountHost, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(accountExit, LinearLayout.LayoutParams(dp(112), dp(48)))
+        }
+        if (embedded) root.addView(accountStrip)
         progress = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
         root.addView(progress, LinearLayout.LayoutParams(-1, dp(2)))
         status = label("Die YouTube-Startseite wird vorbereitet. Videotipps öffnen automatisch den Weiktube-Player.", 12f).apply { maxLines = 3 }
         status.visibility = if (embedded) View.GONE else View.VISIBLE
         root.addView(status)
         retryButton = button("Erneut versuchen") {
-            if (main == null && parkedToken != null) { clearSession(); setVisible(true) }
+            val retryAccount = accountSetup.active
+            if (main == null && parkedToken != null) {
+                clearSession()
+                if (retryAccount) openWebsiteAccount()
+                setVisible(true)
+            }
+            else if (retryAccount) navigate(WebsiteAccountSetup.ACCOUNT_URL)
             else if (main == null) resumeOrPrepare() else reload()
         }.apply { visibility = View.GONE }
         root.addView(retryButton)
@@ -155,8 +179,17 @@ class OriginalHomeController(
         if (disposed) return
         root.visibility = if (visible) View.VISIBLE else View.INVISIBLE
         if (!visible) { if (active) suspend(); return }
+        // Read the presentation marker again: explicit website-data deletion may have cleared it.
+        // Do not replace a pending deep link, retained player return, or an existing channel/search.
+        if (embedded && accountSetup.offerAutomatically(pendingNavigation == null && parkedToken == null &&
+                !openingPlayer && (main == null || OriginalHomePolicy.isHomePage(locations[main].orEmpty())))) {
+            pendingNavigation = WebsiteAccountSetup.ACCOUNT_URL
+            resetProof()
+            notifyNavigationState()
+        }
         if (active && parkedToken == null && pendingNavigation == null && !initialNavigationPending) {
             restoreVisibleFocus()
+            updateControls()
             return
         }
         if (!active) {
@@ -197,7 +230,9 @@ class OriginalHomeController(
         if (main == null && !openingPlayer && !preparing) prepare()
     }
 
-    fun onWindowFocusChanged(hasFocus: Boolean) { if (hasFocus) restoreVisibleFocus() }
+    fun onWindowFocusChanged(hasFocus: Boolean) {
+        if (hasFocus) { restoreVisibleFocus(); scheduleSetupPresentation() }
+    }
 
     private fun restoreVisibleFocus() {
         if (!restoreFocusPending || !active || openingPlayer || !activity.hasWindowFocus()) return
@@ -240,9 +275,12 @@ class OriginalHomeController(
         navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
                 if (!owns(session)) return decision(false)
-                if (!active) return decision(
-                    session in backgroundAuthentication && OriginalHomeBackground.navigation(request.uri) ||
-                        OriginalHomeTabBackground.navigation(locations[session].orEmpty(), request.uri, requestedNavigation[session]))
+                if (!active) {
+                    val allowed = session in backgroundAuthentication && OriginalHomeBackground.navigation(request.uri) ||
+                        OriginalHomeTabBackground.navigation(locations[session].orEmpty(), request.uri, requestedNavigation[session])
+                    if (allowed && session === (popup ?: main)) accountSetup.requestObserved(request.uri)
+                    return decision(allowed)
+                }
                 if (request.uri == "about:blank") return decision(true)
                 if (OriginalHomePolicy.isExplicitOAuthUrl(request.uri)) {
                     resetProof()
@@ -259,7 +297,9 @@ class OriginalHomeController(
                     }
                     return decision(false)
                 }
-                return decision(OriginalHomePolicy.allowedNavigation(request.uri))
+                val allowed = OriginalHomePolicy.allowedNavigation(request.uri)
+                if (allowed && session === (popup ?: main)) accountSetup.requestObserved(request.uri)
+                return decision(allowed)
             }
             override fun onSubframeLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
                 if (!owns(session)) return decision(false)
@@ -275,6 +315,10 @@ class OriginalHomeController(
                 invalidateAutofill()
                 locations[session] = url
                 if (url != "about:blank") requestedNavigation.remove(session)
+                if (session === (popup ?: main)) {
+                    recordSetupPresentationIfVisible()
+                    accountSetup.locationChanged(url)
+                }
                 if (!active) return
                 applyMediaPolicy(session)
                 if (OriginalHomePolicy.isNormalWebAuthUrl(url)) resetProof()
@@ -314,7 +358,10 @@ class OriginalHomeController(
                 return GeckoResult.fromValue(child)
             }
             override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? {
-                if (active && owns(session)) setStatus("Webseite nicht geladen. Gecko-Fehler ${error.category}/${error.code}. Dein bisheriges App-Konto bleibt unverändert.")
+                if (active && owns(session)) {
+                    setStatus("Webseite nicht geladen. Gecko-Fehler ${error.category}/${error.code}. Dein bisheriges App-Konto bleibt unverändert.",
+                        accountError = accountSetup.active || OriginalHomePolicy.isNormalWebAuthUrl(uri.orEmpty()))
+                }
                 return null
             }
         }
@@ -327,6 +374,7 @@ class OriginalHomeController(
                 documentSerial[session] = (documentSerial[session] ?: 0) + 1
                 locations[session] = url
                 if (url != "about:blank") requestedNavigation.remove(session)
+                if (session === (popup ?: main)) accountSetup.pageStarted(url)
                 progress.visibility = View.VISIBLE
                 if (!active) return
                 if (OriginalHomePolicy.isNormalWebAuthUrl(url)) resetProof()
@@ -339,7 +387,13 @@ class OriginalHomeController(
                 progress.visibility = View.GONE
                 if (active && owns(session)) {
                     updateControls()
-                    if (!success) setStatus("Die Webseite wurde nicht vollständig geladen. Home lädt sie erneut; eine sichtbare Google-Fehlermeldung bleibt unverändert.")
+                    if (!success) {
+                        setStatus("Die Webseite wurde nicht vollständig geladen. Home lädt sie erneut; eine sichtbare Google-Fehlermeldung bleibt unverändert.",
+                            accountError = accountSetup.active)
+                    } else if (accountLoadError && OriginalHomePolicy.isNormalWebAuthUrl(locations[session].orEmpty())) {
+                        accountLoadError = false
+                        setStatus("Die YouTube-Kontoseite ist geladen.", false)
+                    }
                 }
             }
         }
@@ -595,16 +649,28 @@ class OriginalHomeController(
             setStatus("Diese Adresse kann in der YouTube-Startseite nicht geöffnet werden.")
             return
         }
+        // Explicit app navigation ends the setup prompt; Google's own redirects do not call here.
+        if (accountSetup.active && !OriginalHomePolicy.isNormalWebAuthUrl(url)) accountSetup.dismiss()
+        if (accountLoadError && !OriginalHomePolicy.isNormalWebAuthUrl(url))
+            setStatus("Die YouTube-Startseite wird geöffnet …", false)
+        if (accountSetup.active && url == WebsiteAccountSetup.ACCOUNT_URL) {
+            accountLoadError = false
+            setStatus("Die YouTube-Anmeldung wird geöffnet …", false)
+        }
         pendingNavigation = url
+        updateControls()
+        notifyNavigationState()
         if (active) { resumeOrPrepare(); loadPendingNavigation() }
     }
 
     private fun loadPendingNavigation() {
         if (!active || openingPlayer || disposed) return
         val session = main ?: return
-        val destination = pendingNavigation ?: if (initialNavigationPending) HOME else return
+        val destination = pendingNavigation ?: if (initialNavigationPending)
+            if (accountSetup.active) WebsiteAccountSetup.ACCOUNT_URL else HOME else return
         pendingNavigation = null; initialNavigationPending = false
         closePopup()
+        if (accountSetup.active && destination == WebsiteAccountSetup.ACCOUNT_URL) accountSetup.loadIssued()
         requestedNavigation[session] = destination
         session.loadUri(destination)
     }
@@ -625,22 +691,31 @@ class OriginalHomeController(
             .setPositiveButton("Schließen", null).show()
     }
 
-    private fun account() {
-        if (!active) return
-        resetProof(); closePopup()
-        main?.loadUri("https://www.youtube.com/channel_switcher?next=%2F")
+    /** Reuse this controller/profile, including while Gecko is still preparing or Home is hidden. */
+    fun openWebsiteAccount() {
+        if (disposed || !accountSetup.begin()) return
+        resetProof()
+        navigate(WebsiteAccountSetup.ACCOUNT_URL)
+    }
+
+    private fun cancelWebsiteAccountSetup() {
+        // This explicit action also consumes an offer if its posted presentation check has not run.
+        accountSetup.dismiss()
+        navigate(HOME)
     }
     fun back(): Boolean {
         if (!active || disposed) return false
         val top = popup ?: main
+        if (accountSetup.active) accountSetup.presented()
         return when {
             top != null && history[top] == true -> { top.goBack(); true }
             popup != null -> { closePopup(); true }
+            accountSetup.active -> { cancelWebsiteAccountSetup(); true }
             else -> false
         }
     }
 
-    private fun notifyNavigationState() = onNavigationState(popup != null || history[popup ?: main] == true)
+    private fun notifyNavigationState() = onNavigationState(accountSetup.active || popup != null || history[popup ?: main] == true)
 
     private fun closePopup() {
         val child = popup ?: return
@@ -671,13 +746,15 @@ class OriginalHomeController(
             if (!audibleAuth) source.pause()
         }
     }
-    private fun setStatus(message: String, issue: Boolean = true) {
+    private fun setStatus(message: String, issue: Boolean = true, accountError: Boolean = false) {
+        accountLoadError = accountError
         status.text = message
         status.visibility = if (!embedded || issue) View.VISIBLE else View.GONE
         if (::retryButton.isInitialized) retryButton.visibility = if (embedded && issue) View.VISIBLE else View.GONE
     }
 
     private fun updateControls() {
+        updateAccountStrip()
         if (!::routingLabel.isInitialized) return
         routingLabel.text = if (handoff && connections[popup ?: main]?.acknowledged == true)
             "Videotipps öffnen automatisch im Weiktube-Player." else "Videoübergabe wird vorbereitet …"
@@ -686,6 +763,32 @@ class OriginalHomeController(
             autofillActions.visibility = if (active && target?.authPage == true) View.VISIBLE else View.GONE
             autofillButton.isEnabled = active && target?.documentReady == true && target.view.isShown
         }
+    }
+
+    private fun updateAccountStrip() {
+        if (!::accountStrip.isInitialized) return
+        val raw = locations[popup ?: main].orEmpty()
+        val authPage = OriginalHomePolicy.isNormalWebAuthUrl(raw)
+        accountStrip.visibility = if (embedded && (accountSetup.active || authPage)) View.VISIBLE else View.GONE
+        val parsed = runCatching { URI(raw) }.getOrNull()
+        accountHost.text = if (parsed?.scheme == "https" && parsed.host != null)
+            "YouTube-Konto · HTTPS\n${parsed.host}" else "YouTube-Anmeldung wird geöffnet …"
+        accountExit.text = if (accountSetup.automatic) "Später" else "Zur Startseite"
+        scheduleSetupPresentation()
+    }
+
+    private fun scheduleSetupPresentation() {
+        if (!embedded || !active || !accountSetup.active || presentationCheckPosted || disposed) return
+        presentationCheckPosted = true
+        root.post {
+            presentationCheckPosted = false
+            recordSetupPresentationIfVisible()
+        }
+    }
+
+    private fun recordSetupPresentationIfVisible() {
+        if (!disposed && active && accountSetup.active && root.isShown && accountStrip.isShown && activity.hasWindowFocus())
+            accountSetup.presented()
     }
     private fun stopSessions() {
         invalidateAutofill()
@@ -703,7 +806,10 @@ class OriginalHomeController(
     }
     private fun suspend() {
         backgroundAuthentication.clear()
-        listOfNotNull(main, popup).filterTo(backgroundAuthentication) { OriginalHomePolicy.isNormalWebAuthUrl(locations[it].orEmpty()) }
+        listOfNotNull(main, popup).filterTo(backgroundAuthentication) {
+            OriginalHomePolicy.isNormalWebAuthUrl(locations[it].orEmpty()) ||
+                OriginalHomePolicy.isNormalWebAuthUrl(requestedNavigation[it].orEmpty())
+        }
         active = false
         autofill.stop()
         invalidateAutofill()
@@ -720,6 +826,8 @@ class OriginalHomeController(
     /** Explicit data clearing is different from a tab or player transition. The view remains reusable. */
     fun clearSession() {
         if (disposed) return
+        accountSetup.finish() // Only the explicit HomeEngine data-clear operation resets the persistent marker.
+        accountLoadError = false
         suspend()
         stopSessions()
         discardOwnedReturn()

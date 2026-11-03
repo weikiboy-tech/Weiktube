@@ -10,8 +10,8 @@ android {
         applicationId = "com.weiktube.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.3.0-home-tab-test"
+        versionCode = 15
+        versionName = "1.3.1-website-login-test"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

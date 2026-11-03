@@ -1,4 +1,10 @@
-# Weiktube 1.3.0-home-tab-test
+# Weiktube 1.3.1-website-login-test
+
+Der [YouTube-Kontoeinstieg](WEBSITE-LOGIN-TEST.md) öffnet sich einmal automatisch
+und ist überspringbar. Unter **Du → Deine YouTube-Startseite → Bei YouTube anmelden /
+Konto wechseln** bleibt er dauerhaft erreichbar. Die bestehende Gecko-Sitzung
+wird verwendet; die Google-Freigabe für Abos und Playlists bleibt separat.
+Die einmalige Einrichtung erscheint auch nach dem Update von einer älteren Version.
 
 Die [originale YouTube-Startseite](HOME-TAB-TEST.md) ist direkt im unteren Tab
 **Startseite** eingebunden. Dieselbe Gecko-Integration wird als gemeinsamer

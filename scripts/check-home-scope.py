@@ -6,6 +6,12 @@ import json
 root = Path(__file__).resolve().parents[1]
 baseline = json.loads((root / "scripts/home-original-source-hashes.json").read_text(encoding="utf-8"))
 tab_review = json.loads((root / "scripts/home-tab-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
+website_login_hook = '''    fun openWebsiteAccount() {
+        // Queue before showing Home so a cold engine opens the account entry directly.
+        originalHome.openWebsiteAccount()
+        selectTab(0)
+    }
+'''
 allowed = {
     "app/src/main/java/com/weiktube/app/MainActivity.kt": [
         ("        com.weiktube.home.HomeEngine.clearIfInitialized(this)\n", ""),
@@ -127,6 +133,10 @@ for name, expected in baseline.items():
         failures.append(name + " missing")
         continue
     content = file.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if name == "app/src/main/java/com/weiktube/app/MainActivity.kt":
+        if content.count(website_login_hook) != 1:
+            failures.append(name + " website account hook missing or duplicated")
+        content = content.replace(website_login_hook, "", 1)
     # Reverse only the reviewed embedding hooks, then apply the pre-existing original-app check.
     # A new unreviewed edit outside these exact chunks still fails the original baseline hash.
     if name in tab_review:

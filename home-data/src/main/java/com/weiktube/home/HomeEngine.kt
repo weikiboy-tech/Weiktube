@@ -15,6 +15,15 @@ object HomeEngine {
     private const val PREFS = "weiktube_home_connection"
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    // A presentation marker, deliberately independent of the website/API account and old feed proof.
+    // clearIfInitialized() clears it only when the user explicitly deletes website data.
+    internal fun websiteSetupPresented(context: Context): Boolean =
+        prefs(context).getBoolean("website_account_setup_presented_v1", false)
+
+    internal fun recordWebsiteSetupPresented(context: Context) {
+        prefs(context).edit().putBoolean("website_account_setup_presented_v1", true).apply()
+    }
+
     fun prepare(context: Context, onReady: (GeckoRuntime) -> Unit, onFailure: () -> Unit) {
         check(Looper.myLooper() == Looper.getMainLooper())
         val app = context.applicationContext

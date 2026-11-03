@@ -73,6 +73,11 @@ class MainActivity : ComponentActivity() {
         selectTab(0)
         originalHomePlayer = false
     }
+    fun openWebsiteAccount() {
+        // Queue before showing Home so a cold engine opens the account entry directly.
+        originalHome.openWebsiteAccount()
+        selectTab(0)
+    }
     fun syncOriginalHomeVisibility() {
         if (!::originalHome.isInitialized) return
         originalHome.setVisible(isOriginalHomeVisible)

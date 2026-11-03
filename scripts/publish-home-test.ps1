@@ -2,14 +2,14 @@ param([switch]$Publish)
 $ErrorActionPreference='Stop'
 $project=Split-Path -Parent $PSScriptRoot
 $repo='weikiboy-tech/Weiktube'
-$tag='home-tab-1.3.0-test.1'
-$branch='home-tab-1.3.0'
-$baseCommit='2a6bfda6c8ad0064e6525c16d2baccd091291f22'
+$tag='website-login-1.3.1-test.1'
+$branch='website-login-1.3.1'
+$baseCommit='f3c4d8441b755193c8551ff4c0560d7410c1eb96'
 $apk=Join-Path $project 'Weiktube-Home-Test.apk'
 $source=Join-Path $project 'Weiktube-Quellcode.zip'
 foreach($file in @($apk,$source)) { if(-not (Test-Path -LiteralPath $file)) { throw 'Build, validate and package source before publishing' } }
 $hash=(Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
-$checksums=Join-Path $project 'validation/home-tab-SHA256SUMS.txt'
+$checksums=Join-Path $project 'validation/website-login-SHA256SUMS.txt'
 @("$hash  Weiktube-Home-Test.apk","$((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant())  Weiktube-Quellcode.zip") | Set-Content -LiteralPath $checksums -Encoding ascii
 if(-not $Publish) { Write-Output "Prepared test $tag; APK SHA256 $hash. No remote changes."; return }
 $env:GCM_INTERACTIVE='never'
@@ -25,7 +25,7 @@ if($releases | Where-Object tag_name -eq $tag) { throw 'Test release exists; ref
 $remote="https://github.com/$repo.git"
 $refs=git ls-remote $remote "refs/heads/$branch" "refs/tags/$tag"
 if($LASTEXITCODE -ne 0 -or $refs) { throw 'Cannot verify unused test refs' }
-$stage=Join-Path $project 'validation/home-tab-release-source'
+$stage=Join-Path $project 'validation/website-login-release-source'
 if(Test-Path -LiteralPath $stage) { throw 'Staging exists; review before retry' }
 Expand-Archive -LiteralPath $source -DestinationPath $stage
 Push-Location (Join-Path $stage 'Weiktube')
@@ -35,9 +35,9 @@ try {
  git config user.name $profile.login
  git config user.email "$($profile.id)+$($profile.login)@users.noreply.github.com"
  git remote add origin $remote
- git fetch origin gecko-return-1.2.9
+ git fetch origin home-tab-1.3.0
  if($LASTEXITCODE -ne 0) { throw 'Cannot fetch original history' }
- $parent=git rev-parse origin/gecko-return-1.2.9
+ $parent=git rev-parse origin/home-tab-1.3.0
  if($LASTEXITCODE -ne 0 -or $parent -ne $baseCommit) { throw 'Unexpected base commit; review source history before publishing' }
  python scripts/check-home-scope.py
  if($LASTEXITCODE -ne 0) { throw 'Original app scope verification failed' }
@@ -49,7 +49,7 @@ try {
  # verified parent without resetting, checking out or replacing any working tree.
  $tree=git write-tree
  if($LASTEXITCODE -ne 0) { throw 'Source tree failed' }
- $commit=git commit-tree $tree -p $baseCommit -m 'Embed the existing original YouTube home in the native Home tab'
+ $commit=git commit-tree $tree -p $baseCommit -m 'Restore website account access with skippable first-launch setup'
  if($LASTEXITCODE -ne 0) { throw 'Source commit failed' }
  git update-ref "refs/heads/$branch" $commit ('0' * 40)
  if($LASTEXITCODE -ne 0) { throw 'New staging branch creation failed' }
@@ -59,17 +59,17 @@ try {
  if($LASTEXITCODE -ne 0) { throw 'Test branch push failed' }
 } finally { Pop-Location }
 $notes=@'
-Weiktube 1.3.0-home-tab-test, code14, com.weiktube.app. Same package and signing certificate. Install as an update to retain the website profile.
+Weiktube 1.3.1-website-login-test, code15, com.weiktube.app. Same package and signing certificate. Install as an update to retain the website profile.
 
-The user-confirmed original YouTube homepage, video handoff and return from 1.2.9 are moved into the native Home tab. The existing Gecko implementation is extracted into one shared controller, not replaced with a new feed or player. The native bottom navigation stays outside the clipped content area. YouTube supplies the Home header; the Weiktube header remains on other tabs.
+The website account entry hidden by the embedded Home toolbar is reachable again. The existing YouTube account chooser opens once automatically, including once after this update, and can be skipped. A permanent sign-in/account-switch action is available under You. Both use the existing Gecko controller and profile.
 
-One controller owns the session for the MainActivity lifetime. Tab and foreground changes suspend and resume the existing page. Player handoff uses the existing validated return transaction and player function. The non-null parked ProgressDelegate fix is preserved. The old entry under You stays until device acceptance and points to the same Home instance.
+Only setup presentation is recorded, not authentication. Cookie consent and sign-in remain the original website pages. A compact setup/auth-only strip offers a return to Home. No API-token or browser-cookie transfer, new login parser, or security bypass is introduced.
 
-PlayerController, click bridge/video parsing, adblock engine and Google API account logic are unchanged. See HOME-TAB-TEST.md for the exact modifications, automated checks, lifecycle limits and required device tests. This is a test prerelease, not a claim of completed Android device acceptance.
+PlayerController, click bridge/video parsing, return transaction, adblock engine and Google API account logic are unchanged. See WEBSITE-LOGIN-TEST.md for exact modifications, automated checks and required device tests. No actual Google sign-in or Android device acceptance is claimed by this test prerelease.
 
 The stable update feed remains unchanged. ARM64 and x86-64, Android8+. No account sessions, credentials or device screenshots are bundled. Diagnostics use fixed reason codes, not sensitive website responses or URLs.
 '@
-$body=@{tag_name=$tag;target_commitish=$commit;name='Weiktube 1.3.0 - Original YouTube Home im Startseite-Tab';body=$notes;draft=$true;prerelease=$true;make_latest='false'} | ConvertTo-Json
+$body=@{tag_name=$tag;target_commitish=$commit;name='Weiktube 1.3.1 - YouTube-Anmeldung und Kontowechsel';body=$notes;draft=$true;prerelease=$true;make_latest='false'} | ConvertTo-Json
 $release=Invoke-RestMethod "https://api.github.com/repos/$repo/releases" -Headers $headers -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body))
 $upload=$release.upload_url -replace '\{.*$', ''
 if(-not $upload.StartsWith('https://uploads.github.com/')) { throw 'Unexpected upload origin' }
