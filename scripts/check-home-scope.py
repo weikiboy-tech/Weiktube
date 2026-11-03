@@ -5,6 +5,7 @@ import json
 
 root = Path(__file__).resolve().parents[1]
 baseline = json.loads((root / "scripts/home-original-source-hashes.json").read_text(encoding="utf-8"))
+tab_review = json.loads((root / "scripts/home-tab-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
 allowed = {
     "app/src/main/java/com/weiktube/app/MainActivity.kt": [
         ("        com.weiktube.home.HomeEngine.clearIfInitialized(this)\n", ""),
@@ -126,6 +127,16 @@ for name, expected in baseline.items():
         failures.append(name + " missing")
         continue
     content = file.read_text(encoding="utf-8").replace("\r\n", "\n")
+    # Reverse only the reviewed embedding hooks, then apply the pre-existing original-app check.
+    # A new unreviewed edit outside these exact chunks still fails the original baseline hash.
+    if name in tab_review:
+        review = tab_review[name]
+        for change in review["changes"]:
+            if content.count(change["current"]) != 1:
+                failures.append(name + " reviewed Home-tab hook missing or duplicated")
+            content = content.replace(change["current"], change["previous"], 1)
+        if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+            failures.append(name + " differs outside reviewed Home-tab changes")
     for added, original in allowed.get(name, []):
         if content.count(added) != 1:
             failures.append(name + " reviewed hook or copy missing or duplicated")
@@ -134,4 +145,4 @@ for name, expected in baseline.items():
         failures.append(name + " differs outside reviewed hooks and copy")
 if failures:
     raise SystemExit("FAIL original app scope:\n" + "\n".join(failures))
-print(f"PASS {len(baseline)} original source files preserved; only reviewed Home routing hooks and website-first copy allowed.")
+print(f"PASS {len(baseline)} original source files preserved; only reviewed Home-tab/routing hooks and website-first copy allowed.")

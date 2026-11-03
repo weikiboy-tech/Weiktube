@@ -1,7 +1,6 @@
 package com.weiktube.app
 
 import android.app.PictureInPictureParams
-import android.app.Activity
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
@@ -16,14 +15,12 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.net.toUri
-import androidx.lifecycle.Lifecycle
-import com.weiktube.home.OriginalHomeActivity
+import com.weiktube.home.OriginalHomeController
 import com.weiktube.home.OriginalHomeReturn
 
 class MainActivity : ComponentActivity() {
@@ -35,6 +32,8 @@ class MainActivity : ComponentActivity() {
     lateinit var youtubeAccount: YoutubeAccountController
     lateinit var videoActions: VideoActionsController
     lateinit var subscriptionFeed: SubscriptionFeedController
+    lateinit var originalHome: OriginalHomeController
+        private set
     var shorts: BrowserController? by mutableStateOf(null)
         private set
     var tab by mutableIntStateOf(0)
@@ -42,8 +41,14 @@ class MainActivity : ComponentActivity() {
     var fullscreen by mutableStateOf(false)
     var blockedCount by mutableLongStateOf(0)
     val isWebTab get() = tab in listOf(0, 1)
-    val isPersonalHome get() = tab == 0 && !browser.searchActive && HomeRoutePolicy.isHome(browser.currentUrl)
+    private var auxiliaryBrowser by mutableStateOf(false)
+    private var homeCanGoBack by mutableStateOf(false)
+    private var hostResumed by mutableStateOf(false)
+    val isPersonalHome get() = tab == 0 && !auxiliaryBrowser
+    val isOriginalHomeVisible get() = hostResumed && isPersonalHome && !pip && !fullscreen && !(player.source != null && player.expanded)
     val activeBrowser get() = if (tab == 1) shorts ?: browser else browser
+    val canHandleBack get() = fullscreen || player.source != null || !isWebTab || tab == 1 ||
+        (if (isPersonalHome) homeCanGoBack else auxiliaryBrowser || browser.searchActive || activeBrowser.canGoBack)
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
     private var orientationBeforeFullscreen = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -51,38 +56,39 @@ class MainActivity : ComponentActivity() {
         private set
     private var pendingOriginalHomeVideo: String? = null
     private var originalHomePlayer = false
-    // Registered before STARTED. A result may arrive before onResume permits playback.
-    private val originalHomeLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val url = OriginalHomeReturn.acceptPlayerResult(
-                result.data?.getStringExtra(OriginalHomeReturn.EXTRA_RETURN_TOKEN),
-                result.data?.getStringExtra(OriginalHomeReturn.EXTRA_VIDEO_URL)
-            )
-            if (url == null) {
-                if (OriginalHomeReturn.resumeToken() == null) OriginalHomeReturn.discard()
-                android.util.Log.w("WeiktubeHome", "RETURN_SESSION_UNAVAILABLE")
-                message("Die Videoübergabe ist nicht mehr gültig. Öffne die YouTube-Startseite erneut und tippe das Video noch einmal an.")
-            } else {
-                pendingOriginalHomeVideo = url
-                if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) openPendingOriginalHomeVideo()
-            }
+    // The embedded view uses the same one-time return ticket and existing player entry point.
+    private fun acceptOriginalHomeVideo(token: String, raw: String) {
+        val url = OriginalHomeReturn.acceptPlayerResult(token, raw)
+        if (url == null) {
+            if (OriginalHomeReturn.resumeToken() == null) OriginalHomeReturn.discard()
+            android.util.Log.w("WeiktubeHome", "RETURN_SESSION_UNAVAILABLE")
+            message("Die Videoübergabe ist nicht mehr gültig. Öffne die YouTube-Startseite erneut und tippe das Video noch einmal an.")
+        } else {
+            pendingOriginalHomeVideo = url
+            if (hostResumed) openPendingOriginalHomeVideo()
         }
     }
 
     fun openOriginalHome() {
-        val resume = OriginalHomeReturn.resumeToken()
-        try {
-            originalHomeLauncher.launch(Intent(this, OriginalHomeActivity::class.java).apply {
-                if (resume != null) putExtra(OriginalHomeReturn.EXTRA_RESUME_TOKEN, resume)
-            })
-            originalHomePlayer = false
-        } catch (_: Exception) {
-            android.util.Log.w("WeiktubeHome", "HOME_LAUNCH_FAILED")
-            message("Die YouTube-Startseite konnte nicht geöffnet werden. Bitte erneut versuchen.")
-        }
+        selectTab(0)
+        originalHomePlayer = false
+    }
+    fun syncOriginalHomeVisibility() {
+        if (!::originalHome.isInitialized) return
+        originalHome.setVisible(isOriginalHomeVisible)
+    }
+    fun reloadCurrentPage() {
+        if (isPersonalHome) originalHome.reload() else activeBrowser.reload()
+    }
+    fun openShieldTest() {
+        selectTab(0)
+        auxiliaryBrowser = true
+        syncOriginalHomeVisibility()
+        browser.testShield()
+        browser.resume()
     }
     private fun openPendingOriginalHomeVideo() {
-        if (!foreground || isFinishing || isDestroyed || !::player.isInitialized) return
+        if (!hostResumed || !foreground || isFinishing || isDestroyed || !::player.isInitialized) return
         val url = pendingOriginalHomeVideo ?: return
         pendingOriginalHomeVideo = null
         openVideo(url)
@@ -93,6 +99,7 @@ class MainActivity : ComponentActivity() {
         player.close()
         originalHomePlayer = false
         if (returnHome) openOriginalHome()
+        else syncOriginalHomeVisibility()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,25 +112,31 @@ class MainActivity : ComponentActivity() {
         youtubeAccount = YoutubeAccountController(this)
         videoActions = VideoActionsController(youtubeAccount)
         subscriptionFeed = SubscriptionFeedController(youtubeAccount)
+        originalHome = OriginalHomeController(this, embedded = true,
+            onVideo = ::acceptOriginalHomeVideo,
+            onExit = { selectTab(0) },
+            onNavigationState = { homeCanGoBack = it })
         setContent { WeiktubeApp(this, model) }
         if (savedInstanceState != null) {
-            browser.navigate(savedInstanceState.getString("browse") ?: "https://m.youtube.com/")
-            tab = savedInstanceState.getInt("tab", 0)
-            if (tab == 1) ensureShorts()
+            // A new Activity starts on the original Home. The persistent Gecko profile retains login.
+            tab = 0
             savedInstanceState.getString("video")?.let { player.open(it, userInitiated = false) }
-            player.expanded = savedInstanceState.getBoolean("expanded", true)
+            player.expanded = false
             originalHomePlayer = savedInstanceState.getBoolean("original_home_player", false) && OriginalHomeReturn.resumeToken() != null
-            // Process-death restore deliberately does not autoplay; normal rotation retains the WebView.
+            // A recreated Activity shows Home with the existing saved player minimized and paused.
+            // Normal rotation is handled in place by the manifest and keeps its current presentation.
         } else {
-            browser.navigate("https://m.youtube.com/")
             acceptIntent(intent)
         }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
     private fun acceptIntent(intent: Intent) {
+        if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
+            openOriginalHome(); return
+        }
         val raw = intent.dataString ?: intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
         val url = Regex("https?://[^\\s]+").find(raw)?.value ?: raw
-        if (Links.videoId(url) != null) openVideo(url) else if (Links.youtube(url) && Links.https(url)) { tab = 0; browser.navigate(url) }
+        if (Links.videoId(url) != null) openVideo(url) else if (Links.youtube(url) && Links.https(url)) openAccountUrl(url)
     }
     fun openVideo(url: String) {
         pendingOriginalHomeVideo = null
@@ -132,31 +145,33 @@ class MainActivity : ComponentActivity() {
         browser.pauseMedia(); shorts?.pauseMedia()
         player.open(url)
         player.resumeView()
+        syncOriginalHomeVisibility()
     }
     fun minimizeWebVideo() {
         player.expanded = false
+        syncOriginalHomeVisibility()
     }
     fun goHome() {
-        selectTab(0)
-        if (!HomeRoutePolicy.isHome(browser.currentUrl)) browser.navigate("https://m.youtube.com/")
+        val reselectedHome = isPersonalHome && !(player.source != null && player.expanded)
+        openOriginalHome()
+        if (reselectedHome) originalHome.goHome()
     }
     fun selectTab(value: Int) {
-        val previous = tab
-        val wasExpanded = player.source != null && player.expanded
         browser.closeSearch()
         tab = value
         if (player.source != null) player.expanded = false
         if (value == 1) player.pause()
         when (value) {
             0 -> {
+                auxiliaryBrowser = false
                 shorts?.pauseMedia()
-                // A tab round-trip preserves the feed and scroll. A second Home tap explicitly goes home.
-                if (previous == 0 && !wasExpanded && browser.currentUrl != "https://m.youtube.com/") browser.navigate("https://m.youtube.com/")
-                if (isPersonalHome) browser.pauseMedia() else browser.resume()
+                // Showing the retained Gecko document never navigates or creates a second session.
+                browser.pauseMedia()
             }
             1 -> { browser.pauseMedia(); ensureShorts().resume() }
             else -> { browser.pauseMedia(); shorts?.pauseMedia() }
         }
+        syncOriginalHomeVisibility()
     }
     private fun ensureShorts(): BrowserController = shorts ?: BrowserController(this, shield, ::openVideo).also {
         shorts = it; it.navigate("https://m.youtube.com/shorts/")
@@ -170,21 +185,22 @@ class MainActivity : ComponentActivity() {
             message("Diese YouTube-Adresse konnte nicht geöffnet werden.")
             return
         }
-        tab = 0
-        player.expanded = false
-        shorts?.pauseMedia()
-        browser.resume()
-        browser.navigate(url, true)
+        selectTab(0)
+        originalHome.navigate(url)
     }
     fun search(query: String) {
         if (query.isBlank()) return
-        tab = 0; player.expanded = false; shorts?.pauseMedia(); browser.resume()
+        selectTab(0)
         if (Links.videoId(query.trim()) != null) openVideo(query.trim())
-        else if (Links.https(query.trim())) browser.navigate(query.trim())
-        else browser.navigate("https://m.youtube.com/results?search_query=" + android.net.Uri.encode(query.trim()))
+        else if (Links.https(query.trim()) && !Links.youtube(query.trim())) {
+            auxiliaryBrowser = true; syncOriginalHomeVisibility(); browser.navigate(query.trim()); browser.resume()
+        }
+        else if (Links.https(query.trim())) originalHome.navigate(query.trim())
+        else originalHome.navigate("https://m.youtube.com/results?search_query=" + android.net.Uri.encode(query.trim()))
     }
     fun openSearch() {
-        tab = 0; player.expanded = false; shorts?.pauseMedia(); browser.resume(); browser.openYoutubeSearch()
+        selectTab(0)
+        originalHome.navigate("https://m.youtube.com/results?search_query=")
     }
     fun enterPip() {
         if (player.source == null || player.isYoutube) return
@@ -208,8 +224,11 @@ class MainActivity : ComponentActivity() {
         pip = isInPictureInPictureMode
         if (pip) { browser.pauseMedia(); shorts?.pauseMedia() }
         else if (foreground && isWebTab && !isPersonalHome) activeBrowser.resume()
+        syncOriginalHomeVisibility()
     }
     override fun onPause() {
+        hostResumed = false
+        syncOriginalHomeVisibility()
         super.onPause()
         if (!isInPictureInPictureMode) { player.pauseView(); browser.pauseMedia(); shorts?.pauseMedia() }
     }
@@ -222,9 +241,15 @@ class MainActivity : ComponentActivity() {
     override fun onStart() { super.onStart(); foreground = true }
     override fun onResume() {
         super.onResume()
+        hostResumed = true
         if (::updater.isInitialized) updater.onForeground()
         if (::player.isInitialized) { player.resumeView(); if (isWebTab && !isPersonalHome) activeBrowser.resume() }
         openPendingOriginalHomeVideo()
+        syncOriginalHomeVisibility()
+    }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (::originalHome.isInitialized) originalHome.onWindowFocusChanged(hasFocus)
     }
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("browse", browser.currentUrl)
@@ -265,9 +290,11 @@ class MainActivity : ComponentActivity() {
             }
             true
         }
-        browser.searchActive -> browser.closeSearch()
+        isPersonalHome && homeCanGoBack -> originalHome.back()
+        !isPersonalHome && browser.searchActive -> browser.closeSearch()
         !isWebTab -> { selectTab(0); true }
-        activeBrowser.canGoBack -> activeBrowser.goBack()
+        !isPersonalHome && activeBrowser.canGoBack -> activeBrowser.goBack()
+        tab == 0 && auxiliaryBrowser -> { openOriginalHome(); true }
         tab == 1 -> { selectTab(0); true }
         player.source != null -> { player.close(); true }
         else -> false
@@ -287,6 +314,8 @@ class MainActivity : ComponentActivity() {
     }
     fun clearWebData() {
         pendingOriginalHomeVideo = null; originalHomePlayer = false
+        originalHome.clearSession()
+        homeCanGoBack = false
         OriginalHomeReturn.discard()
         com.weiktube.home.HomeEngine.clearIfInitialized(this)
         hideFullscreen()
@@ -320,6 +349,8 @@ class MainActivity : ComponentActivity() {
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
     override fun onDestroy() {
+        hostResumed = false
+        originalHome.close()
         if (isFinishing) OriginalHomeReturn.discard()
         subscriptionFeed.close()
         youtubeAccount.close()

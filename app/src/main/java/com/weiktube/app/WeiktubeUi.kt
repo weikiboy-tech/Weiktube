@@ -66,7 +66,7 @@ fun WeiktubeApp(activity: MainActivity, model: WeiktubeModel) {
         }
     }
     LaunchedEffect(storageError) { storageError?.let(activity::message) }
-    BackHandler(enabled = activity.fullscreen || activity.player.source != null || !activity.isWebTab || activity.tab == 1 || activity.browser.searchActive || activity.activeBrowser.canGoBack) { activity.back() }
+    BackHandler(enabled = activity.canHandleBack) { activity.back() }
     MaterialTheme(colorScheme = colors) {
         Surface(Modifier.fillMaxSize()) {
             WeiktubeContent(activity, model, prefs)
@@ -89,16 +89,17 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
     val tabStates = rememberSaveableStateHolder()
     LaunchedEffect(p.source) { actions = false }
     LaunchedEffect(dark) { a.browser.setTheme(dark); a.shorts?.setTheme(dark) }
-    LaunchedEffect(full, a.tab, hasPlayer, a.pip, a.foreground, actions, personalHome) {
+    LaunchedEffect(full, a.tab, hasPlayer, a.pip, a.fullscreen, a.foreground, actions, personalHome) {
         a.browser.playbackElsewhere = hasPlayer
         a.shorts?.playbackElsewhere = full
         if (full || a.pip || a.tab != 0 || personalHome) a.browser.pauseMedia() else a.browser.resume()
         if (full || a.pip || a.tab != 1) a.shorts?.pauseMedia() else a.shorts?.resume()
         if (a.foreground || a.pip) p.resumeView()
         p.setPlaybackAllowed(!actions && (a.foreground || a.pip) && (a.tab != 1 || full))
+        a.syncOriginalHomeVisibility()
     }
     Column(Modifier.fillMaxSize().then(if (a.pip) Modifier else Modifier.safeDrawingPadding())) {
-        if (!a.pip && !full && !a.browser.searchActive) {
+        if (!a.pip && !full && !personalHome && !a.browser.searchActive) {
             Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.ic_weiktube), "Weiktube Logo", Modifier.size(28.dp))
                 Text("Weiktube", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp).weight(1f))
@@ -110,7 +111,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                         DropdownMenuItem(text = { Text("Video-Link öffnen") }, onClick = { menu = false; showLinkDialog = true })
                         DropdownMenuItem(text = { Text("Verlauf") }, onClick = { menu = false; a.selectTab(6) })
                         DropdownMenuItem(text = { Text("Einstellungen & Updates") }, onClick = { menu = false; a.selectTab(5) })
-                        if (a.isWebTab) DropdownMenuItem(text = { Text(if (personalHome) "Startseite aktualisieren" else "Seite neu laden") }, onClick = { menu = false; if (personalHome) a.subscriptionFeed.refresh() else a.activeBrowser.reload() })
+                        if (a.isWebTab) DropdownMenuItem(text = { Text("Seite neu laden") }, onClick = { menu = false; a.reloadCurrentPage() })
                     }
                 }
             }
@@ -118,10 +119,15 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
         if (!a.pip && !full) UpdateNotice(a.updater) { a.selectTab(5) }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
             val availableHeight = maxHeight
-            // All WebViews stay attached. Changing tabs or player size never changes their keys.
+            // The original Gecko page and existing WebViews keep stable view identities across tabs.
             key(a.browser.view) {
                 AndroidView(factory = { a.browser.view }, modifier = Modifier.fillMaxSize(), update = {
                     it.visibility = if (a.tab == 0 && !personalHome && !full && !a.pip) android.view.View.VISIBLE else android.view.View.INVISIBLE
+                })
+            }
+            key(a.originalHome.view) {
+                AndroidView(factory = { a.originalHome.view }, modifier = Modifier.fillMaxSize(), update = {
+                    it.visibility = if (a.isOriginalHomeVisible) android.view.View.VISIBLE else android.view.View.INVISIBLE
                 })
             }
             a.shorts?.let { shorts ->
@@ -133,9 +139,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
             }
             if (!full && !a.pip) {
                 tabStates.SaveableStateProvider(a.tab) {
-                if (personalHome) {
-                    PersonalHomeScreen(a.subscriptionFeed, a.youtubeAccount, prefs.history, a::openVideo, a::openAccountUrl)
-                } else {
+                if (!personalHome) {
                 when (a.tab) {
                     2 -> SettingsScreen(prefs, model, a, shieldsOnly = true)
                     3 -> SubscriptionsScreen(a.subscriptionFeed, a.youtubeAccount, a::openVideo, a::openAccountUrl)
@@ -275,7 +279,7 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
                     model.saveFilters(domains, exceptions); error = null; a.message("Filter gespeichert.")
                 } catch (e: IllegalArgumentException) { error = e.message }
             }) { Text("Listen speichern") }
-            OutlinedButton(onClick = { a.selectTab(0); a.browser.testShield() }) { Text("Shields-Prüfseite öffnen") }
+            OutlinedButton(onClick = a::openShieldTest) { Text("Shields-Prüfseite öffnen") }
             OutlinedButton(onClick = { a.shield.blocked.set(0); a.blockedCount = 0 }) { Text("Sitzungszähler zurücksetzen") }
             }
             if (!shieldsOnly) {

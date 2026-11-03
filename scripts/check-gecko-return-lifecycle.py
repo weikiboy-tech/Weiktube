@@ -48,7 +48,7 @@ def main() -> int:
         raise AssertionError("Unknown parked ProgressDelegate; review the lifecycle fixture")
 
     # Bind the modeled Activity effects to the code that actually consumes these events.
-    activity = (root / "home-data/src/main/java/com/weiktube/home/OriginalHomeActivity.kt").read_text(encoding="utf-8-sig")
+    activity = (root / "home-data/src/main/java/com/weiktube/home/OriginalHomeController.kt").read_text(encoding="utf-8-sig")
     page_start = activity.split("override fun onPageStart(", 1)[1].split("override fun onProgressChange(", 1)[0]
     for statement in ("disconnect(session)", "documentSerial[session] = (documentSerial[session] ?: 0) + 1", "locations[session] = url"):
         if statement not in page_start:

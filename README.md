@@ -1,4 +1,13 @@
-# Weiktube 1.2.9-gecko-return-test
+# Weiktube 1.3.0-home-tab-test
+
+Die [originale YouTube-Startseite](HOME-TAB-TEST.md) ist direkt im unteren Tab
+**Startseite** eingebunden. Dieselbe Gecko-Integration wird als gemeinsamer
+Controller verwendet; Videos öffnen weiterhin den bestehenden Weiktube-Player.
+Tabwechsel halten die Sitzung an, ohne sie neu zu laden. Die native untere
+Navigation bleibt außerhalb der Website. Der bisherige Einstieg unter **Du**
+bleibt bis zur Geräteabnahme erhalten und öffnet dieselbe Startseite.
+
+## Beibehaltener Gecko-Rückkehr-Fix aus 1.2.9
 
 Der [Gecko-Progress-Fix](GECKO-RETURN-TEST.md) behebt den in 1.2.8 noch bestehenden
 Verlust der Seitenadresse und Klickverbindung nach der Player-Rückkehr. Der
