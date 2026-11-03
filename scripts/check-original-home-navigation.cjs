@@ -5,9 +5,9 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const { webcrypto } = require('node:crypto');
 const dir = path.join(__dirname, '../home-data/src/main/assets/original-home-navigation');
-const source = fs.readFileSync(path.join(dir, 'bridge.js'), 'utf8');
+const source = fs.readFileSync(process.env.WEIKTUBE_HOME_BRIDGE_SOURCE || path.join(dir, 'bridge.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-assert.equal(manifest.version, '2.0.0');
+assert.equal(manifest.version, '2.0.1');
 assert.equal(manifest.browser_specific_settings.gecko.id, 'original-home-navigation@weiktube.local');
 assert.deepEqual(manifest.content_scripts[0].matches, ['https://www.youtube.com/*', 'https://m.youtube.com/*', 'https://youtube.com/*']);
 assert.equal(manifest.content_scripts[0].run_at, 'document_start');
@@ -26,6 +26,8 @@ const anchor = href => element('A', { href });
 function fixture({ url = 'https://m.youtube.com/', subframe = false, exports = true, connectFailure = false } = {}) {
   const messages = [], windowEvents = {}, documentEvents = {}, nativeHistory = [], exportTargets = [];
   let receive, disconnected, mutation, connects = 0, pauses = 0, plays = 0, now = 100, failPost = false;
+  let currentGeneration, rejectConnect = connectFailure;
+  const portListeners = [];
   const location = new URL(url);
   function CleanHistory() {}
   function PageHistory() {}
@@ -76,8 +78,10 @@ function fixture({ url = 'https://m.youtube.com/', subframe = false, exports = t
     fetch: noNetwork, XMLHttpRequest: noNetwork,
     browser: { runtime: { connectNative(name) {
       assert.equal(name, 'weiktubeOriginalHome'); connects++;
-      if (connectFailure) throw new Error('fixture connection failed');
-      return { onMessage: { addListener: fn => receive = fn }, onDisconnect: { addListener: fn => disconnected = fn },
+      if (rejectConnect) throw new Error('fixture connection failed');
+      const listeners = { message: 0, disconnect: 0 }; portListeners.push(listeners);
+      return { onMessage: { addListener: fn => { receive = fn; listeners.receive = fn; listeners.message++; } },
+        onDisconnect: { addListener: fn => { disconnected = fn; listeners.disconnected = fn; listeners.disconnect++; } }, disconnect() {},
         postMessage(message) {
           if (failPost) throw new Error('fixture native port lost');
           const value = JSON.parse(JSON.stringify(message));
@@ -99,11 +103,16 @@ function fixture({ url = 'https://m.youtube.com/', subframe = false, exports = t
     get opens() { return messages.filter(x => x.type === 'openVideo'); },
     get documentId() { return messages.find(x => x.type === 'ready')?.documentId; },
     send(message) { receive?.(message); },
-    enable(generation = 'generation-1') { receive?.({ type: 'enable', documentId: this.documentId, generation }); },
-    disable() { receive?.({ type: 'disable', documentId: this.documentId }); },
+    enable(generation = 'generation-1') { currentGeneration = generation; receive?.({ type: 'enable', documentId: this.documentId, generation }); },
+    disable(generation = currentGeneration) { receive?.({ type: 'disable', documentId: this.documentId, generation }); },
+    allowConnect() { rejectConnect = false; }, restorePost() { failPost = false; },
     disconnect() { disconnected?.(); }, failPost() { failPost = true; }, advance(ms) { now += ms; },
     background() { document.hidden = true; (documentEvents.visibilitychange || []).forEach(fn => fn()); },
-    foreground() { document.hidden = false; }, pagehide() { dispatch('pagehide', {}); },
+    foreground() { document.hidden = false; (documentEvents.visibilitychange || []).forEach(fn => fn()); },
+    pagehide() { dispatch('pagehide', {}); }, pageshow() { dispatch('pageshow', {}); },
+    get listeners() { return JSON.stringify({ window: Object.fromEntries(Object.entries(windowEvents).map(([k,v]) => [k,v.length])),
+      document: Object.fromEntries(Object.entries(documentEvents).map(([k,v]) => [k,v.length])) }); },
+    get portListeners() { return portListeners; },
     tap(href, overrides = {}) { return this.tapPath([element('IMG'), anchor(href)], overrides); },
     tapPath(path, overrides = {}) {
       let prevented = false, stopped = false;
@@ -124,6 +133,110 @@ function fixture({ url = 'https://m.youtube.com/', subframe = false, exports = t
 }
 
 (async () => {
+  // 1.2.7 regression: a late disable from the previous activation must not revoke the return.
+  let returning = fixture(); returning.enable('before-player'); returning.tap(`/watch?v=${id}`);
+  returning.disable(); returning.background(); returning.foreground(); returning.enable('after-player');
+  returning.disable('before-player'); returning.tap(`/watch?v=${id2}`);
+  assert.equal(returning.opens.length, 2, 'A retired disable must not strand the second video');
+
+  // Page lifecycle delivery may follow native onResume. Reannounce readiness without reloading.
+  returning = fixture(); returning.enable('before-player'); returning.tap(`/watch?v=${id}`);
+  returning.disable(); returning.background(); returning.enable('after-player'); returning.pagehide();
+  const readyBeforeReturn = returning.messages.filter(x => x.type === 'ready').length;
+  returning.foreground(); returning.pageshow();
+  assert.ok(returning.messages.filter(x => x.type === 'ready').length > readyBeforeReturn, 'Visible document must rejoin native handshake');
+  returning.enable('after-player'); returning.tap(`/watch?v=${id2}`);
+  assert.equal(returning.opens.length, 2, 'Same activation ACK resumes a pagehidden document');
+
+  // A nonce retry acknowledges a lost ACK but never re-arms an already selected video.
+  returning = fixture(); returning.enable('active'); returning.tap(`/watch?v=${id}`); returning.enable('active');
+  assert.equal(returning.messages.filter(x => x.type === 'enabled').length, 2, 'Native retry receives an ACK');
+  returning.tap(`/watch?v=${id2}`); assert.equal(returning.opens.length, 1, 'ACK retry cannot duplicate player launch');
+
+  // A real post-return tap before the new ACK waits for that grant; it needs no second tap.
+  returning = fixture(); returning.enable('before-player'); returning.tap(`/watch?v=${id}`);
+  returning.disable(); returning.background(); returning.foreground();
+  returning.tap(`/watch?v=${id2}`); returning.tap(`/watch?v=${id}`);
+  returning.enable('before-player');
+  assert.equal(returning.opens.length, 1, 'Retried old grant cannot launch the queued return tap');
+  returning.enable('after-player');
+  assert.equal(returning.opens.length, 2, 'First post-return tap is delivered after the fresh grant');
+  assert.equal(returning.opens[1].url, `https://www.youtube.com/watch?v=${id2}`, 'Only the first post-return selection waits');
+
+  returning = fixture(); returning.enable('before-player'); returning.tap(`/watch?v=${id}`);
+  returning.tap(`/watch?v=${id2}`); returning.disable(); returning.background(); returning.foreground(); returning.enable('after-player');
+  assert.equal(returning.opens.length, 1, 'Old foreground double-tap is never replayed on return');
+
+  returning = fixture(); returning.enable('before-player');
+  const fastSameVideo = [element('IMG'), anchor(`/watch?v=${id}`)];
+  returning.pointer('pointerdown', fastSameVideo); returning.pointer('pointerup', fastSameVideo);
+  returning.disable(); returning.background(); returning.foreground(); returning.enable('after-player');
+  returning.tapPath(fastSameVideo);
+  assert.equal(returning.opens.length, 1, 'A late old compatibility click is still consumed after a fast return');
+  returning.pointer('pointerdown', fastSameVideo); returning.pointer('pointerup', fastSameVideo); returning.tapPath(fastSameVideo);
+  assert.equal(returning.opens.length, 2, 'A new real gesture can reopen the same video inside the 800ms compatibility window');
+
+  returning = fixture(); returning.enable('before-player');
+  returning.pointer('pointerdown', fastSameVideo); returning.pointer('pointerup', fastSameVideo);
+  returning.disable(); returning.background(); returning.foreground(); returning.enable('after-player');
+  returning.pointer('pointerdown', fastSameVideo); returning.tapPath(fastSameVideo);
+  assert.equal(returning.opens.length, 2, 'A fresh pointerdown also permits the click fallback if no usable pointerup arrives');
+
+  // A disconnected document remains alive: reconnect only on a visible event or real user action.
+  returning = fixture(); returning.enable('before-player'); returning.tap(`/watch?v=${id}`);
+  const originalListeners = returning.listeners;
+  returning.background(); returning.disconnect(); returning.advance(1000); returning.foreground(); returning.pageshow();
+  assert.equal(returning.connects, 2, 'Foreground reconnects the existing document once');
+  returning.enable('after-player'); returning.tap(`/watch?v=${id2}`); assert.equal(returning.opens.length, 2);
+  assert.equal(returning.listeners, originalListeners, 'Reconnect never adds document event handlers');
+  assert.ok(returning.portListeners.every(x => x.message === 1 && x.disconnect === 1));
+  returning.portListeners[0].disconnected();
+  returning.portListeners[0].receive({ type: 'disable', documentId: returning.documentId, generation: 'after-player' });
+  returning.disable(); returning.enable('next-player'); returning.tap(`/watch?v=${id}`);
+  assert.equal(returning.opens.length, 3, 'Callbacks from a replaced port cannot disable the current port');
+
+  // Ten full simulated return cycles on one DOM/session, including the same video twice,
+  // lower scroll positions, search/channel navigation, Shorts and fast duplicate input.
+  returning = fixture(); const cycleListeners = returning.listeners;
+  const identity = returning.documentId;
+  returning.enable('cycle-0');
+  for (let cycle = 0; cycle < 10; cycle++) {
+    returning.scroll(0, 480 + cycle * 250);
+    assert.deepEqual(returning.tap('/@channel'), { prevented: false, stopped: false });
+    assert.deepEqual(returning.tap('/results?search_query=normal'), { prevented: false, stopped: false });
+    returning.pageHistory('pushState', '/results?search_query=normal');
+    const route = cycle === 5 ? `/shorts/${id2}` : `/watch?v=${cycle < 2 || cycle % 2 === 0 ? id : id2}`;
+    const hit = [element('IMG'), anchor(route)];
+    returning.pointer('pointerdown', hit); returning.pointer('pointerup', hit);
+    returning.tapPath(hit); returning.tap(route); returning.enable(`cycle-${cycle}`);
+    returning.tap(`/watch?v=${id2}`);
+    assert.equal(returning.opens.length, cycle + 1, 'One native launch per activation even with retries and repeated taps');
+    const originalLocation = returning.location.href, scroll = returning.window.scrollY;
+    returning.disable(); returning.background(); returning.pagehide(); returning.advance(1000);
+    returning.foreground(); returning.pageshow(); returning.enable(`cycle-${cycle + 1}`);
+    returning.disable(`cycle-${cycle}`); returning.enable(`cycle-${cycle}`);
+    assert.equal(returning.location.href, originalLocation, 'No reload or web video navigation');
+    assert.equal(returning.window.scrollY, scroll, 'No script scroll reset');
+    assert.equal(returning.documentId, identity);
+    assert.equal(returning.listeners, cycleListeners);
+  }
+  assert.equal(returning.opens[0].url, returning.opens[1].url, 'The same video can be selected after returning');
+  assert.equal(returning.connects, 1, 'Healthy port survives every cycle');
+  assert.equal(returning.opens.length, 10);
+  assert.equal(returning.plays, 0);
+
+  returning = fixture({ connectFailure: true });
+  for (let i = 0; i < 10; i++) { returning.tap(`/watch?v=${id}`); returning.pageshow(); }
+  assert.equal(returning.connects, 1, 'Failed reconnection is coalesced; no retry loop');
+  returning.advance(600); returning.allowConnect(); returning.tap(`/watch?v=${id}`); returning.enable('recovered');
+  assert.equal(returning.connects, 2); assert.equal(returning.opens.length, 1, 'A later trusted tap can recover the same document');
+
+  returning = fixture(); returning.enable('active'); returning.disconnect(); returning.advance(1000);
+  returning.tap(`/watch?v=${id}`, { isTrusted: false });
+  assert.equal(returning.connects, 1, 'Synthetic click cannot reconnect or request playback');
+  returning.tap(`/watch?v=${id}`); returning.enable('reconnected');
+  assert.equal(returning.connects, 2); assert.equal(returning.opens.length, 1);
+
   for (const url of ['https://accounts.google.com/ServiceLogin', 'https://consent.youtube.com/m',
     'https://www.youtube.com.evil.test/', 'http://m.youtube.com/', 'https://www.youtube.com:444/',
     'https://m.youtube.com/signin', 'https://www.youtube.com/t/signin', 'https://m.youtube.com/account_switcher',
@@ -241,5 +354,5 @@ function fixture({ url = 'https://m.youtube.com/', subframe = false, exports = t
   const genericPath = [element('DIV')];
   f.pointer('pointerdown', genericPath); f.pointer('pointerup', genericPath);
   assert.throws(() => f.pageHistory('pushState', `/watch?v=${id}`), { name: 'AbortError' }); assert.equal(f.opens.length, 1);
-  console.log('PASS Original Home bridge: early/invalid/duplicate/disconnected clicks fail closed; nearest anchors and bounded renderer endpoints; page-world history guards; preserved non-video history arguments; fresh return nonce; media guards; sanitized protocol and no secret/network access. Real Gecko/Xray and current YouTube DOM still require runtime testing.');
+  console.log('PASS Original Home bridge: ten simulated return cycles including same video, Shorts/search/channel/scroll; stale disable/enable and lost-ACK recovery; page visibility rehandshake and bounded port recovery without duplicate listeners; early/invalid/duplicate clicks fail closed; renderer/history/media guards; sanitized protocol and no secret/network access. Real Android touch, Gecko/Xray, current YouTube DOM and playback still require runtime testing.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -11,8 +11,11 @@
 
   const documentId = crypto.randomUUID();
   let port = null, connected = false, enabled = false, handingOff = false, generation = null, queued = null;
+  let hiddenSinceHandoff = false;
+  let nextConnectAttempt = 0;
   let gestureUntil = 0, pointer = null, consumedClick = null;
   const reports = new Set(), pendingReports = new Set();
+  const retiredGenerations = new Set();
   const validNonce = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
   const idPattern = /^[A-Za-z0-9_-]{11}$/;
   const clock = () => performance.now();
@@ -36,7 +39,7 @@
   function send(value) {
     if (!connected || !port) return false;
     try { port.postMessage(value); return true; }
-    catch { connected = false; enabled = false; queued = null; pauseMedia(); return false; }
+    catch { losePort(port, true); return false; }
   }
   function blocked(reason) {
     if (reports.has(reason)) return;
@@ -124,14 +127,27 @@
   function deliver(url) {
     if (handingOff) return;
     pauseMedia();
-    if (!connected) { blocked('BRIDGE_UNAVAILABLE'); return; }
-    if (!enabled) { if (!queued) queued = url; return; }
+    if (!connected || !enabled) {
+      if (!queued) queued = url;
+      requestReady();
+      if (!connected) blocked('BRIDGE_UNAVAILABLE');
+      return;
+    }
     queued = null; handingOff = true; enabled = false; gestureUntil = 0;
     if (!send({ type: 'openVideo', documentId, generation, url })) blocked('BRIDGE_UNAVAILABLE');
   }
   function intercept(result, trusted) {
     if (result.kind === 'invalid') { pauseMedia(); blocked('INVALID_VIDEO'); return; }
-    if (handingOff) { pauseMedia(); return; }
+    if (handingOff) {
+      pauseMedia();
+      if (trusted && !document.hidden) {
+        // Only a tap AFTER an observed player suspension can wait for the new return grant.
+        // Foreground double-taps from the old activation must never be replayed on return.
+        if (hiddenSinceHandoff && !queued) queued = result.url;
+        requestReady();
+      }
+      return;
+    }
     if (!trusted || document.hidden) { pauseMedia(); blocked('UNTRUSTED_NAVIGATION'); return; }
     deliver(result.url);
   }
@@ -162,6 +178,8 @@
     const result = clickedTarget(event);
     if (result.kind === 'other' && result.excluded) { gestureUntil = 0; return; }
     if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+    // A new real gesture is not the compatibility click belonging to the previous pointerup.
+    consumedClick = null;
     pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, at: clock(), key: result.url || result.kind,
       origin: event.target, moved: false };
   }, true);
@@ -246,29 +264,66 @@
     gestureUntil = 0; intercept(result, trusted);
   }, true);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { gestureUntil = 0; pointer = null; queued = null; pauseMedia(); }
+    if (document.hidden) {
+      if (handingOff) hiddenSinceHandoff = true;
+      enabled = false; gestureUntil = 0; pointer = null; queued = null; pauseMedia();
+    }
+    else requestReady();
   });
-  window.addEventListener('pagehide', () => { enabled = false; queued = null; pointer = null; gestureUntil = 0; pauseMedia(); });
+  window.addEventListener('pagehide', () => {
+    if (handingOff) hiddenSinceHandoff = true;
+    enabled = false; queued = null; pointer = null; gestureUntil = 0; pauseMedia();
+  });
+  window.addEventListener('pageshow', () => requestReady());
 
-  try {
-    port = browser.runtime.connectNative('weiktubeOriginalHome'); connected = true;
-    port.onDisconnect.addListener(() => {
-      connected = false; enabled = false; queued = null; pointer = null; gestureUntil = 0;
-      pauseMedia(); blocked('BRIDGE_UNAVAILABLE');
-    });
-    port.onMessage.addListener(message => {
-      if (!connected || !message || message.documentId !== documentId) return;
-      if (message.type === 'disable') { enabled = false; queued = null; pointer = null; gestureUntil = 0; pauseMedia(); return; }
-      if (message.type === 'pause') { pauseMedia(); return; }
-      if (message.type !== 'enable' || !validNonce(message.generation) || !guarded()) return;
-      if (message.generation === generation) return; // Return uses a fresh nonce, not duplicate permission.
-      generation = message.generation; enabled = true; handingOff = false; reports.clear();
-      if (!send({ type: 'enabled', documentId, generation })) return;
-      const next = queued; queued = null;
-      if (next && !document.hidden) deliver(next);
-    });
+  function losePort(candidate, close) {
+    if (!candidate || port !== candidate) return;
+    port = null; connected = false; enabled = false; queued = null; pointer = null; gestureUntil = 0;
+    if (close) { try { candidate.disconnect(); } catch { /* Already disconnected. */ } }
+    pauseMedia(); blocked('BRIDGE_UNAVAILABLE');
+  }
+  function requestReady() {
+    if (!guarded() || document.hidden) return;
+    if (!connected) { connectPort(); return; }
     send({ type: 'ready', documentId });
-    for (const reason of pendingReports) send({ type: 'blocked', documentId, ...(generation ? { generation } : {}), reason });
-    pendingReports.clear();
-  } catch { connected = false; enabled = false; queued = null; pauseMedia(); }
+  }
+  function connectPort() {
+    if (connected || clock() < nextConnectAttempt) return;
+    try {
+      const candidate = browser.runtime.connectNative('weiktubeOriginalHome');
+      port = candidate; connected = true;
+      candidate.onDisconnect.addListener(() => losePort(candidate, false));
+      candidate.onMessage.addListener(message => {
+        if (!connected || port !== candidate || !message || message.documentId !== documentId) return;
+        if (message.type === 'disable') {
+          // A delayed pause from the previous Activity must not revoke a newer return grant.
+          if (message.generation !== generation) return;
+          enabled = false; queued = null; pointer = null; gestureUntil = 0; pauseMedia(); return;
+        }
+        if (message.type === 'pause') { pauseMedia(); return; }
+        if (message.type !== 'enable' || !validNonce(message.generation) || !guarded() || retiredGenerations.has(message.generation)) return;
+        if (message.generation !== generation) {
+          if (generation) retiredGenerations.add(generation);
+          if (retiredGenerations.size > 16) retiredGenerations.delete(retiredGenerations.values().next().value);
+          generation = message.generation; handingOff = false; hiddenSinceHandoff = false; reports.clear();
+        }
+        // ACK retries are idempotent: only a NEW native activation can reset the launch guard.
+        enabled = !handingOff;
+        if (!send({ type: 'enabled', documentId, generation })) return;
+        if (enabled) {
+          const next = queued; queued = null;
+          if (next && !document.hidden) deliver(next);
+        }
+      });
+      send({ type: 'ready', documentId });
+      for (const reason of pendingReports) send({ type: 'blocked', documentId, ...(generation ? { generation } : {}), reason });
+      pendingReports.clear();
+    } catch {
+      if (port) losePort(port, true);
+      connected = false; enabled = false; pauseMedia();
+      // No timer/retry loop. A later visible event or trusted tap may try once again.
+      nextConnectAttempt = clock() + 500;
+    }
+  }
+  connectPort();
 })();

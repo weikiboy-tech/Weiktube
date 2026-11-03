@@ -65,6 +65,7 @@ class OriginalHomeActivity : ComponentActivity() {
     private val deferredRelease = mutableListOf<HomeExperimentLease.Lease>()
     private var openingPlayer = false
     private var attemptedResume = false
+    private var restoreFocusPending = false
     private val locations = mutableMapOf<GeckoSession, String>()
     private val history = mutableMapOf<GeckoSession, Boolean>()
     private val documentSerial = mutableMapOf<GeckoSession, Int>()
@@ -155,7 +156,28 @@ class OriginalHomeActivity : ComponentActivity() {
         main?.setActive(true); popup?.setActive(true)
         if (main != null) showOrigin()
         connections.toMap().forEach { (session, connection) -> resumeConnection(session, connection) }
+        restoreVisibleFocus()
         updateControls()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) restoreVisibleFocus()
+    }
+
+    private fun restoreVisibleFocus() {
+        if (!restoreFocusPending || !active || openingPlayer || !hasWindowFocus()) return
+        val session = popup ?: main ?: return
+        val view = (if (session === popup) popupView else mainView) ?: return
+        view.post {
+            if (!restoreFocusPending || !canRoute(session) || !view.isAttachedToWindow || !view.isShown || !hasWindowFocus()) return@post
+            // Only restore the retained view once; never steal a focused website input on later callbacks.
+            view.requestFocus()
+            session.setActive(true)
+            if (view.hasFocus()) session.setFocused(true)
+            restoreFocusPending = false
+            connections[session]?.let { resumeConnection(session, it) }
+        }
     }
 
     private fun prepare() {
@@ -342,6 +364,7 @@ class OriginalHomeActivity : ComponentActivity() {
         generation++
         runtime = held.runtime; extension = held.extension; lease = held.lease
         main = held.main; popup = held.popup; handoff = true; openingPlayer = false
+        restoreFocusPending = true
         locations.putAll(held.locations); history.putAll(held.history); documentSerial.putAll(held.documentSerial)
         connections.putAll(held.connections); media.putAll(held.media); autofillLoading.addAll(held.loading)
         held.sessions().forEach { session ->
@@ -354,10 +377,9 @@ class OriginalHomeActivity : ComponentActivity() {
         }
         media.keys.toList().forEach(::applyMediaPolicy)
         connections.toMap().forEach { (session, connection) ->
-            connection.token = null; connection.acknowledged = false
             attachPort(session, connection)
         }
-        status.text = "Deine bisherige Startseite ist wieder geöffnet."
+        status.text = "Deine bisherige Startseite ist wieder geöffnet. Die Player-Verbindung wird fortgesetzt …"
         invalidateAutofill()
         showOrigin()
         // No loadUri or restoreState: reattach the same live document and its existing scroll position.
@@ -395,8 +417,9 @@ class OriginalHomeActivity : ComponentActivity() {
                         resumeConnection(session, state)
                     }
                     "enabled" -> if (matches(state, data)) {
-                        state.acknowledged = true
+                        state.activation.acknowledge(data.optString("generation"))
                         if (state.blockedReason == null) status.text = "Videotipps öffnen automatisch den Weiktube-Player."
+                        updateControls()
                     }
                     "openVideo" -> {
                         if (!canRoute(session) || !state.acknowledged || !matches(state, data)) { logRoutingCause("UNTRUSTED_NAVIGATION"); return }
@@ -410,7 +433,7 @@ class OriginalHomeActivity : ComponentActivity() {
                         if (reason in setOf("HISTORY_GUARD_UNAVAILABLE", "MEDIA_GUARD_UNAVAILABLE")) state.blockedReason = reason
                         status.text = when (reason) {
                             "INVALID_VIDEO" -> "Dieser Videolink ist ungültig. Website-Wiedergabe bleibt gesperrt."
-                            "BRIDGE_UNAVAILABLE" -> "Die Player-Verbindung ist unterbrochen. Home lädt sie erneut; Website-Wiedergabe bleibt gesperrt."
+                            "BRIDGE_UNAVAILABLE" -> "Die Player-Verbindung wird wiederhergestellt. Die Startseite bleibt geöffnet; Website-Wiedergabe bleibt gesperrt."
                             "HISTORY_GUARD_UNAVAILABLE", "MEDIA_GUARD_UNAVAILABLE" -> "Ein Schutz der Videoübergabe ist nicht verfügbar. Website-Wiedergabe bleibt gesperrt."
                             "UNTRUSTED_NAVIGATION" -> "Automatische Website-Wiedergabe wurde gesperrt. Tippe direkt auf ein Video."
                             else -> "Die Website-Wiedergabe wurde gesperrt. Bitte den Videotipp erneut versuchen."
@@ -421,7 +444,11 @@ class OriginalHomeActivity : ComponentActivity() {
             override fun onDisconnect(port: WebExtension.Port) {
                 if (connections[session] === state) {
                     connections.remove(session)
-                    if (active && owns(session)) { logRoutingCause("BRIDGE_UNAVAILABLE"); status.text = "Die Player-Verbindung wurde unterbrochen. Home lädt sie erneut." }
+                    if (active && owns(session)) {
+                        logRoutingCause("BRIDGE_UNAVAILABLE")
+                        status.text = "Die Player-Verbindung wird wiederhergestellt. Die Startseite bleibt geöffnet."
+                        updateControls()
+                    }
                 }
             }
         })
@@ -429,15 +456,39 @@ class OriginalHomeActivity : ComponentActivity() {
 
     private fun resumeConnection(session: GeckoSession, state: OriginalHomeReturn.Connection) {
         val id = state.documentId ?: return
-        if (!canRoute(session) || !OriginalHomePolicy.isYoutubePage(locations[session].orEmpty())) return
-        state.token = UUID.randomUUID().toString(); state.acknowledged = false
-        runCatching {
-            state.port.postMessage(JSONObject().put("type", "enable").put("documentId", id).put("generation", state.token))
-        }.onFailure { logRoutingCause("BRIDGE_UNAVAILABLE"); disconnect(session); status.text = "Die Player-Verbindung konnte nicht fortgesetzt werden. Home lädt sie erneut." }
+        if (!currentConnection(session, state)) return
+        // ready/pageshow/focus/retry may repeat. Only a real suspension creates a new permission.
+        val token = state.activation.enable { UUID.randomUUID().toString() }
+        sendEnable(session, state, id, token)
+        if (state.retryGeneration == token) return
+        state.retryGeneration = token
+        listOf(250L, 1_000L, 2_500L).forEach { delay ->
+            handler.postDelayed({
+                if (currentConnection(session, state) && state.activation.matches(token) && !state.acknowledged)
+                    sendEnable(session, state, id, token)
+            }, delay)
+        }
+        handler.postDelayed({
+            if (currentConnection(session, state) && state.activation.matches(token) && !state.acknowledged) {
+                logRoutingCause("BRIDGE_RESUME_TIMEOUT")
+                status.text = "Die Player-Verbindung antwortet noch nicht. Tippe erneut auf ein Video; Website-Wiedergabe bleibt gesperrt."
+                updateControls()
+            }
+        }, 4_000)
     }
 
-    private fun matches(state: OriginalHomeReturn.Connection, message: JSONObject) = state.documentId != null && state.token != null &&
-        message.optString("documentId") == state.documentId && message.optString("generation") == state.token
+    private fun currentConnection(session: GeckoSession, state: OriginalHomeReturn.Connection) =
+        canRoute(session) && connections[session] === state && state.serial == (documentSerial[session] ?: 0) &&
+            OriginalHomePolicy.isYoutubePage(locations[session].orEmpty())
+
+    private fun sendEnable(session: GeckoSession, state: OriginalHomeReturn.Connection, id: String, token: String) {
+        runCatching {
+            state.port.postMessage(JSONObject().put("type", "enable").put("documentId", id).put("generation", token))
+        }.onFailure { logRoutingCause("BRIDGE_UNAVAILABLE"); disconnect(session); status.text = "Die Player-Verbindung konnte nicht fortgesetzt werden. Ein erneuter Videotipp versucht die Verbindung wiederherzustellen." }
+    }
+
+    private fun matches(state: OriginalHomeReturn.Connection, message: JSONObject) = state.documentId != null &&
+        message.optString("documentId") == state.documentId && state.activation.matches(message.optString("generation"))
 
     private fun openOriginal(raw: String) {
         val url = OriginalHomePolicy.videoUrl(raw) ?: run { logRoutingCause("INVALID_VIDEO"); return }
@@ -466,6 +517,7 @@ class OriginalHomeActivity : ComponentActivity() {
 
     private fun disconnect(session: GeckoSession) {
         connections.remove(session)?.let { state ->
+            state.activation.suspend()
             runCatching { state.port.postMessage(JSONObject().put("type", "disable").put("documentId", state.documentId).put("generation", state.token)) }
             runCatching { state.port.disconnect() }
         }
@@ -526,7 +578,8 @@ class OriginalHomeActivity : ComponentActivity() {
     }
     private fun updateControls() {
         if (!::routingLabel.isInitialized) return
-        routingLabel.text = if (handoff) "Videotipps öffnen automatisch im Weiktube-Player." else "Videoübergabe wird vorbereitet …"
+        routingLabel.text = if (handoff && connections[popup ?: main]?.acknowledged == true)
+            "Videotipps öffnen automatisch im Weiktube-Player." else "Videoübergabe wird vorbereitet …"
         if (::autofillButton.isInitialized) {
             val target = autofillTarget()
             autofillActions.visibility = if (active && target?.authPage == true) View.VISIBLE else View.GONE
@@ -553,7 +606,7 @@ class OriginalHomeActivity : ComponentActivity() {
         invalidateAutofill()
         resetProof()
         connections.values.forEach { state ->
-            state.acknowledged = false
+            state.activation.suspend()
             runCatching { state.port.postMessage(JSONObject().put("type", "disable").put("documentId", state.documentId).put("generation", state.token)) }
         }
         media.values.toList().forEach { runCatching { it.pause() } }
@@ -603,7 +656,7 @@ class OriginalHomeActivity : ComponentActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     companion object {
         private const val HOME = "https://m.youtube.com/"
-        private val ROUTING_CAUSES = setOf("INVALID_VIDEO", "ROUTING_NOT_READY", "BRIDGE_UNAVAILABLE", "HISTORY_GUARD_UNAVAILABLE", "MEDIA_GUARD_UNAVAILABLE", "UNTRUSTED_NAVIGATION")
+        private val ROUTING_CAUSES = setOf("INVALID_VIDEO", "ROUTING_NOT_READY", "BRIDGE_UNAVAILABLE", "BRIDGE_RESUME_TIMEOUT", "HISTORY_GUARD_UNAVAILABLE", "MEDIA_GUARD_UNAVAILABLE", "UNTRUSTED_NAVIGATION")
         private val UUID_PATTERN = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     }
 }

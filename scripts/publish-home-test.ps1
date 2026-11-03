@@ -2,14 +2,14 @@ param([switch]$Publish)
 $ErrorActionPreference='Stop'
 $project=Split-Path -Parent $PSScriptRoot
 $repo='weikiboy-tech/Weiktube'
-$tag='player-handoff-1.2.7-test.1'
-$branch='player-handoff-1.2.7'
-$baseCommit='4b8c9161c547070cacc437acf41b86bd170df8ac'
+$tag='player-return-1.2.8-test.1'
+$branch='player-return-1.2.8'
+$baseCommit='f0669ef9aa6fd180a46f657cac9f9719d82b2f9f'
 $apk=Join-Path $project 'Weiktube-Home-Test.apk'
 $source=Join-Path $project 'Weiktube-Quellcode.zip'
 foreach($file in @($apk,$source)) { if(-not (Test-Path -LiteralPath $file)) { throw 'Build, validate and package source before publishing' } }
 $hash=(Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
-$checksums=Join-Path $project 'validation/player-handoff-SHA256SUMS.txt'
+$checksums=Join-Path $project 'validation/player-return-SHA256SUMS.txt'
 @("$hash  Weiktube-Home-Test.apk","$((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant())  Weiktube-Quellcode.zip") | Set-Content -LiteralPath $checksums -Encoding ascii
 if(-not $Publish) { Write-Output "Prepared test $tag; APK SHA256 $hash. No remote changes."; return }
 $env:GCM_INTERACTIVE='never'
@@ -25,7 +25,7 @@ if($releases | Where-Object tag_name -eq $tag) { throw 'Test release exists; ref
 $remote="https://github.com/$repo.git"
 $refs=git ls-remote $remote "refs/heads/$branch" "refs/tags/$tag"
 if($LASTEXITCODE -ne 0 -or $refs) { throw 'Cannot verify unused test refs' }
-$stage=Join-Path $project 'validation/player-handoff-release-source'
+$stage=Join-Path $project 'validation/player-return-release-source'
 if(Test-Path -LiteralPath $stage) { throw 'Staging exists; review before retry' }
 Expand-Archive -LiteralPath $source -DestinationPath $stage
 Push-Location (Join-Path $stage 'Weiktube')
@@ -35,9 +35,9 @@ try {
  git config user.name $profile.login
  git config user.email "$($profile.id)+$($profile.login)@users.noreply.github.com"
  git remote add origin $remote
- git fetch origin website-first-1.2.6
+ git fetch origin player-handoff-1.2.7
  if($LASTEXITCODE -ne 0) { throw 'Cannot fetch original history' }
- $parent=git rev-parse origin/website-first-1.2.6
+ $parent=git rev-parse origin/player-handoff-1.2.7
  if($LASTEXITCODE -ne 0 -or $parent -ne $baseCommit) { throw 'Unexpected base commit; review source history before publishing' }
  python scripts/check-home-scope.py
  if($LASTEXITCODE -ne 0) { throw 'Original app scope verification failed' }
@@ -49,7 +49,7 @@ try {
  # verified parent without resetting, checking out or replacing any working tree.
  $tree=git write-tree
  if($LASTEXITCODE -ne 0) { throw 'Source tree failed' }
- $commit=git commit-tree $tree -p $baseCommit -m 'Route Gecko video taps to the existing player and retain the original page for return'
+ $commit=git commit-tree $tree -p $baseCommit -m 'Rearm the retained Gecko click bridge after native player return'
  if($LASTEXITCODE -ne 0) { throw 'Source commit failed' }
  git update-ref "refs/heads/$branch" $commit ('0' * 40)
  if($LASTEXITCODE -ne 0) { throw 'New staging branch creation failed' }
@@ -59,17 +59,17 @@ try {
  if($LASTEXITCODE -ne 0) { throw 'Test branch push failed' }
 } finally { Pop-Location }
 $notes=@'
-Weiktube 1.2.7-player-handoff-test, code11, com.weiktube.app. Same package and signing certificate. Install as an update to retain the website profile.
+Weiktube 1.2.8-player-return-test, code12, com.weiktube.app. Same package and signing certificate. Install as an update to retain the website profile.
 
-Targeted fix for Original Home video routing. The navigation extension is prepared before the first document loads and no longer requires manual feed confirmation. Early video clicks, recognized video history changes, malformed video targets and media startup are guarded. Ordinary search/channel/account navigation remains separate; no feed API or replacement recommendations are introduced.
+Targeted fix for video clicks remaining blocked after returning from the existing player. The retained document's bridge now has an explicit resume/reconnection handshake, generation-scoped suspension and bounded acknowledgement recovery. Event listeners are installed once; repeated return does not reload the feed or replace the player.
 
-The original MainActivity receives a validated one-time ActivityResult and calls its existing openVideo function. Gecko session, document, bridge port and extension lease are retained without Activity/View references. Back or Close can reattach the same document without a normal reload. Original player, miniplayer implementation, adblock engine and Google API account logic are unchanged.
+The working video detection and ActivityResult handoff remain in place. Original player, MainActivity navigation, adblock engine, Google API account logic and original personalized website are unchanged. No account sessions, credentials or device screenshots are bundled.
 
-This is a test prerelease, not a claim of completed Android/OnePlus acceptance. See PLAYER-HANDOFF-TEST.md for exact local checks, runtime test limitations and the required video/back/scroll regression checklist. Node fixtures simulate the Firefox Xray boundary. Process or renderer loss cannot preserve the live DOM; an unknown router that has already replaced it cannot be universally rolled back by a history hook alone. No new Google login fix is claimed.
+This is a test prerelease, not a claim of completed Android/OnePlus acceptance. See PLAYER-RETURN-TEST.md for reproduced protocol failures, automated repeated-return tests and the eight required device checks. No Android device was reachable for this change; fixtures do not prove playback, actual touch delivery or scroll preservation on a device. No new Google login fix is claimed.
 
 The default homepage and stable update feed remain unchanged. ARM64 and x86-64, Android8+. No account sessions, credentials or device screenshots are bundled. Diagnostics use fixed reason codes, not sensitive website responses or URLs.
 '@
-$body=@{tag_name=$tag;target_commitish=$commit;name='Weiktube 1.2.7 — Gecko-Videoübergabe und Rückkehr zur Startseite';body=$notes;draft=$true;prerelease=$true;make_latest='false'} | ConvertTo-Json
+$body=@{tag_name=$tag;target_commitish=$commit;name='Weiktube 1.2.8 — Videoklicks nach Player-Rückkehr wieder aktivieren';body=$notes;draft=$true;prerelease=$true;make_latest='false'} | ConvertTo-Json
 $release=Invoke-RestMethod "https://api.github.com/repos/$repo/releases" -Headers $headers -Method Post -ContentType 'application/json' -Body $body
 $upload=$release.upload_url -replace '\{.*$', ''
 if(-not $upload.StartsWith('https://uploads.github.com/')) { throw 'Unexpected upload origin' }

@@ -1,4 +1,11 @@
-# Weiktube 1.2.7-player-handoff-test
+# Weiktube 1.2.8-player-return-test
+
+Der [gezielte Rückkehr-Fix](PLAYER-RETURN-TEST.md) behandelt die Wiederaufnahme der
+Klick-Bridge nach dem vorhandenen Player. Er erhält dieselbe Gecko-Sitzung und
+führt keine neue Wiedergabeimplementierung oder Startseite ein. Fehlerursachen,
+Regressionstests und ausdrücklich offene Gerätetests stehen im Testbericht.
+
+## Beibehaltener Übergabeweg aus 1.2.7
 
 Dieser [gezielte Übergabefix](PLAYER-HANDOFF-TEST.md) aktiviert die Videoüberwachung
 vor dem Laden der originalen YouTube-Seite. Videoklicks benötigen keine manuelle

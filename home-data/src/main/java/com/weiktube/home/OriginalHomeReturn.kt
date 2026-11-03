@@ -19,8 +19,10 @@ object OriginalHomeReturn {
 
     internal class Connection(val port: WebExtension.Port, val serial: Int) {
         var documentId: String? = null
-        var token: String? = null
-        var acknowledged = false
+        val activation = OriginalHomeBridgeActivation()
+        val token get() = activation.token
+        val acknowledged get() = activation.acknowledged
+        var retryGeneration: String? = null
         var blockedReason: String? = null
     }
     internal class Retained(
@@ -97,7 +99,7 @@ object OriginalHomeReturn {
             }, NATIVE_APP)
         }
         retained.connections.toMap().forEach { (session, connection) ->
-            connection.acknowledged = false
+            connection.activation.suspend()
             runCatching {
                 connection.port.postMessage(JSONObject().put("type", "disable").put("documentId", connection.documentId).put("generation", connection.token))
             }
