@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <queries>
+        <package android:name="com.android.chrome" />
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
@@ -8,6 +12,17 @@
         </intent>
     </queries>
     <application>
+        <activity android:name="com.weiktube.home.OriginalHomeActivity"
+            android:exported="false" android:label="Original-Home testen"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize" />
+        <activity android:name="com.weiktube.home.ChromeHomeTestActivity"
+            android:exported="false" android:label="Chrome-Original-Home testen"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+        <activity android:name="com.weiktube.home.OriginalHomeHandoffActivity"
+            android:exported="false" android:label="Im Weiktube-Player öffnen"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
         <activity android:name="com.weiktube.home.HomeConnectionActivity"
             android:exported="false" android:label="YouTube-Startseite verbinden"
             android:theme="@android:style/Theme.Material.NoActionBar"

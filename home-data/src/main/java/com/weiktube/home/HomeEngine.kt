@@ -23,7 +23,7 @@ object HomeEngine {
         if (clearing || prefs(app).getBoolean("clear_pending", false)) {
             waiting += onReady to onFailure
             beginClear(app, engine)
-        } else onReady(engine)
+        } else recovered(app, engine, onReady, onFailure)
     }
 
     /** No runtime is created just to disconnect. A persistent marker prevents later reuse. */
@@ -42,7 +42,7 @@ object HomeEngine {
                 prefs(context).edit().putBoolean("clear_pending", false).commit()
                 clearing = false
                 val callbacks = waiting.toList(); waiting.clear()
-                callbacks.forEach { it.first(engine) }
+                callbacks.forEach { recovered(context, engine, it.first, it.second) }
             }
         }, {
             mainHandler.post {
@@ -52,6 +52,10 @@ object HomeEngine {
                 callbacks.forEach { it.second() }
             }
         })
+    }
+
+    private fun recovered(context: Context, engine: GeckoRuntime, ready: (GeckoRuntime) -> Unit, failure: () -> Unit) {
+        HomeExperimentLease.recover(context, engine, { ready(engine) }, failure)
     }
 
     internal fun recordProof(context: Context, channelId: String, firstCount: Int, nextCount: Int) {

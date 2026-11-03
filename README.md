@@ -1,12 +1,13 @@
-# Weiktube 1.2.4-home-test.2
+# Weiktube 1.2.5-original-home-test
 
-Dieser Entwicklungsstand ergänzt ausschließlich den ausdrücklichen
-[Homepage-Verbindungstest](HOME-CONNECTION-TEST.md) unter „Du / Konto“. Player und
-bisherige Startseite bleiben erhalten. Test.2 korrigiert den fehlerhaften
-Anmelde-Startpfad und ergänzt eine bereinigte Diagnose für `CONFIG_UNAVAILABLE`.
-Die bestehende Google-API-Anmeldung ist von der dafür nötigen Website-Sitzung
-getrennt. Ein authentifizierter Home-Abruf ist noch nicht auf dem Zielgerät
-bestätigt; die neue Datenquelle ist deshalb noch nicht an die Startseite angeschlossen.
+Dieser Entwicklungsstand ergänzt einen isolierten
+[Original-Home-Test](ORIGINAL-HOME-TEST.md) unter „Du / Konto“: sichtbare originale
+YouTube-Webseite in Gecko und ein getrennter Chrome-Custom-Tab-Vergleich.
+Maßgeblich ist jeweils das in YouTube aktuell ausgewählte Website-Konto, nicht
+ein festgelegter Name oder die Google-API-Anmeldung. Erst nach manueller Bestätigung
+der echten angemeldeten Startseite wird die Übergabe an den Originalplayer getestet.
+Die bisherige Startseite, Player und Adblock bleiben unverändert. Der frühere
+[Konfigurations-/Feed-Test](HOME-CONNECTION-TEST.md) ist kein Bestandteil dieses Ansatzes.
 
 ## Erhaltener Ausgangsstand 1.2.3
 

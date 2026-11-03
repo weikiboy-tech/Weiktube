@@ -1,0 +1,13 @@
+{
+  "manifest_version": 2,
+  "name": "Weiktube Original Home video handoff",
+  "version": "1.0.0",
+  "browser_specific_settings": { "gecko": { "id": "original-home-navigation@weiktube.local" } },
+  "permissions": ["nativeMessaging", "nativeMessagingFromContent", "geckoViewAddons"],
+  "content_scripts": [{
+    "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
+    "js": ["bridge.js"],
+    "run_at": "document_start",
+    "all_frames": false
+  }]
+}
