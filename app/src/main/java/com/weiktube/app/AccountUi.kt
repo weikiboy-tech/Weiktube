@@ -43,13 +43,13 @@ fun AccountScreen(controller: YoutubeAccountController, onOpenUrl: (String) -> U
                         RemoteThumbnail(channel?.thumbnailUrl.orEmpty(), null, Modifier.size(56.dp), shape = CircleShape, fallback = Icons.Rounded.AccountCircle)
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 2)
-                            Text("YouTube-Konto", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Konto für Abos und Playlists", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = controller::refresh, enabled = !controller.busy) { Icon(Icons.Rounded.Refresh, "Kontodaten aktualisieren") }
                         Box {
                             IconButton(onClick = { accountMenu = true }) { Icon(Icons.Rounded.MoreVert, "Kontooptionen") }
                             DropdownMenu(accountMenu, { accountMenu = false }) {
-                                DropdownMenuItem(text = { Text("Google-Verbindung trennen") }, enabled = !controller.busy,
+                                DropdownMenuItem(text = { Text("Google-Freigabe widerrufen") }, enabled = !controller.busy,
                                     onClick = { accountMenu = false; confirmDisconnect = true })
                             }
                         }
@@ -75,26 +75,26 @@ fun AccountScreen(controller: YoutubeAccountController, onOpenUrl: (String) -> U
                     if (controller.morePlaylists) item { OutlinedButton(onClick = controller::loadMorePlaylists, enabled = !controller.busy) { Text("Weitere Playlists laden") } }
                 }
             } else {
-                item { Text(if (subscriptionsOnly) "Deine Abos" else "Dein YouTube", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
+                item { Text(if (subscriptionsOnly) "Deine Abos" else "Abos und Playlists", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Rounded.AccountCircle, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-                        Text("Deine Kanäle, Abos und Playlists – direkt in Weiktube.", style = MaterialTheme.typography.bodyLarge)
-                        Button(onClick = controller::connect, enabled = !controller.busy) { Text("Mit Google anmelden") }
+                        Text("Optional: Gib den Zugriff auf deine Abos und Playlists für diese Kontoansicht frei.", style = MaterialTheme.typography.bodyLarge)
+                        OutlinedButton(onClick = controller::connect, enabled = !controller.busy) { Text("Abos und Playlists freigeben") }
                         if (controller.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                         Text(controller.status, style = MaterialTheme.typography.bodySmall)
-                        Text("Du meldest dich sicher bei Google an. Manche privaten Videos können im Player weiterhin nicht verfügbar sein.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Diese Google-Freigabe ist von deiner Anmeldung auf der YouTube-Startseite getrennt. Manche privaten Videos können im Player weiterhin nicht verfügbar sein.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (controller.linked || controller.revocationPending) TextButton(onClick = { confirmDisconnect = true }, enabled = !controller.busy) {
-                            Text(if (controller.revocationPending) "Google-Widerruf erneut versuchen" else "Google-Verbindung trennen")
+                            Text(if (controller.revocationPending) "Google-Widerruf erneut versuchen" else "Freigabe für Kontofunktionen widerrufen")
                         }
                     }
                 }
             }
         }
     }
-    if (confirmDisconnect) AlertDialog(onDismissRequest = { confirmDisconnect = false }, title = { Text("Google-Verbindung trennen?") },
-        text = { Text("Weiktube löscht die geladenen Kontodaten und widerruft den Google-Zugriff. Dein Google-/YouTube-Konto und deine Abos bleiben bestehen.") },
-        confirmButton = { TextButton(onClick = { confirmDisconnect = false; controller.disconnect() }) { Text("Trennen") } },
+    if (confirmDisconnect) AlertDialog(onDismissRequest = { confirmDisconnect = false }, title = { Text("Google-Freigabe widerrufen?") },
+        text = { Text("Weiktube löscht die geladenen Daten dieser Kontoansicht und widerruft die Google-Freigabe. Dein YouTube-Konto und deine Abos bleiben bestehen. Deine Anmeldung auf der YouTube-Startseite bleibt erhalten.") },
+        confirmButton = { TextButton(onClick = { confirmDisconnect = false; controller.disconnect() }) { Text("Freigabe widerrufen") } },
         dismissButton = { TextButton(onClick = { confirmDisconnect = false }) { Text("Abbrechen") } })
 }
 

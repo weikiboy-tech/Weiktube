@@ -44,6 +44,11 @@ class OriginalHomeActivity : ComponentActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var proof: CheckBox
     private lateinit var enable: Button
+    private lateinit var autofill: OriginalHomeAutofill
+    private lateinit var autofillButton: Button
+    private lateinit var autofillActions: LinearLayout
+    private var autofillRevision = 0
+    private val autofillLoading = mutableSetOf<GeckoSession>()
     private var runtime: GeckoRuntime? = null
     private var lease: HomeExperimentLease.Lease? = null
     private var main: GeckoSession? = null
@@ -83,7 +88,7 @@ class OriginalHomeActivity : ComponentActivity() {
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom); insets
         }
-        val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val toolbar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS }
         listOf("‹" to { back() }, "Home" to { goHome() }, "Konto" to { account() },
             "Test" to { panel.visibility = if (panel.visibility == View.VISIBLE) View.GONE else View.VISIBLE },
             "×" to { finish() }).forEach { (label, action) -> toolbar.addView(button(label, action), LinearLayout.LayoutParams(0, dp(46), 1f)) }
@@ -94,7 +99,22 @@ class OriginalHomeActivity : ComponentActivity() {
         root.addView(progress, LinearLayout.LayoutParams(-1, dp(2)))
         status = label("Prüfe dein Konto und deine Vorschläge. Anschließend unter „Test“ bestätigen.", 12f).apply { maxLines = 3 }
         root.addView(status)
-        panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        autofillButton = button("Zugangsdaten vorschlagen") { autofill.suggest() }.apply {
+            // A touch on this action must not take focus away from Gecko's real virtual input.
+            isFocusable = false; isFocusableInTouchMode = false
+        }
+        autofillActions = LinearLayout(this).apply {
+            visibility = View.GONE; importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+            addView(autofillButton, LinearLayout.LayoutParams(0, -1, 1f))
+            addView(button("Info") {
+                val snapshot = autofill.diagnostics()
+                AlertDialog.Builder(this@OriginalHomeActivity).setTitle("Autofill-Diagnose")
+                    .setMessage("Momentaufnahme vor Öffnen dieses Fensters. Keine Eingaben oder Kontodaten.\n\n$snapshot")
+                    .setPositiveButton("Schließen", null).show()
+            }.apply { isFocusable = false; contentDescription = "Autofill-Diagnose ohne Eingaben anzeigen" }, LinearLayout.LayoutParams(dp(64), -1))
+        }
+        root.addView(autofillActions, LinearLayout.LayoutParams(-1, dp(44)))
+        panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS }
         panel.addView(label("Diese Webseite verwendet ihr eigenes gespeichertes Profil. Die Google-API-Anmeldung und Chrome sind davon getrennt. Nur du bestätigst hier, ob wirklich dein Konto und deine Vorschläge sichtbar sind.", 13f))
         proof = CheckBox(this).apply {
             text = "Ich sehe mein angemeldetes Konto und meine echten Vorschläge"; setTextColor(Color.WHITE); textSize = 13f
@@ -123,6 +143,7 @@ class OriginalHomeActivity : ComponentActivity() {
         root.addView(panel)
         viewport = FrameLayout(this)
         root.addView(viewport, LinearLayout.LayoutParams(-1, 0, 1f))
+        autofill = OriginalHomeAutofill(this, ::autofillTarget, { status.text = it })
         setContentView(root)
         updateControls()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -132,6 +153,7 @@ class OriginalHomeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume(); active = true
+        autofill.start()
         backgroundAuthentication.clear()
         if (main == null && !openingPlayer) prepare()
         main?.setActive(true); popup?.setActive(true)
@@ -151,7 +173,7 @@ class OriginalHomeActivity : ComponentActivity() {
                     val session = createSession()
                     main = session
                     session.open(engine)
-                    mainView = GeckoView(this).also { it.setSession(session); viewport.addView(it, FrameLayout.LayoutParams(-1, -1)) }
+                    mainView = createGeckoView(session, R.id.original_home_gecko_main).also { viewport.addView(it, FrameLayout.LayoutParams(-1, -1)) }
                     session.setActive(true)
                     session.loadUri(HOME)
                 }, { if (current(attempt)) status.text = "Der isolierte Webtest konnte nicht vorbereitet werden. Bitte schließen und erneut öffnen." })
@@ -187,6 +209,7 @@ class OriginalHomeActivity : ComponentActivity() {
             }
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
                 if (!owns(session) || url == null || (!active && session !in backgroundAuthentication)) return
+                invalidateAutofill()
                 locations[session] = url
                 if (!active) return
                 if (OriginalHomePolicy.isNormalWebAuthUrl(url)) resetProof()
@@ -202,12 +225,13 @@ class OriginalHomeActivity : ComponentActivity() {
                 if (!active || !owns(session) || popup != null || OriginalHomePolicy.isExplicitOAuthUrl(uri) ||
                     (uri != "about:blank" && !OriginalHomePolicy.allowedNavigation(uri)) || OriginalHomePolicy.videoUrl(uri) != null) return null
                 if (OriginalHomePolicy.isNormalWebAuthUrl(uri)) resetProof()
+                invalidateAutofill()
                 val child = createSession()
                 popup = child
                 extension?.let { bind(child, it) }
                 handler.post {
                     if (!active || popup !== child || isDestroyed) return@post
-                    popupView = GeckoView(this@OriginalHomeActivity).also { it.setSession(child); viewport.addView(it, FrameLayout.LayoutParams(-1, -1)) }
+                    popupView = createGeckoView(child, R.id.original_home_gecko_popup).also { viewport.addView(it, FrameLayout.LayoutParams(-1, -1)) }
                     child.setActive(true); showOrigin()
                 }
                 return GeckoResult.fromValue(child)
@@ -220,6 +244,8 @@ class OriginalHomeActivity : ComponentActivity() {
         progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 if (!owns(session) || (!active && session !in backgroundAuthentication)) return
+                invalidateAutofill()
+                autofillLoading += session
                 disconnect(session)
                 documentSerial[session] = (documentSerial[session] ?: 0) + 1
                 locations[session] = url
@@ -229,8 +255,11 @@ class OriginalHomeActivity : ComponentActivity() {
             }
             override fun onProgressChange(session: GeckoSession, value: Int) { if (active && owns(session)) progress.progress = value }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
+                if (!owns(session)) return
+                if (success) autofillLoading.remove(session)
                 if (active && owns(session)) {
                     progress.visibility = View.GONE
+                    updateControls()
                     if (!success) status.text = "Die Webseite wurde nicht vollständig geladen. Home lädt sie erneut; eine sichtbare Google-Fehlermeldung bleibt unverändert."
                 }
             }
@@ -385,9 +414,10 @@ class OriginalHomeActivity : ComponentActivity() {
     }
     private fun closePopup() {
         val child = popup ?: return
+        invalidateAutofill()
         disconnect(child); media.remove(child)?.pause()
         popupView?.let { it.releaseSession(); viewport.removeView(it) }; popupView = null; popup = null
-        locations.remove(child); history.remove(child); documentSerial.remove(child); backgroundAuthentication.remove(child)
+        locations.remove(child); history.remove(child); documentSerial.remove(child); backgroundAuthentication.remove(child); autofillLoading.remove(child)
         runCatching { child.setActive(false); child.close() }
         showOrigin()
     }
@@ -403,8 +433,14 @@ class OriginalHomeActivity : ComponentActivity() {
         if (!::enable.isInitialized) return
         enable.isEnabled = active && confirmed && !installing && !extensionOperation && !handoff && popup == null && main != null
         enable.text = if (handoff) "Originalplayer-Übergabe aktiv" else "Videoübergabe an Originalplayer aktivieren"
+        if (::autofillButton.isInitialized) {
+            val target = autofillTarget()
+            autofillActions.visibility = if (active && target?.authPage == true) View.VISIBLE else View.GONE
+            autofillButton.isEnabled = active && target?.documentReady == true && target.view.isShown
+        }
     }
     private fun stopSessions() {
+        invalidateAutofill()
         generation++; installing = false; resetProof()
         connections.keys.toList().forEach(::disconnect)
         media.values.toList().forEach { runCatching { it.pause() } }; media.clear()
@@ -412,13 +448,15 @@ class OriginalHomeActivity : ComponentActivity() {
         popupView?.let { it.releaseSession(); viewport.removeView(it) }; popupView = null
         val sessions = listOfNotNull(main, popup); main = null; popup = null
         sessions.forEach { runCatching { it.setActive(false); it.close() } }
-        locations.clear(); history.clear(); documentSerial.clear(); backgroundAuthentication.clear(); extension = null
+        locations.clear(); history.clear(); documentSerial.clear(); backgroundAuthentication.clear(); autofillLoading.clear(); extension = null
         lease?.let { if (extensionOperation) deferredRelease += it else it.release() }; lease = null
     }
     override fun onPause() {
         backgroundAuthentication.clear()
         listOfNotNull(main, popup).filterTo(backgroundAuthentication) { OriginalHomePolicy.isNormalWebAuthUrl(locations[it].orEmpty()) }
         active = false
+        autofill.stop()
+        invalidateAutofill()
         val wasConfirmed = confirmed
         resetProof()
         if (wasConfirmed) status.text = "Nach der Unterbrechung bitte deinen Feed unter „Test“ erneut bestätigen und die Videoübergabe aktivieren."
@@ -435,12 +473,32 @@ class OriginalHomeActivity : ComponentActivity() {
     }
     // Asynchronous extension completions must still release their lease after Activity destruction.
     // Every UI callback checks generation/active; do not discard the cleanup callbacks.
-    override fun onDestroy() { if (::viewport.isInitialized) stopSessions(); super.onDestroy() }
+    override fun onDestroy() {
+        if (::autofill.isInitialized) autofill.stop()
+        if (::viewport.isInitialized) stopSessions()
+        super.onDestroy()
+    }
+    private fun createGeckoView(session: GeckoSession, viewId: Int) = GeckoView(this).apply {
+        id = viewId
+        importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
+        // setSession retains Gecko's own default AndroidAutofillDelegate and virtual structure.
+        setSession(session)
+    }
+    private fun autofillTarget(): OriginalHomeAutofill.Target? {
+        val session = popup ?: main ?: return null
+        val view = (if (session === popup) popupView else mainView) ?: return null
+        return OriginalHomeAutofill.Target(session, view, autofillRevision, active && owns(session) && !openingPlayer,
+            OriginalHomeAutofillPolicy.isGoogleSignIn(locations[session].orEmpty()), session !in autofillLoading)
+    }
+    private fun invalidateAutofill() {
+        autofillRevision++
+        if (::autofill.isInitialized) autofill.invalidate()
+    }
     private fun owns(session: GeckoSession) = session === main || session === popup
     private fun current(attempt: Int) = active && !isDestroyed && generation == attempt
     private fun decision(allow: Boolean) = GeckoResult.fromValue(if (allow) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
-    private fun label(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.WHITE); setPadding(dp(10), dp(3), dp(10), dp(3)) }
-    private fun button(value: String, action: () -> Unit) = Button(this).apply { text = value; isAllCaps = false; textSize = 12f; setOnClickListener { action() } }
+    private fun label(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.WHITE); importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO; setPadding(dp(10), dp(3), dp(10), dp(3)) }
+    private fun button(value: String, action: () -> Unit) = Button(this).apply { text = value; isAllCaps = false; textSize = 12f; importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO; setOnClickListener { action() } }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     companion object {
         private const val HOME = "https://m.youtube.com/"

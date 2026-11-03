@@ -1,4 +1,17 @@
-# Weiktube 1.2.5-original-home-test
+# Weiktube 1.2.6-website-first-test
+
+Der Kontobereich beginnt mit **YouTube-Startseite öffnen**. Die echte Website nutzt
+ihr dauerhaftes Gecko-Profil; eine bereits gültige Website-Sitzung wird wiederverwendet.
+Die vorhandene native Google-Freigabe für Abos und Playlists bleibt unabhängig davon
+erhalten und wird nur bei Bedarf ausdrücklich angefordert. Es gibt keinen automatischen
+Transfer der Google-API-Anmeldung oder der Chrome-Cookies nach Gecko.
+
+Der [Website-first-Test](WEBSITE-FIRST-TEST.md) ergänzt eine gezielte Android-Autofill-
+Anfrage für das fokussierte Anmeldefeld und einen optionalen Diagnosebereich ohne
+Zugangsdaten. Verfügbare Vorschläge bestimmt der ausgewählte Passwortmanager.
+Eine erfolgreiche Anmeldung mit einem echten Konto muss auf dem Gerät geprüft werden.
+
+## Beibehaltener Original-Home-Test aus 1.2.5
 
 Dieser Entwicklungsstand ergänzt einen isolierten
 [Original-Home-Test](ORIGINAL-HOME-TEST.md) unter „Du / Konto“: sichtbare originale

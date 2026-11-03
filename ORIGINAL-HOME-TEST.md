@@ -1,5 +1,8 @@
 # Original-Home-Test: echte Website, aktuell ausgewähltes Konto
 
+Historischer Teststand 1.2.5. Die Ergänzungen zum Website-Einstieg und zur
+Autofill-Hilfe in 1.2.6 stehen in [WEBSITE-FIRST-TEST.md](WEBSITE-FIRST-TEST.md).
+
 Version 1.2.5-original-home-test, Versionscode 9, Paket `com.weiktube.app`.
 Diese Test-APK aktualisiert dieselbe App. Die bisherige Startseite bleibt Standard.
 Keine privaten Kontodaten oder Anmeldungen werden mit der APK verteilt.

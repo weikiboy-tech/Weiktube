@@ -15,15 +15,15 @@ import com.weiktube.home.ChromeHomeTestActivity
 fun HomeConnectionEntry(activity: MainActivity, account: YoutubeAccountController) {
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Originale YouTube-Startseite testen", style = MaterialTheme.typography.titleMedium)
-            Text("Zeigt die echte Website mit dem dort aktuell angemeldeten Konto. Prüfe zuerst deine Startseite, danach die Übergabe an den bestehenden Player. Deine bisherige Startseite bleibt erhalten.", style = MaterialTheme.typography.bodySmall)
+            Text("Deine YouTube-Startseite", style = MaterialTheme.typography.titleMedium)
+            Text("Melde dich bei Bedarf einmal auf der YouTube-Website an. Eine gültige Anmeldung wird beim nächsten Öffnen wiederverwendet. Die separate Freigabe für Abos und Playlists brauchst du dafür nicht.", style = MaterialTheme.typography.bodySmall)
             Button(onClick = {
                 activity.startActivity(Intent(activity, OriginalHomeActivity::class.java))
-            }) { Text("1. Original-Home in Weiktube testen") }
-            OutlinedButton(onClick = {
+            }) { Text("YouTube-Startseite öffnen") }
+            TextButton(onClick = {
                 activity.startActivity(Intent(activity, ChromeHomeTestActivity::class.java))
-            }) { Text("2. Mit Chrome vergleichen") }
-            Text("Gecko und Chrome verwenden getrennte Website-Anmeldungen. Die separate Google-API-Verbindung ist dafür nicht erforderlich.", style = MaterialTheme.typography.bodySmall)
+            }) { Text("Diagnose: mit Chrome vergleichen") }
+            Text("Chrome verwendet eine eigene Anmeldung. Diese wird nicht in Weiktube übernommen.", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

@@ -1,0 +1,4 @@
+<resources>
+    <item name="original_home_gecko_main" type="id" />
+    <item name="original_home_gecko_popup" type="id" />
+</resources>

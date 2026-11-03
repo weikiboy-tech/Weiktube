@@ -52,7 +52,7 @@ class YoutubeAccountController(activity: ComponentActivity) {
     var connected by mutableStateOf(false); private set
     var loaded by mutableStateOf(false); private set
     var busy by mutableStateOf(false); private set
-    var status by mutableStateOf("Melde dich mit Google an, um deine YouTube-Abos und Playlists in Weiktube zu sehen."); private set
+    var status by mutableStateOf("Für diese Kontoansicht ist eine separate Google-Freigabe nötig."); private set
     var ownChannels by mutableStateOf<List<YoutubeAccountItem>>(emptyList()); private set
     var subscriptions by mutableStateOf<List<YoutubeAccountItem>>(emptyList()); private set
     var playlists by mutableStateOf<List<YoutubeAccountItem>>(emptyList()); private set
@@ -71,7 +71,7 @@ class YoutubeAccountController(activity: ComponentActivity) {
         resolutionPending = false
         if (!closed && resolutionGeneration == generation) {
             if (result.resultCode != Activity.RESULT_OK || result.data == null) {
-                busy = false; status = "Anmeldung abgebrochen. Du kannst Weiktube weiterhin ohne Konto nutzen."
+                busy = false; status = "Google-Freigabe abgebrochen. Die YouTube-Startseite kannst du weiterhin öffnen."
                 nativeAuthorization?.completeExceptionally(IllegalStateException("Google-Freigabe abgebrochen.")); nativeAuthorization = null
             } else try {
                 acceptAuthorization(client.getAuthorizationResultFromIntent(result.data!!))
@@ -97,7 +97,7 @@ class YoutubeAccountController(activity: ComponentActivity) {
 
     private fun authorize(interactive: Boolean) {
         if (busy || closed || resolutionPending) return
-        busy = true; status = "Google-Konto wird vorbereitet …"
+        busy = true; status = "Google-Freigabe wird vorbereitet …"
         val requestGeneration = generation
         try {
             client.authorize(AuthorizationRequest.builder().setRequestedScopes(scopes).build())
@@ -106,10 +106,10 @@ class YoutubeAccountController(activity: ComponentActivity) {
                     if (result.hasResolution()) {
                         if (!interactive) {
                             busy = false
-                            status = "Bitte erneut mit Google anmelden, um den Kontozugriff zu bestätigen."
+                            status = "Bitte die Freigabe für Abos und Playlists erneut bestätigen."
                         } else {
                             val pending = result.pendingIntent
-                            if (pending == null) authorizationFailed(IllegalStateException("Google hat keinen Anmeldedialog bereitgestellt."))
+                            if (pending == null) authorizationFailed(IllegalStateException("Google hat keinen Freigabedialog bereitgestellt."))
                             else try { resolutionGeneration = requestGeneration; resolutionPending = true; resolutionLauncher.launch(IntentSenderRequest.Builder(pending.intentSender).build()) }
                             catch (failure: Exception) { resolutionPending = false; authorizationFailed(failure) }
                         }
@@ -172,7 +172,7 @@ class YoutubeAccountController(activity: ComponentActivity) {
             }
             NativeGrantDecision.NONE -> {
                 invalidateGrant()
-                status = "Der YouTube-Kontozugriff wurde nicht freigegeben. Bitte erneut anmelden."
+                status = "Der YouTube-Kontozugriff wurde nicht freigegeben. Bitte die Freigabe erneut bestätigen."
                 throw IllegalStateException("Der YouTube-Kontozugriff wurde nicht freigegeben.")
             }
         }
@@ -189,11 +189,11 @@ class YoutubeAccountController(activity: ComponentActivity) {
         busy = false
         nativeAuthorization?.completeExceptionally(failure); nativeAuthorization = null
         status = when ((failure as? ApiException)?.statusCode) {
-            10 -> "Google-Anmeldung noch nicht freigeschaltet: Der Entwickler muss den Android-OAuth-Client für com.weiktube.app und diesen APK-Signierschlüssel im Google-Cloud-Projekt registrieren und die YouTube Data API aktivieren."
+            10 -> "Google-Freigabe noch nicht freigeschaltet: Der Entwickler muss den Android-OAuth-Client für com.weiktube.app und diesen APK-Signierschlüssel im Google-Cloud-Projekt registrieren und die YouTube Data API aktivieren."
             7 -> "Google ist nicht erreichbar. Bitte die Internetverbindung prüfen und erneut anmelden."
-            16, 12501 -> "Anmeldung abgebrochen."
+            16, 12501 -> "Freigabe abgebrochen."
             4 -> "Bitte ein Google-Konto auf dem Gerät hinzufügen oder erneut anmelden."
-            else -> "Google-Anmeldung fehlgeschlagen${(failure as? ApiException)?.statusCode?.let { " (Code $it)" } ?: ""}. Prüfe Internet und Google Play-Dienste. Falls es weiterhin scheitert, muss der Entwickler OAuth-Client, Signierschlüssel und Testnutzer-Freigabe prüfen."
+            else -> "Google-Freigabe fehlgeschlagen${(failure as? ApiException)?.statusCode?.let { " (Code $it)" } ?: ""}. Prüfe Internet und Google Play-Dienste. Falls es weiterhin scheitert, muss der Entwickler OAuth-Client, Signierschlüssel und Testnutzer-Freigabe prüfen."
         }
     }
 
@@ -248,7 +248,7 @@ class YoutubeAccountController(activity: ComponentActivity) {
         ownChannels = pages.first.items; loaded = true
         subscriptions = pages.second.items; nextSubscriptions = pages.second.nextToken; moreSubscriptions = nextSubscriptions.isNotEmpty()
         playlists = pages.third.items; nextPlaylists = pages.third.nextToken; morePlaylists = nextPlaylists.isNotEmpty()
-        status = if (ownChannels.isEmpty()) "Mit Google verbunden. Für dieses Konto wurde kein eigener YouTube-Kanal gefunden." else "Mit YouTube verbunden. Deine Kontodaten sind aktuell."
+        status = if (ownChannels.isEmpty()) "Google-Freigabe aktiv. Für dieses Konto wurde kein eigener YouTube-Kanal gefunden." else "Freigabe für Kontofunktionen aktiv. Deine Kontodaten sind aktuell."
     }
 
     /** One noninteractive refresh attempt per operation. Rebuild all rows; old-account page cursors are discarded. */
@@ -266,7 +266,7 @@ class YoutubeAccountController(activity: ComponentActivity) {
                 ensureGeneration(currentGeneration); sessionGuard.check(requestSession)
                 invalidateGrant()
                 var recoverySession = sessionGuard.capture()
-                status = "Google-Anmeldung wird erneuert …"
+                status = "Google-Freigabe wird erneuert …"
                 try {
                     client.clearToken(ClearTokenRequest.builder().setToken(accessToken).build()).awaitResult()
                     ensureGeneration(currentGeneration); sessionGuard.check(recoverySession)
@@ -350,7 +350,7 @@ class YoutubeAccountController(activity: ComponentActivity) {
                 .addOnSuccessListener { if (!closed) {
                     busy = false; revocationPending = false
                     preferences.edit().putBoolean("revocation_pending", false).apply()
-                    status = "Google-Verbindung getrennt und Zugriff widerrufen."
+                    status = "Google-Freigabe für Kontofunktionen widerrufen."
                 } }
                 .addOnFailureListener { if (!closed) { busy = false; status = "Lokale Kontodaten sind gelöscht. Google konnte den Zugriff nicht widerrufen. Bitte unter myaccount.google.com/connections Weiktube entfernen oder erneut trennen." } }
         } catch (_: Exception) { busy = false; status = "Lokale Kontodaten gelöscht. Bitte den Zugriff zusätzlich unter myaccount.google.com/connections entfernen." }
@@ -409,11 +409,11 @@ class YoutubeAccountController(activity: ComponentActivity) {
         status = when {
             failure is AccountConsentRequired -> {
                 invalidateGrant()
-                "Bitte erneut mit Google anmelden, um den Kontozugriff zu bestätigen."
+                "Bitte den Zugriff auf deine Kontodaten erneut freigeben."
             }
             failure is YoutubeApiFailure && failure.http == 401 -> {
                 invalidateGrant()
-                "Die Anmeldung ist abgelaufen. Bitte erneut mit Google anmelden."
+                "Die Google-Freigabe für Kontofunktionen ist abgelaufen. Bitte erneut bestätigen."
             }
             failure is YoutubeApiFailure && failure.reason in setOf("accessNotConfigured", "serviceDisabled") ->
                 "Die YouTube Data API ist im Google-Cloud-Projekt noch nicht aktiviert. Der Entwickler muss sie zuerst freischalten."
@@ -458,7 +458,7 @@ class YoutubeAccountController(activity: ComponentActivity) {
                 // Never leave the old account presented as usable after token renewal failed.
                 if (!closed && expected == generation && requestSession == sessionGuard.capture() && token == null) {
                     invalidateGrant()
-                    status = "Bitte unter „Du“ die Google-Anmeldung erneut bestätigen."
+                    status = "Bitte unter „Du“ die Google-Freigabe erneut bestätigen."
                 }
                 throw renewalFailure
             }
@@ -478,15 +478,15 @@ class YoutubeAccountController(activity: ComponentActivity) {
         if (closed) throw CancellationException("Account controller closed")
         token?.takeIf { grantedScopes.containsAll(required) }?.let { return@withLock it }
         if (write && !interactive) throw IllegalStateException("Bitte die zusätzliche Google-Freigabe zuerst über die gewünschte Aktion bestätigen.")
-        if (!interactive && !linked) throw IllegalStateException("Bitte zuerst unter „Du“ mit Google anmelden.")
-        if (busy || resolutionPending) throw IllegalStateException("Die Kontoanmeldung wird gerade aktualisiert. Bitte kurz warten und erneut versuchen.")
+        if (!interactive && !linked) throw IllegalStateException("Bitte zuerst unter „Du“ Abos und Playlists freigeben.")
+        if (busy || resolutionPending) throw IllegalStateException("Die Google-Freigabe wird gerade aktualisiert. Bitte kurz warten und erneut versuchen.")
         val expected = generation
         busy = true
         try {
             val result = client.authorize(AuthorizationRequest.builder().setRequestedScopes(required.map(::Scope)).build()).awaitResult()
             ensureGeneration(expected)
             if (result.hasResolution()) {
-                if (!interactive) throw IllegalStateException("Bitte unter „Du“ die Google-Anmeldung bestätigen.")
+                if (!interactive) throw IllegalStateException("Bitte unter „Du“ die Google-Freigabe bestätigen.")
                 val pending = result.pendingIntent ?: throw IllegalStateException("Google hat keine Freigabe bereitgestellt.")
                 val waiting = CompletableDeferred<String>()
                 nativeAuthorization = waiting; nativeAuthorizationScopes = required
