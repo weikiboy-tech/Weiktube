@@ -1,4 +1,13 @@
-# Weiktube 1.2.8-player-return-test
+# Weiktube 1.2.9-gecko-return-test
+
+Der [Gecko-Progress-Fix](GECKO-RETURN-TEST.md) behebt den in 1.2.8 noch bestehenden
+Verlust der Seitenadresse und Klickverbindung nach der Player-Rückkehr. Der
+geparkte Lade-Callback bleibt aktiv, damit Gecko keine künstliche `about:blank`-
+Initialnavigation erzeugt. Der eigentliche Laufzeitfix betrifft eine Zuweisung
+in `OriginalHomeReturn.kt`; Player, Klick-Bridge und Activity-Navigation bleiben
+unverändert. Fehlernachweis und Testgrenzen stehen im neuen Bericht.
+
+## Bisheriger Rückkehr-Fix aus 1.2.8 (allein nicht ausreichend)
 
 Der [gezielte Rückkehr-Fix](PLAYER-RETURN-TEST.md) behandelt die Wiederaufnahme der
 Klick-Bridge nach dem vorhandenen Player. Er erhält dieselbe Gecko-Sitzung und

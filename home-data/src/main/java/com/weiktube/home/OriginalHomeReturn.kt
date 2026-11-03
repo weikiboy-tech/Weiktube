@@ -79,7 +79,10 @@ object OriginalHomeReturn {
                 override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest) = GeckoResult.fromValue(AllowOrDeny.DENY)
                 override fun onSubframeLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest) = GeckoResult.fromValue(AllowOrDeny.DENY)
             }
-            session.progressDelegate = null
+            // Keep Gecko's Progress module enabled while this document is parked. Disabling it
+            // would replay _fireInitialLoad/about:blank on return, invalidating its live bridge.
+            // A non-null, Activity-free delegate consumes parked callbacks without that restart.
+            session.progressDelegate = object : GeckoSession.ProgressDelegate {}
             session.historyDelegate = null
             session.contentDelegate = object : GeckoSession.ContentDelegate {
                 override fun onCrash(session: GeckoSession) { if (entry === held) discard() }
