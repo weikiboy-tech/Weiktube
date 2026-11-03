@@ -1,0 +1,8 @@
+{
+  "manifest_version": 2,
+  "name": "Weiktube internal navigation",
+  "version": "1.0.0",
+  "browser_specific_settings": {"gecko": {"id": "navigation@weiktube.local"}},
+  "permissions": ["nativeMessaging", "nativeMessagingFromContent", "geckoViewAddons"],
+  "content_scripts": [{"matches": ["https://m.youtube.com/*", "https://www.youtube.com/*", "https://youtube.com/*"], "js": ["navigation.js"], "run_at": "document_start", "all_frames": false}]
+}

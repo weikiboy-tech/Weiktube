@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,10 +19,13 @@ import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalConfiguration
@@ -43,25 +47,26 @@ private val mint = Color(0xFF65D8C8)
 @Composable
 fun WeiktubeApp(activity: MainActivity, model: WeiktubeModel) {
     val prefs by model.preferences.collectAsStateWithLifecycle()
+    val shieldConfig by model.shieldConfig.collectAsStateWithLifecycle()
     val storageError by model.error.collectAsStateWithLifecycle()
     val dark = when (prefs.theme) { "Dunkel" -> true; "Hell" -> false; else -> isSystemInDarkTheme() }
-    val colors = if (dark) darkColorScheme(primary = mint, background = ink, surface = ink, secondary = Color(0xFFC1B6FF))
-        else lightColorScheme(primary = Color(0xFF006B60), background = Color(0xFFF6F8FB), surface = Color(0xFFF6F8FB))
-    LaunchedEffect(prefs) {
-        activity.shield.config = ShieldConfig(prefs.shield, prefs.ads, prefs.trackers,
-            runCatching { ShieldEngine.parse(prefs.domains) }.getOrDefault(emptySet()),
-            runCatching { ShieldEngine.parse(prefs.exceptions) }.getOrDefault(emptySet()))
-    }
+    val colors = if (dark) darkColorScheme(primary = mint, background = ink, surface = ink,
+        surfaceContainer = Color(0xFF212121), surfaceContainerHigh = Color(0xFF272727), secondary = Color(0xFFAAAAAA))
+        else lightColorScheme(primary = Color(0xFF006B60), background = Color.White, surface = Color.White,
+            surfaceContainer = Color(0xFFF2F2F2), surfaceContainerHigh = Color(0xFFEAEAEA), secondary = Color(0xFF606060))
+    LaunchedEffect(shieldConfig) { activity.shield.config = shieldConfig }
     LaunchedEffect(activity.foreground, activity.pip) {
         while (activity.foreground || activity.pip) {
             activity.player.poll()
+            activity.browser.poll()
+            activity.shorts?.poll()
             activity.blockedCount = activity.shield.blocked.get()
-            activity.keepAwake(activity.player.playing)
+            activity.keepAwake(activity.player.playing || (activity.isWebTab && activity.activeBrowser.mediaPlaying))
             delay(1000)
         }
     }
     LaunchedEffect(storageError) { storageError?.let(activity::message) }
-    BackHandler(enabled = activity.fullscreen || activity.player.source != null || !activity.isWebTab || activity.browser.view.canGoBack()) { activity.back() }
+    BackHandler(enabled = activity.fullscreen || activity.player.source != null || !activity.isWebTab || activity.tab == 1 || activity.browser.searchActive || activity.activeBrowser.canGoBack) { activity.back() }
     MaterialTheme(colorScheme = colors) {
         Surface(Modifier.fillMaxSize()) {
             WeiktubeContent(activity, model, prefs)
@@ -73,143 +78,148 @@ fun WeiktubeApp(activity: MainActivity, model: WeiktubeModel) {
 private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Preferences) {
     val p = a.player
     val hasPlayer = p.source != null
-    val webWatch = !hasPlayer && Links.videoId(a.browser.currentUrl) != null
-    val full = hasPlayer && (p.expanded || LocalConfiguration.current.screenHeightDp < 450)
-    val landscapePlayer = full && LocalConfiguration.current.screenHeightDp < 450
+    val full = hasPlayer && p.expanded
+    val personalHome = a.isPersonalHome
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     var menu by remember { mutableStateOf(false) }
-    var searchOpen by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
-    val searchFocus = remember { FocusRequester() }
-    LaunchedEffect(searchOpen) { if (searchOpen) searchFocus.requestFocus() }
-    BackHandler(searchOpen) { searchOpen = false }
-    var account by remember { mutableStateOf(false) }
-    val focus = LocalFocusManager.current
+    var actions by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
     var directUrl by remember { mutableStateOf("") }
     var linkError by remember { mutableStateOf<String?>(null) }
+    val tabStates = rememberSaveableStateHolder()
+    LaunchedEffect(p.source) { actions = false }
+    LaunchedEffect(dark) { a.browser.setTheme(dark); a.shorts?.setTheme(dark) }
+    LaunchedEffect(full, a.tab, hasPlayer, a.pip, a.foreground, actions, personalHome) {
+        a.browser.playbackElsewhere = hasPlayer
+        a.shorts?.playbackElsewhere = full
+        if (full || a.pip || a.tab != 0 || personalHome) a.browser.pauseMedia() else a.browser.resume()
+        if (full || a.pip || a.tab != 1) a.shorts?.pauseMedia() else a.shorts?.resume()
+        if (a.foreground || a.pip) p.resumeView()
+        p.setPlaybackAllowed(!actions && (a.foreground || a.pip) && (a.tab != 1 || full))
+    }
     Column(Modifier.fillMaxSize().then(if (a.pip) Modifier else Modifier.safeDrawingPadding())) {
-        if (!a.pip && !landscapePlayer && !webWatch) {
-            if (searchOpen) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { searchOpen = false }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Suche schließen") }
-                    OutlinedTextField(query, { query = it }, modifier = Modifier.weight(1f).focusRequester(searchFocus), singleLine = true,
-                        placeholder = { Text("Bei YouTube suchen") }, shape = RoundedCornerShape(24.dp),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus(); a.search(query); searchOpen = false }),
-                        trailingIcon = { IconButton(onClick = { focus.clearFocus(); a.search(query); searchOpen = false }) { Icon(Icons.Rounded.Search, "Suche starten") } })
-                }
-            } else Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (!a.isWebTab) IconButton(onClick = { a.selectTab(0) }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") }
+        if (!a.pip && !full && !a.browser.searchActive) {
+            Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.ic_weiktube), "Weiktube Logo", Modifier.size(28.dp))
                 Text("Weiktube", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp).weight(1f))
-                IconButton(onClick = { searchOpen = true }) { Icon(Icons.Rounded.Search, "YouTube durchsuchen") }
-                IconButton(onClick = { account = true }) { Icon(Icons.Rounded.AccountCircle, "Konto und Anmeldung") }
+                IconButton(onClick = a::openSearch) { Icon(Icons.Rounded.Search, "YouTube durchsuchen") }
+                IconButton(onClick = a::openAccountScreen) { Icon(Icons.Rounded.AccountCircle, "Konto und Anmeldung") }
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "Weitere Optionen") }
                     DropdownMenu(menu, { menu = false }) {
-                        if (Links.videoId(a.browser.currentUrl) != null) DropdownMenuItem(text = { Text("Im Mini-Player öffnen") }, onClick = { menu = false; a.minimizeWebVideo() })
                         DropdownMenuItem(text = { Text("Video-Link öffnen") }, onClick = { menu = false; showLinkDialog = true })
-                        DropdownMenuItem(text = { Text("Lokaler Verlauf") }, onClick = { menu = false; a.selectTab(6) })
+                        DropdownMenuItem(text = { Text("Verlauf") }, onClick = { menu = false; a.selectTab(6) })
                         DropdownMenuItem(text = { Text("Einstellungen & Updates") }, onClick = { menu = false; a.selectTab(5) })
-                        DropdownMenuItem(text = { Text("Seite neu laden") }, onClick = { menu = false; a.browser.view.reload() })
+                        if (a.isWebTab) DropdownMenuItem(text = { Text(if (personalHome) "Startseite aktualisieren" else "Seite neu laden") }, onClick = { menu = false; if (personalHome) a.subscriptionFeed.refresh() else a.activeBrowser.reload() })
                     }
                 }
             }
         }
-        // Keep both AndroidView nodes in the same composition position for the whole Activity lifetime.
-        if (!a.pip && !landscapePlayer) UpdateNotice(a.updater) { a.selectTab(5) }
-        Box(Modifier.fillMaxWidth().weight(if (full || a.pip) 0.001f else 1f).clipToBounds()) {
-            AndroidView(factory = { a.browser.view }, modifier = Modifier.fillMaxSize(), update = {
-                it.visibility = if (a.isWebTab && !full && !a.pip) android.view.View.VISIBLE else android.view.View.INVISIBLE
-            })
+        if (!a.pip && !full) UpdateNotice(a.updater) { a.selectTab(5) }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+            val availableHeight = maxHeight
+            // All WebViews stay attached. Changing tabs or player size never changes their keys.
+            key(a.browser.view) {
+                AndroidView(factory = { a.browser.view }, modifier = Modifier.fillMaxSize(), update = {
+                    it.visibility = if (a.tab == 0 && !personalHome && !full && !a.pip) android.view.View.VISIBLE else android.view.View.INVISIBLE
+                })
+            }
+            a.shorts?.let { shorts ->
+                key(shorts.view) {
+                    AndroidView(factory = { shorts.view }, modifier = Modifier.fillMaxSize(), update = {
+                        it.visibility = if (a.tab == 1 && !full && !a.pip) android.view.View.VISIBLE else android.view.View.INVISIBLE
+                    })
+                }
+            }
             if (!full && !a.pip) {
+                tabStates.SaveableStateProvider(a.tab) {
+                if (personalHome) {
+                    PersonalHomeScreen(a.subscriptionFeed, a.youtubeAccount, prefs.history, a::openVideo, a::openAccountUrl)
+                } else {
                 when (a.tab) {
                     2 -> SettingsScreen(prefs, model, a, shieldsOnly = true)
+                    3 -> SubscriptionsScreen(a.subscriptionFeed, a.youtubeAccount, a::openVideo, a::openAccountUrl)
+                    4 -> AccountScreen(a.youtubeAccount, a::openAccountUrl)
                     5 -> SettingsScreen(prefs, model, a)
                     6 -> HistoryScreen(prefs, model, a)
                     else -> {
-                        if (a.browser.progress < 1f) LinearProgressIndicator(progress = { a.browser.progress }, modifier = Modifier.fillMaxWidth())
-                        a.browser.error?.let { error ->
-                            Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) {
+                        if (a.activeBrowser.progress < 1f) LinearProgressIndicator(progress = { a.activeBrowser.progress }, modifier = Modifier.fillMaxWidth())
+                        a.activeBrowser.error?.let { error ->
+                            Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.errorContainer) {
                                 Column(Modifier.padding(16.dp)) {
                                     Text(error)
-                                    TextButton(onClick = { a.browser.view.reload() }) { Text("Erneut versuchen") }
+                                    TextButton(onClick = { a.activeBrowser.reload() }) { Text("Erneut versuchen") }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }
-        Column(Modifier.fillMaxWidth().then(if (full || a.pip) Modifier.weight(1f) else Modifier).clipToBounds().background(Color.Black)) {
-            if (hasPlayer && !a.pip) {
-                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { p.expanded = !p.expanded }) { Icon(if (p.expanded) Icons.Rounded.ExpandMore else Icons.Rounded.ExpandLess, if (p.expanded) "Mini-Player" else "Player vergrößern") }
-                        Text(p.title, Modifier.weight(1f), maxLines = 1, style = MaterialTheme.typography.labelLarge)
-                        IconButton(onClick = p::toggle) { Icon(if (p.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (p.playing) "Pause" else "Abspielen") }
-                        IconButton(onClick = p::close) { Icon(Icons.Rounded.Close, "Player schließen") }
-                    }
+                }
                 }
             }
-            AndroidView(factory = { p.view }, update = { it.visibility = if (hasPlayer) android.view.View.VISIBLE else android.view.View.GONE }, modifier = Modifier.fillMaxWidth().clipToBounds().then(
-                if (full || a.pip) Modifier.weight(1f) else Modifier.height(if (hasPlayer) 200.dp else 0.dp)))
-            if (hasPlayer && !a.pip && full && !landscapePlayer) {
-                Surface {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                        p.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            IconButton(onClick = a::share) { Icon(Icons.Rounded.Share, "Video teilen") }
-                            IconButton(onClick = { p.expanded = false }) { Icon(Icons.Rounded.PictureInPictureAlt, "Als Mini-Player weitersehen") }
-                            IconButton(onClick = a::enterPip, enabled = !p.isYoutube) { Icon(Icons.Rounded.PictureInPicture, "Android Picture-in-Picture für HTTPS-Videos") }
-                            IconButton(onClick = { p.pause(); a.external(p.source!!) }) { Icon(Icons.AutoMirrored.Rounded.OpenInNew, "Im Browser öffnen") }
-                            if (p.isYoutube) IconButton(onClick = {
-                                val source = p.source!!; p.close(); a.tab = 0; a.browser.view.onResume(); a.browser.navigate(source, true)
-                            }) { Icon(Icons.AutoMirrored.Rounded.Comment, "YouTube-Seite mit Kommentaren und Likes") }
+            val targetHeight = if (!hasPlayer || (a.tab == 1 && !full && !a.pip)) 0.dp else if (full || a.pip) availableHeight else minOf(244.dp, availableHeight)
+            Column(Modifier.align(Alignment.BottomEnd).fillMaxWidth().height(targetHeight).clipToBounds().background(Color.Black)) {
+                key(p.view) {
+                    AndroidView(factory = { p.view }, modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds(), update = {
+                        it.visibility = if (hasPlayer) android.view.View.VISIBLE else android.view.View.GONE
+                        p.setPresentation(!full && !a.pip, dark)
+                    })
+                }
+                if (hasPlayer && !a.pip) {
+                    if (p.loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                    p.error?.let { error ->
+                        Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                                Text(error, style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = p::retry) { Text("Erneut laden") }
+                            }
                         }
-                        if (p.isYoutube) Text("YouTube · PiP nicht freigeschaltet. Kommentare und Likes über die Videoseite.", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(bottom = 8.dp))
+                    }
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+                        Row(Modifier.fillMaxWidth().height(44.dp)
+                            .pointerInput(full) {
+                                var drag = 0f
+                                detectVerticalDragGestures(onDragStart = { drag = 0f }, onDragEnd = {
+                                    if (drag > 35) p.expanded = false else if (drag < -35) p.expanded = true
+                                }) { _, dy -> drag += dy }
+                            }, verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { p.expanded = !p.expanded }) {
+                                Icon(if (full) Icons.Rounded.ExpandMore else Icons.Rounded.ExpandLess, if (full) "Video minimieren" else "Video öffnen")
+                            }
+                            Text(p.title, Modifier.weight(1f).clickable { p.expanded = !p.expanded }, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+                            if (!full) IconButton(onClick = p::toggle) { Icon(if (p.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (p.playing) "Pause" else "Abspielen") }
+                            if (full && p.isYoutube) IconButton(onClick = { p.pause(); actions = true }) { Icon(Icons.Rounded.AccountCircle, "Gefällt mir, Abos und Kommentare mit deinem Konto") }
+                            if (full) IconButton(onClick = a::share) { Icon(Icons.Rounded.Share, "Video teilen") }
+                            if (full && !p.isYoutube) IconButton(onClick = a::enterPip) { Icon(Icons.Rounded.PictureInPicture, "Bild-in-Bild") }
+                            IconButton(onClick = p::close) { Icon(Icons.Rounded.Close, "Video schließen") }
+                        }
                     }
                 }
             }
         }
-        if (!a.pip && !landscapePlayer) {
-            NavigationBar(Modifier.height(64.dp), containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp, windowInsets = WindowInsets(0, 0, 0, 0)) {
+        if (!a.pip && !full) {
+            NavigationBar(Modifier.height(60.dp), containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp, windowInsets = WindowInsets(0, 0, 0, 0)) {
                 listOf("Startseite" to Icons.Rounded.Home, "Shorts" to Icons.Rounded.SlowMotionVideo, "Adblock" to Icons.Rounded.Shield,
                     "Abos" to Icons.Rounded.Subscriptions, "Du" to Icons.Rounded.AccountCircle).forEachIndexed { index, item ->
-                    NavigationBarItem(selected = a.tab == index, onClick = { a.selectTab(index) }, icon = { Icon(item.second, item.first, Modifier.size(24.dp)) }, label = { Text(item.first, maxLines = 1, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = true,
+                    NavigationBarItem(selected = a.tab == index, onClick = { if (index == 0) a.goHome() else a.selectTab(index) }, icon = { Icon(item.second, item.first, Modifier.size(24.dp)) }, label = { Text(item.first, maxLines = 1, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent, selectedIconColor = MaterialTheme.colorScheme.onSurface, selectedTextColor = MaterialTheme.colorScheme.onSurface))
                 }
             }
         }
     }
-    LaunchedEffect(full, a.tab, a.pip) {
-        if (full || !a.isWebTab || a.pip) {
-            a.browser.view.evaluateJavascript("document.querySelectorAll('video,audio').forEach(function(v){v.pause()})", null)
-            a.browser.view.onPause()
-        } else a.browser.view.onResume()
-    }
-    if (account) AlertDialog(onDismissRequest = { account = false }, title = { Text("Dein YouTube-Konto") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Dein Konto, deine Abos und Playlists öffnest du über YouTube.")
-            Text("Google unterstützt die Anmeldung in eingebetteten Browsern nicht zuverlässig. Die sichere Anmeldung erfolgt deshalb extern. Eine externe Sitzung wird nicht in Weiktube übernommen.", style = MaterialTheme.typography.bodySmall)
+    val id = p.source?.let(Links::videoId)
+    if (actions && id != null) VideoActionsSheet(a.videoActions, a.youtubeAccount, id) { actions = false }
+    if (showLinkDialog) AlertDialog(onDismissRequest = { showLinkDialog = false }, title = { Text("Video öffnen") }, text = {
+        Column {
+            OutlinedTextField(directUrl, { directUrl = it; linkError = null }, label = { Text("YouTube-Link oder HTTPS-Video") }, modifier = Modifier.fillMaxWidth())
+            linkError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
-    }, confirmButton = { TextButton(onClick = { account = false; a.external("https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fm.youtube.com%2F") }) { Text("Im Browser anmelden") } },
-        dismissButton = { TextButton(onClick = { account = false; a.tab = 4; a.player.expanded = false; a.browser.openAccount() }) { Text("YouTube-Kontoseite") } })
-    if (showLinkDialog) AlertDialog(onDismissRequest = { showLinkDialog = false },
-        title = { Text("Video öffnen") }, text = {
-            Column {
-                Text("YouTube-Link oder direkte HTTPS-Videodatei (z. B. MP4). PiP ist nur für direkte Videos verfügbar, die du abspielen darfst.")
-                OutlinedTextField(directUrl, { directUrl = it; linkError = null }, label = { Text("https://…") }, modifier = Modifier.fillMaxWidth())
-                linkError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        }, confirmButton = { TextButton(onClick = {
-            val url = directUrl.trim()
-            if (Links.videoId(url) != null || Links.directVideoAllowed(url)) {
-                a.openVideo(url); showLinkDialog = false
-            } else linkError = "Bitte einen gültigen YouTube-Videolink oder eine direkte HTTPS-Video-URL eingeben."
-        }) { Text("Öffnen") } }, dismissButton = { TextButton(onClick = { showLinkDialog = false }) { Text("Abbrechen") } })
+    }, confirmButton = { TextButton(onClick = {
+        val url = directUrl.trim()
+        if (Links.videoId(url) != null || Links.directVideoAllowed(url)) { a.openVideo(url); showLinkDialog = false }
+        else linkError = "Bitte einen gültigen Video-Link eingeben."
+    }) { Text("Öffnen") } }, dismissButton = { TextButton(onClick = { showLinkDialog = false }) { Text("Abbrechen") } })
 }
-
 @Composable
 private fun HistoryScreen(prefs: Preferences, model: WeiktubeModel, a: MainActivity) {
     Surface(Modifier.fillMaxSize()) {
@@ -217,7 +227,7 @@ private fun HistoryScreen(prefs: Preferences, model: WeiktubeModel, a: MainActiv
             item { Text("Deine Mediathek", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
             item { Text("Zuletzt in Weiktube geöffnet · lokal auf diesem Gerät", style = MaterialTheme.typography.bodyMedium) }
             item { Row {
-                TextButton(onClick = { a.tab = 0; a.browser.view.onResume(); a.browser.navigate("https://m.youtube.com/feed/library") }) { Text("YouTube-Playlists") }
+                TextButton(onClick = a::openAccountScreen) { Text("Deine Playlists") }
                 TextButton(onClick = model::clearHistory) { Text("Verlauf löschen") }
             } }
             if (prefs.history.isEmpty()) item { Text("Noch keine Videos im Verlauf. Öffne ein Video oder teile einen YouTube-Link mit Weiktube.") }
@@ -262,10 +272,10 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(onClick = {
                 try { ShieldEngine.parse(domains); ShieldEngine.parse(exceptions)
-                    model.string("domains", domains); model.string("exceptions", exceptions); error = null; a.message("Filter gespeichert.")
+                    model.saveFilters(domains, exceptions); error = null; a.message("Filter gespeichert.")
                 } catch (e: IllegalArgumentException) { error = e.message }
             }) { Text("Listen speichern") }
-            OutlinedButton(onClick = { a.tab = 0; a.player.expanded = false; a.browser.view.onResume(); a.browser.testShield() }) { Text("Shields-Prüfseite öffnen") }
+            OutlinedButton(onClick = { a.selectTab(0); a.browser.testShield() }) { Text("Shields-Prüfseite öffnen") }
             OutlinedButton(onClick = { a.shield.blocked.set(0); a.blockedCount = 0 }) { Text("Sitzungszähler zurücksetzen") }
             }
             if (!shieldsOnly) {
@@ -281,12 +291,12 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
             HorizontalDivider()
             Text("Konten & Wiedergabe", style = MaterialTheme.typography.titleLarge)
             Text("Empfehlungen, Suchvorschläge, Shorts, Kanäle und Playlists kommen von YouTubes mobiler Website. Dort stehen auch Qualitätswahl, Kommentare und Likes bereit, soweit YouTube sie anbietet. Die Suchlupe öffnet die Suche. Ergebnisse kommen direkt von YouTube.")
-            Text("Google kann Anmeldungen in eingebetteten Browsern ablehnen. Anmeldung wird im externen Browser geöffnet; dessen Sitzung lässt sich nicht in Weiktube übernehmen. Abos, Likes und private Playlists sind deshalb hier nicht garantiert verfügbar. Weiktube liest keine Passwörter aus.")
+            Text("Unter Du verbindest du dein Google-Konto für Abos und Playlists. Das Kontosymbol am Video öffnet Likes, Abos und Kommentare. Für Änderungen fragt Google nach deiner Freigabe. Die Website und ihre Empfehlungen behalten eine getrennte Sitzung.")
             Text("Der YouTube-Mini-Player bleibt mindestens 200 dp hoch. Keine Hintergrundwiedergabe oder YouTube-PiP. Direkte HTTPS-Videos unterstützen Android-PiP. Kein Download und keine Premium-Umgehung.")
             Text("Weiktube selbst enthält keine Analyse- oder Werbe-SDKs. Geladene Webseiten und der YouTube-Player erhalten technisch notwendige Netzwerk- und Gerätedaten. Verlauf und Einstellungen bleiben lokal; Cookies sind davon getrennt.")
             TextButton(onClick = { a.external("https://www.youtube.com/t/terms") }) { Text("YouTube-Nutzungsbedingungen") }
             TextButton(onClick = { a.external("https://policies.google.com/privacy") }) { Text("Google-Datenschutzerklärung") }
-            Text("Weiktube 1.1 · Unabhängige App, kein Produkt von Google oder Brave.", style = MaterialTheme.typography.labelMedium)
+            Text("Weiktube 1.2.3 · Unabhängige App, kein Produkt von Google oder Brave.", style = MaterialTheme.typography.labelMedium)
             }
         }
     }

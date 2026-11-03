@@ -1,48 +1,73 @@
-# Weiktube 1.1
+# Weiktube 1.2.3
+
+**Neue getrennte Test-App:** `engine-probe/` enthält Weiktube Test 0.1.0 mit eigener
+GeckoView-Engine, Original-Webstartseite und direkter interner Video-Navigation.
+Sie ersetzt die folgende Bestands-App nicht. Echte Google-Anmeldung und persönliche
+Empfehlungen müssen noch auf dem Zielgerät geprüft werden. Build, Grenzen und
+Abnahmeschritte stehen in [ENGINE-TEST.md](ENGINE-TEST.md).
 
 Android-App mit Kotlin, Jetpack Compose und Material 3. Paket und Namespace: `com.weiktube.app`. Benötigt Android 8.0 oder neuer, einen aktuellen Android System WebView und Internetzugang.
 
-Weiktube zeigt echte YouTube-Webinhalte in einer eigenen Android-Oberfläche. Version 1.1 entfernt die doppelte Webnavigation, ersetzt das dauerhafte zusätzliche Suchfeld durch eine Suchlupe und ergänzt einen Adblock-Tab sowie einen App-Updater. Die App bleibt ein unabhängiger WebView-Client; sie bildet nicht sämtliche Funktionen der offiziellen YouTube-App identisch nach.
+Version 1.2.3 stellt die native Weiktube-Startseite wieder her: eigener Kontokanal, ausdrücklich gerätelokaler Verlauf und echte Uploads der eigenen Abos. Die Anmeldung verwendet Googles offiziellen Android-Konto-/Freigabedialog. Der verworfene Chrome-Custom-Tab-Versuch und dessen Browserbibliothek sind entfernt; Start und Home-Taste bleiben in Weiktube. Der aktuelle Build- und Geräteteststand steht in `TESTING.md`.
+
+**Die verlangten originalen persönlichen YouTube-Empfehlungen innerhalb der App sind weiterhin nicht umgesetzt.** Eigene Abo-Uploads und lokaler Verlauf erfüllen diese Anforderung nicht. Die Rückkehr zur nativen Oberfläche ist keine abgeschlossene Umsetzung des gewünschten Funktionsumfangs.
+
+Native Videokarten öffnen den vorhandenen Weiktube-Watch-Player direkt. Suche, Kanäle und Videos verwenden weiterhin originale YouTube-Webinhalte in internen WebViews. Die native Google-Freigabe erzeugt dort keine YouTube-Webanmeldung und macht deren Empfehlungen nicht automatisch persönlich.
 
 ## Bedienung
 
-Die unteren Tabs heißen **Startseite**, **Shorts**, **Adblock**, **Abos** und **Du**. Die Suchlupe blendet ein einzeiliges Suchfeld anstelle der Kopfzeile ein. Nach dem Absenden erscheinen echte YouTube-Suchergebnisse; native Live-Suchvorschläge sind nicht implementiert. Das Kontosymbol öffnet die Kontoauswahl. Im Dreipunktmenü liegen **Video-Link öffnen**, **Lokaler Verlauf**, **Einstellungen & Updates** und **Seite neu laden**. Auf einer geöffneten YouTube-Videoseite wechselt ein Tippen auf **Startseite** zum Mini-Player. Die Videoseite behält ihre originale Web-Kopfzeile; die native Kopfzeile wird dort ausgeblendet.
+Die unteren Tabs heißen **Startseite**, **Shorts**, **Adblock**, **Abos** und **Du**. Die native Startseite zeigt den eigenen Kontokanal, „Verlauf auf diesem Gerät“ und „Videos deiner Abos“. **Mit Google anmelden** öffnet den offiziellen Android-Google-Dialog. Es gibt keinen automatischen Custom-Tab-/Browserstart und keine Browser-Symbolleiste über der Startseite.
+
+Ein Tippen auf eine native Abo- oder Verlaufskarte öffnet deren echtes Video im vorhandenen Player. Seine Leiste bietet Minimieren/Vergrößern, Play/Pause, Teilen, Schließen und native Kontoaktionen. Video-Links, lokaler Verlauf, Einstellungen und Updates bleiben über das Appmenü erreichbar.
 
 | Funktion | Umsetzung und Grenzen |
 | --- | --- |
-| Startseite und Suche | Echte mobile YouTube-Seiten. Empfehlungen hängen von YouTube, Cookies, Region und dem verfügbaren Verlauf ab. Suchbegriffe werden an YouTube gesendet. Die native Eingabe bietet keine Live-Autovervollständigung. |
-| Videos | YouTube-Videos öffnen standardmäßig auf der vollständigen originalen Videoseite mit Player, Aktionen, Kommentaren und Empfehlungen. Direkte HTTPS-Videodateien verwenden den separaten HTML5-Player. YouTubes Zugangsbeschränkungen bleiben wirksam; externes Öffnen ist möglich. |
-| Mini-Player | Von einer geöffneten Videoseite über den Tab „Startseite“; je nach Ansicht zusätzlich über „Im Mini-Player öffnen“ im Menü. Der Webplayer wird pausiert, seine Zeitposition auf ganze Sekunden erfasst und das Video einmalig im offiziellen IFrame-Player neu geladen. Danach bleibt dieselbe Player-WebView beim Navigieren erhalten. Play/Pause, Schließen und Vergrößern; mindestens 200 dp Höhe für YouTube. Die anfängliche Übergabe ist nicht unterbrechungsfrei und kann erneutes Tippen auf Play erfordern. Nicht einbettbare Videos können dort abgelehnt werden. |
-| Shorts | Originale vertikale Weboberfläche. Ein optionaler Wechsel einer erkannten Video-URL in den Mini-Player unterliegt denselben Einbettungsbeschränkungen wie andere Videos. |
-| Kanäle und Playlists | Über die YouTube-Webseite erreichbar. Keine eigene native Playlistverwaltung oder automatische Playlist-Fortsetzung im separaten Player. |
-| Abos und Du | YouTube-Aboseite bzw. Mediathek. Kontoabhängige Inhalte setzen eine von YouTube akzeptierte Websitzung voraus. |
-| Kommentare und Likes | Auf der standardmäßig geöffneten vollständigen Videoseite verfügbar, soweit YouTube sie anbietet. Schreiben und Liken benötigen eine gültige Websitzung. Vom optionalen separaten Player führt die Kommentar-Schaltfläche zurück zur Videoseite. |
-| Lokaler Verlauf | Bis zu 100 über native App-Aktionen geöffnete Videos, abschaltbar und löschbar. Dazu gehören übergebene YouTube-Links und direkte HTTPS-Videos. Keine Google-Synchronisierung; ausschließlich innerhalb der Webseite angeklickte Videos werden nicht vollständig erfasst. |
-| Vollbild und Rotation | WebView-Custom-View-Anbindung; Rotation erstellt die WebViews nicht neu. |
+| Startseite | Native Ansicht mit eigenem Kontotitel/-avatar, lokal gekennzeichnetem Verlauf und echten Abo-Uploads. Abos werden mit `subscriptions.list(mine=true)` geladen; nur angeforderte Videos aus den zugehörigen Kanälen werden akzeptiert. Keine originalen persönlichen YouTube-Empfehlungen. |
+| Suche und Kanäle | Originale mobile YouTube-Seiten in internen WebViews, einschließlich der von YouTube bereitgestellten Suche. Native Google-Autorisierung erzeugt darin keine Login-Cookies. |
+| Videos | Native Abo-/Verlaufseinträge und geteilte Videolinks öffnen den vollständigen Watch-WebView. Direkte HTTPS-Videodateien verwenden dessen HTML5-Player. Zugangsbeschränkungen bleiben wirksam. |
+| Mini-Player | Dieselbe Original-Videoseite wird verkleinert, ohne IFrame-Transfer; mindestens 200 dp Videohöhe. Im früheren OnePlus-Test blieb über „Du“ und „Abos“ dieselbe Watch-Sitzung erhalten, Position 18 → 39 Sekunden. |
+| Shorts | Eigene dauerhaft gehaltene Browserinstanz mit YouTubes vertikaler Weboberfläche. Der Wechsel zu Shorts pausiert die normale Videowiedergabe; Audioübergänge gehören zur Geräteabnahme. |
+| Kanäle und Playlists | Nach Google-Freigabe werden eigene Kanäle, eigene Playlists und deren Videoeinträge nativ angezeigt, einschließlich freigegebener privater Playlistdaten. Weitere Einträge lassen sich seitenweise laden. Kanäle öffnen den Browser, einzelne Videos die Original-Videoseite. Native Videoaktionen können nach zusätzlicher Freigabe in eine eigene Playlist speichern. Keine native Playlist-Warteschlange oder automatische Playlist-Fortsetzung. |
+| Abos und Du | „Abos“ zeigt echte neue Uploads abonnierter Kanäle mit Kanalbildern, Video-Thumbnails und Dauer. Zunächst werden 12 Kanäle mit jeweils bis zu 3 Uploads verarbeitet; weitere Kanäle lassen sich laden. Ergebnisse werden innerhalb derselben Kontositzung 5 Minuten zwischengespeichert. Dies ist ein begrenzter Abo-Uploadfeed, kein vollständiger persönlicher Homefeed. „Du“ zeigt eigene Kanäle und Playlists. |
+| Kommentare, Likes und Abonnieren | Die Original-Videoseite behält ihre Kommentare, Aktionen und Empfehlungen. Zusätzlich bietet ein natives Aktionsfenster echte API-Aufrufe für Gefällt mir, Abo ändern, Playlist speichern, Kommentare und Antworten. Es zeigt den tatsächlich geladenen Status; Schreiben benötigt eine zusätzliche Google-Freigabe. Diese neuen Schreibabläufe sind noch nicht auf dem Gerät abgenommen. |
+| Lokaler Verlauf | Bis zu 100 im Weiktube-Player geöffnete Videos, abschaltbar und löschbar. Kein synchronisierter Google-/YouTube-Verlauf. |
+| Vollbild und Rotation | WebView-Custom-View-Anbindung ohne Neuanlage des Players bei Rotation. |
 | Android-PiP | Für erlaubte direkte HTTPS-Videodateien über eine explizite Taste. YouTube-PiP bleibt deaktiviert. |
 | Qualität | Nur Auswahlmöglichkeiten des offiziellen Players bzw. der Webseite; keine erzwungene Qualität. |
 | Teilen und Links | Teilen des aktiven Videos und Empfang über „Teilen → Weiktube“. Direktes Öffnen unterstützter YouTube-Links muss unter Android 12+ ggf. in den App-Einstellungen erlaubt werden. |
 | Darstellung | Eigene kompakte Kopfzeile und Navigation, Play-Logo sowie System-/Hell-/Dunkelmodus für die native Oberfläche. Die Website steuert ihren eigenen Modus. |
 
-Die Webanpassung beschränkt sich auf doppelte mobile Kopf- und Fußnavigation. Auf der vollständigen Videoseite bleiben die originale YouTube-Kopfzeile und deren Abstände erhalten. Suchfelder, Suchvorschläge, eingebettete Player, deren Bedienelemente und Werbung werden davon nicht entfernt. Änderungen an YouTubes Webseitenstruktur können eine App-Aktualisierung erfordern.
+Die Webanpassungen betreffen doppelte mobile Kopf-/Fußnavigation und die Größe der internen Videoseite. Änderungen an YouTubes Webseitenstruktur können diese Ansichten beeinflussen. Der verworfene Browserversuch ist in `AUDIT.md` getrennt vom aktuellen Stand dokumentiert.
 
-## Anmeldung
+## Native Google-Anmeldung
 
-Das Kontosymbol bietet die YouTube-Seite „Du“ (`/feed/you`) und **Im Browser anmelden**. Google kann die Anmeldung in eingebetteten Browsern ablehnen. Deshalb erfolgt der sichere Anmeldeweg extern, ohne User-Agent-Täuschung oder Umgehung der Google-Anmeldevorgaben.
+Seit Version 1.2 verwendet Weiktube für native Kontoansichten und Videoaktionen Googles offiziellen Android-`AuthorizationClient` aus Google Play Services. **Mit Google anmelden** auf **Startseite**, **Du** oder **Abos** startet die Google-Kontoauswahl und Freigabe. Zunächst wird nur `https://www.googleapis.com/auth/youtube.readonly` angefordert. Damit liest Weiktube Kanäle, Abos, Playlists, Videoeinträge und Videoaktionen über die YouTube Data API.
 
-**Die externe Browsersitzung wird nicht nach Weiktube übernommen.** Eine externe Anmeldung garantiert daher keine Abos, Likes oder privaten Playlists innerhalb der App. Diese Aktionen können im externen Browser durchgeführt werden. Weiktube besitzt keine native Google-OAuth-/YouTube-Data-API-Kontointegration und liest oder speichert keine Google-Passwörter.
+Die erste ausdrücklich ausgelöste Schreibaktion fordert zusätzlich `https://www.googleapis.com/auth/youtube.force-ssl` an, soweit noch nicht erteilt. Das gilt für Gefällt mir, Abo ändern, in Playlist speichern, Kommentar oder Antwort senden. Auch die native Kommentarabfrage benötigt eine zusätzliche Freigabe: Dafür gibt es die ausdrückliche Schaltfläche **Kommentare freigeben**, die über den auch zum Schreiben berechtigenden Scope informiert. Bloßes Öffnen des Aktionsfensters löst weder diese Freigabe noch eine Schreibanfrage aus. Erfolg wird erst nach YouTubes Antwort angezeigt; ein angenommener Kommentar kann weiterhin der Kanalmoderation unterliegen. Nach einem unklaren Netzwerkfehler werden Schreibanfragen nicht automatisch wiederholt. Der neue Kommentar-Freigabeweg und die Schreibabläufe sind noch nicht Ende zu Ende auf dem Gerät geprüft.
+
+**Native API-Autorisierung und interne YouTube-WebViews sind getrennte Sitzungen.** Zugriffstokens und Browser-Cookies werden nicht in WebViews übertragen. Die APK enthält keine Anmeldung, Kontodaten oder Sitzung des Testgeräts. Eine frische Installation erhält dadurch keine native Google-Freigabe. Private Playlistmetadaten in der nativen Ansicht garantieren nicht das Abspielen ihrer privaten Videos im Watch-Player. Der Android-Google-Dialog allein verschafft keinen Zugriff auf den originalen persönlichen Empfehlungsfeed.
+
+Passwörter verbleiben bei Google. Zugriffstokens und geladene Kontolisten werden nur im Arbeitsspeicher gehalten; lokal wird lediglich der Verbindungs-/Widerrufsstatus gespeichert. Nach Neustart kann eine zuvor erteilte Berechtigung wieder angefordert werden. Bei einem neuen Kontozugriff werden zuvor geladene Kontolisten geleert. Ein abgelaufener Zugriffstoken wird begrenzt ohne erneuten Dialog erneuert, sofern Google das erlaubt; erforderliche Zustimmung muss der Nutzer selbst bestätigen. Beim Trennen werden lokale Kontodaten entfernt und der Google-Zugriff widerrufen. Scheitert der Widerruf, zeigt die App das an und bietet einen erneuten Versuch; das Google-/YouTube-Konto selbst bleibt bestehen.
+
+Die native Google-Anmeldung, Wiederherstellung der vorhandenen Kontofreigabe und echte Kontodaten wurden auf dem OnePlus geprüft. Der neue Abo-Uploadfeed lieferte Daten aus 9 der ersten 12 verarbeiteten Kanäle; ein Video-Thumbnail öffnete die Original-Videoseite. Native Bewertung und Abostatus wurden gelesen. Verwendet wurde ein ausdrücklich eingetragener persönlicher Testnutzer mit `youtube.readonly`. Playlistabnahme, neue Kommentarfreigabe und Schreibaktionen bleiben offen. Andere Signierschlüssel oder nicht freigegebene Testkonten können abgelehnt werden; den genauen Stand dokumentiert `TESTING.md`.
+
+### Persönlicher Testbetrieb ohne Billing
+
+Vorgesehen ist ein separates Google-Cloud-Projekt ohne verknüpftes Billing-Konto und ohne Aktivierung einer Testphase. Die App aktiviert keine kostenpflichtigen Dienste und fordert keine kostenpflichtige Kontingenterhöhung an. Die YouTube Data API besitzt ein projektbezogenes Kontingent; bei erschöpftem Kontingent zeigt Weiktube einen Fehler. Daraus folgt keine Zusage unbegrenzter API-Nutzung.
+
+Im externen OAuth-Testmodus dürfen nur ausdrücklich eingetragene Testnutzer zustimmen; eine APK-Weitergabe an Freunde schaltet deren Konten nicht automatisch frei. Google begrenzt diesen Testmodus auf bis zu 100 eingetragene Nutzer und kann nach sieben Tagen erneut Zustimmung verlangen. Eine breitere Veröffentlichung ist gesondert zu konfigurieren und kann eine Google-Prüfung erfordern. Siehe [Google: App-Zielgruppe](https://support.google.com/cloud/answer/15549945?hl=en) und [YouTube API-Kontingente](https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits).
 
 ## Adblock und Datenschutz
 
 Der Adblock-Tab enthält Weiktube Shields: eine kleine lokale Domainfilter-Engine mit getrennten Basislisten für Werbe- und Trackingdomains, eigenen Listen, Ausnahmen und einem Sitzungszähler. Unterstützt werden reine Domains und Hosts-Dateiformat mit `#`-Kommentaren, bis 256 KiB pro Liste. Domainsegmente und Subdomains werden berücksichtigt; Ausnahmen gelten für Hauptseite oder angefragte Domain.
 
-**YouTube und dessen Player sind vom Blocking ausgenommen, einschließlich der dort geladenen Werbeanfragen.** Weiktube ist kein YouTube-Werbeblocker. Es gibt keine ABP-/EasyList-Regeln, kosmetischen Werbefilter, automatischen Filterlisten-Downloads oder vollständige Brave-Engine. First-Party-/serverseitige Werbung, Service-Worker-, Cache-, WebSocket-, Blob-/Data- und bestimmte Weiterleitungszugriffe sind nicht vollständig erfassbar.
+**YouTube und dessen Player sind einschließlich Werbung vom Blocking ausgenommen.** Weiktube ist kein YouTube-Werbeblocker. Es gibt keine ABP-/EasyList-Regeln, kosmetischen Werbefilter, automatischen Filterlisten-Downloads oder vollständige Brave-Engine in Weiktube. First-Party-/serverseitige Werbung, Service-Worker-, Cache-, WebSocket-, Blob-/Data- und bestimmte Weiterleitungszugriffe sind nicht vollständig erfassbar.
 
 Die lokale Shields-Prüfseite fordert genau eine Ressource von der reservierten Testdomain `ads.weiktube.invalid` an. Bei aktiviertem Werbefilter steigt der Sitzungszähler um eins; mit deaktiviertem Filter bleibt er unverändert.
 
-Drittanbieter-Cookies, HTTP-Klartext, Mixed Content und lokale Datei-/Content-Zugriffe sind in den WebViews deaktiviert. Zertifikatsfehler werden nicht übergangen. Es gibt keine JavaScript-Native-Bridge, Analyse-SDKs oder Werbe-SDKs. Webseiten und YouTube erhalten dennoch Netzwerk- und technische Gerätedaten; die App macht YouTube-Nutzung nicht anonym.
+Drittanbieter-Cookies, HTTP-Klartext, Mixed Content und lokale Datei-/Content-Zugriffe sind in den WebViews deaktiviert. Zertifikatsfehler werden nicht übergangen. Eng begrenzte, auf YouTube-Ursprünge beschränkte Web-Nachrichten dienen der Linknavigation; Google-Tokens und Passwörter werden darüber nicht übertragen. Es gibt keine Analyse- oder Werbe-SDKs. Webseiten und YouTube erhalten dennoch Netzwerk- und technische Gerätedaten; die App macht YouTube-Nutzung nicht anonym.
 
-Einstellungen und Verlauf bleiben im privaten Appspeicher. Cookies, Cache und Webspeicher lassen sich separat löschen. Backups der Appdaten sind ausgeschlossen. Ohne sichtbare App bzw. erlaubtes direktes PiP wird der separate Player pausiert. Rotation und Navigation behalten dessen Instanz; nach Prozessbeendigung ist eine unterbrechungsfreie Wiederherstellung nicht garantiert.
+Einstellungen und lokaler Verlauf bleiben im privaten Appspeicher. WebView-Cookies, Cache und Webspeicher lassen sich separat löschen; native Google-Freigabe und Webdaten bleiben getrennte Zustände. Backups der Appdaten sind ausgeschlossen. Wiedergabesperren sollen unsichtbare und konkurrierende Wiedergabe verhindern; sämtliche Fehler-/Hintergrundfälle sind noch nicht abgenommen. Nach Prozessbeendigung ist eine unterbrechungsfreie Wiederherstellung nicht garantiert.
 
 ## Automatische App-Updates
 
@@ -62,16 +87,24 @@ Die App benötigt INTERNET und REQUEST_INSTALL_PACKAGES für diese Funktion sowi
 
 - `BUILD.md`: Build, Installation und Veröffentlichung eines Updates.
 - `TESTING.md`: automatisierte Prüfungen und dokumentierter Stand der Gerätetests.
-- `app/src/test`: Tests für Links, Filter und Updatevalidierung.
+- `AUDIT.md`: Funktionsvergleich, Plattformgrenzen und offene Abnahmeziele.
+- `app/src/test`: Tests für Links, Filter, Updates, Navigation und API-Aktionsregeln.
 - `UpdateController.kt` / `UpdateUi.kt`: Updater und Oberfläche.
+- `YoutubeAccountController.kt` / `AccountUi.kt`: native Google-Freigabe und schreibgeschützte YouTube-Kontoseiten.
+- `VideoActionsController.kt` / `VideoActionsUi.kt`: echte native Videoaktionen mit zusätzlicher Schreibfreigabe.
+- `SubscriptionFeedController.kt` / `SubscriptionsUi.kt`: echte Uploads abonnierter Kanäle mit begrenztem Sitzungs-Cache.
+- `PersonalHomeUi.kt`: native Startseite mit eigenem Kontokanal, lokalem Verlauf und echtem Abo-Uploadfeed.
 - `MainActivity.kt`: Android-Lifecycle, Navigation, Intents, Vollbild und PiP.
 - `WeiktubeUi.kt`: Compose-Oberfläche, Tabs, Player und Einstellungen.
 - `BrowserController.kt` / `PlayerController.kt`: dauerhaft gehaltene Browser- und Player-WebViews.
 - `ShieldEngine.kt`, `Links.kt`, `WeiktubeModel.kt`: Filter, Quellenvalidierung und lokale Daten.
 
-Technische Referenzen: [YouTube IFrame API](https://developers.google.com/youtube/iframe_api_reference), [YouTube-Playeranforderungen](https://developers.google.com/youtube/terms/required-minimum-functionality), [Android Picture-in-Picture](https://developer.android.com/develop/ui/views/picture-in-picture), [YouTube-Nutzungsbedingungen](https://www.youtube.com/t/terms), [Google-Datenschutz](https://policies.google.com/privacy).
+Technische Referenzen: [Google-Autorisierung unter Android](https://developer.android.com/identity/authorization), [YouTube Data API](https://developers.google.com/youtube/v3), [YouTube-Playeranforderungen](https://developers.google.com/youtube/terms/required-minimum-functionality), [Android Picture-in-Picture](https://developer.android.com/develop/ui/views/picture-in-picture), [YouTube-Nutzungsbedingungen](https://www.youtube.com/t/terms), [Google-Datenschutz](https://policies.google.com/privacy).
 
 Weiktube ist nicht mit YouTube, Google oder Brave verbunden. Die APK ist ein Debug-Build, keine Veröffentlichung im Play Store. Technische und kontoabhängige Einschränkungen sind kein Nachweis einer 1:1-Funktionsgleichheit mit der offiziellen YouTube-App.
+
+
+
 
 
 

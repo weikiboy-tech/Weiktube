@@ -1,7 +1,0 @@
-{
-  "versionCode": 2,
-  "versionName": "1.1.0",
-  "apkUrl": "https://github.com/weikiboy-tech/Weiktube/releases/download/v1.1.0/Weiktube.apk",
-  "sha256": "77e79caaa58f2a644c5663a2c27d9aa10725108b6dde162fa0893a253a3b9ad2",
-  "notes": "Weiktube 1.1.0: kompakte Navigation, vollständige YouTube-Webvideoseite, native Suche, optionaler Mini-Player, Adblock-Tab für unterstützte Webseiten (YouTube ausgenommen) und tägliche Updateprüfung beim Appstart. Google-Anmeldung extern ohne Cookieübertragung. Kein identischer offizieller YouTube-Client. APK mit bestehender Signieridentität; 25 Tests bestanden, Lint ohne Fehler. Gerätetestdetails in TESTING.md."
-}

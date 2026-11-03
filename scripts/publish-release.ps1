@@ -40,7 +40,7 @@ foreach ($directory in @('gradle','scripts','.github')) {
 New-Item -ItemType Directory -Path (Join-Path $stage 'app') | Out-Null
 Copy-Item -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Destination (Join-Path $stage 'app')
 Copy-Item -LiteralPath (Join-Path $project 'app/src') -Destination (Join-Path $stage 'app') -Recurse
-foreach ($extra in @('UPDATES.md','CHANGELOG.md','PRIVACY.md')) {
+foreach ($extra in @('UPDATES.md','AUDIT.md','CHANGELOG.md','PRIVACY.md')) {
     if (Test-Path -LiteralPath (Join-Path $project $extra)) { Copy-Item -LiteralPath (Join-Path $project $extra) -Destination $stage }
 }
 $feed = [ordered]@{
