@@ -1,4 +1,14 @@
-# Weiktube 1.2.6-website-first-test
+# Weiktube 1.2.7-player-handoff-test
+
+Dieser [gezielte Übergabefix](PLAYER-HANDOFF-TEST.md) aktiviert die Videoüberwachung
+vor dem Laden der originalen YouTube-Seite. Videoklicks benötigen keine manuelle
+Feed-Bestätigung mehr. Die bestehende MainActivity öffnet über ein internes
+ActivityResult weiterhin ihren vorhandenen Player. Für Zurück/Schließen wird das
+Gecko-Dokument mit seiner Sitzung im Speicher gehalten statt geschlossen/neugeladen.
+SPA-/History-Überwachung und Wiedergabesperren ergänzen die frühe Klickbehandlung.
+Die lokale Testabdeckung und die noch offenen Gerätetests stehen im Testbericht.
+
+## Beibehaltener Website-Einstieg aus 1.2.6
 
 Der Kontobereich beginnt mit **YouTube-Startseite öffnen**. Die echte Website nutzt
 ihr dauerhaftes Gecko-Profil; eine bereits gültige Website-Sitzung wird wiederverwendet.

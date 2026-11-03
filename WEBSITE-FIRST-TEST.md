@@ -1,5 +1,8 @@
 # Website zuerst: Anmeldung und Autofill testen
 
+Historischer Stand 1.2.6. Die anschließende Korrektur der Videoübergabe und des
+Rückwegs ist in [PLAYER-HANDOFF-TEST.md](PLAYER-HANDOFF-TEST.md) dokumentiert.
+
 Version 1.2.6-website-first-test, Android-Versioncode 10, Paket `com.weiktube.app`.
 Diese Testversion setzt den Original-Home-Test aus 1.2.5 fort. Sie ersetzt weder
 die bisherige Startseite noch Player, Miniplayer, Navigation oder Adblock-Engine.

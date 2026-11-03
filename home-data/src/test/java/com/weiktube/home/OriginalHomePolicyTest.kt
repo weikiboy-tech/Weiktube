@@ -4,6 +4,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OriginalHomePolicyTest {
+    @Test fun invalidPlayerRoutesStillCannotFallThroughToWebsitePlayback() {
+        for (url in listOf("https://m.youtube.com/watch", "https://m.youtube.com/watch?v=short",
+            "https://m.youtube.com/watch?v=dQw4w9WgXcQ&v=abcdefghijk", "https://m.youtube.com/%77atch?v=dQw4w9WgXcQ",
+            "https://m.youtube.com/shorts/invalid", "https://m.youtube.com/live", "https://youtu.be/invalid",
+            "https://m.youtube.com/embed/dQw4w9WgXcQ", "https://m.youtube.com/v/dQw4w9WgXcQ")) {
+            assertTrue(url, OriginalHomePolicy.isVideoNavigation(url))
+        }
+        for (url in listOf("https://m.youtube.com/", "https://m.youtube.com/results?search_query=test",
+            "https://m.youtube.com/@channel", "https://m.youtube.com/feed/subscriptions", "https://accounts.google.com/v3/signin/",
+            "https://m.youtube.com.evil.test/watch?v=dQw4w9WgXcQ")) {
+            assertFalse(url, OriginalHomePolicy.isVideoNavigation(url))
+        }
+    }
     private val id = "abcDEFghi_1"
     private val expected = "https://www.youtube.com/watch?v=$id"
 

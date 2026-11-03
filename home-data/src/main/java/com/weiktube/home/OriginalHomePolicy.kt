@@ -47,6 +47,17 @@ object OriginalHomePolicy {
         return isYoutubePage(raw) && u.path.orEmpty() in setOf("", "/", "/feed/what_to_watch")
     }
 
+    /** Recognize player routes independently of ID validation, so malformed routes never play in Gecko. */
+    fun isVideoNavigation(raw: String): Boolean {
+        val u = uri(raw) ?: return false
+        if (host(u) == "youtu.be") return true
+        if (host(u) !in youtubeHosts) return false
+        val path = u.path.orEmpty()
+        return path == "/watch" || path.startsWith("/watch/") || path == "/shorts" || path.startsWith("/shorts/") ||
+            path == "/live" || path.startsWith("/live/") || path == "/embed" || path.startsWith("/embed/") ||
+            path == "/v" || path.startsWith("/v/")
+    }
+
     fun isNormalWebAuthUrl(raw: String): Boolean {
         val u = uri(raw) ?: return false
         return !isExplicitOAuthUrl(raw) && (host(u) in webAuthHosts ||

@@ -1,4 +1,4 @@
-"""Verify original app source, allowing reviewed entry/clear hooks and website-first copy."""
+"""Verify original app source, allowing reviewed Home routing hooks and website-first copy."""
 from pathlib import Path
 import hashlib
 import json
@@ -7,10 +7,81 @@ root = Path(__file__).resolve().parents[1]
 baseline = json.loads((root / "scripts/home-original-source-hashes.json").read_text(encoding="utf-8"))
 allowed = {
     "app/src/main/java/com/weiktube/app/MainActivity.kt": [
-        ("        com.weiktube.home.HomeEngine.clearIfInitialized(this)\n", "")],
+        ("        com.weiktube.home.HomeEngine.clearIfInitialized(this)\n", ""),
+        ("import android.app.Activity\n", ""),
+        ("import androidx.activity.result.contract.ActivityResultContracts\n", ""),
+        ("import androidx.lifecycle.Lifecycle\n", ""),
+        ("import com.weiktube.home.OriginalHomeActivity\n", ""),
+        ("import com.weiktube.home.OriginalHomeReturn\n", ""),
+        ('''    private var pendingOriginalHomeVideo: String? = null
+    private var originalHomePlayer = false
+    // Registered before STARTED. A result may arrive before onResume permits playback.
+    private val originalHomeLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val url = OriginalHomeReturn.acceptPlayerResult(
+                result.data?.getStringExtra(OriginalHomeReturn.EXTRA_RETURN_TOKEN),
+                result.data?.getStringExtra(OriginalHomeReturn.EXTRA_VIDEO_URL)
+            )
+            if (url == null) {
+                if (OriginalHomeReturn.resumeToken() == null) OriginalHomeReturn.discard()
+                android.util.Log.w("WeiktubeHome", "RETURN_SESSION_UNAVAILABLE")
+                message("Die Videoübergabe ist nicht mehr gültig. Öffne die YouTube-Startseite erneut und tippe das Video noch einmal an.")
+            } else {
+                pendingOriginalHomeVideo = url
+                if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) openPendingOriginalHomeVideo()
+            }
+        }
+    }
+
+    fun openOriginalHome() {
+        val resume = OriginalHomeReturn.resumeToken()
+        try {
+            originalHomeLauncher.launch(Intent(this, OriginalHomeActivity::class.java).apply {
+                if (resume != null) putExtra(OriginalHomeReturn.EXTRA_RESUME_TOKEN, resume)
+            })
+            originalHomePlayer = false
+        } catch (_: Exception) {
+            android.util.Log.w("WeiktubeHome", "HOME_LAUNCH_FAILED")
+            message("Die YouTube-Startseite konnte nicht geöffnet werden. Bitte erneut versuchen.")
+        }
+    }
+    private fun openPendingOriginalHomeVideo() {
+        if (!foreground || isFinishing || isDestroyed || !::player.isInitialized) return
+        val url = pendingOriginalHomeVideo ?: return
+        pendingOriginalHomeVideo = null
+        openVideo(url)
+        originalHomePlayer = OriginalHomeReturn.resumeToken() != null
+    }
+    fun closeVideo() {
+        val returnHome = originalHomePlayer && OriginalHomeReturn.resumeToken() != null
+        player.close()
+        originalHomePlayer = false
+        if (returnHome) openOriginalHome()
+    }
+''', ""),
+        ('            originalHomePlayer = savedInstanceState.getBoolean("original_home_player", false) && OriginalHomeReturn.resumeToken() != null\n', ""),
+        ('''    fun openVideo(url: String) {
+        pendingOriginalHomeVideo = null
+        originalHomePlayer = false
+''', '    fun openVideo(url: String) {\n'),
+        ('        openPendingOriginalHomeVideo()\n', ""),
+        ('        outState.putBoolean("original_home_player", originalHomePlayer)\n', ""),
+        ('''        player.source != null && player.expanded -> {
+            player.expanded = false
+            if (originalHomePlayer && OriginalHomeReturn.resumeToken() != null) {
+                player.pause()
+                openOriginalHome()
+            }
+            true
+        }
+''', '        player.source != null && player.expanded -> { player.expanded = false; true }\n'),
+        ('        pendingOriginalHomeVideo = null; originalHomePlayer = false\n        OriginalHomeReturn.discard()\n', ""),
+        ('        if (isFinishing) OriginalHomeReturn.discard()\n', "")],
     "app/src/main/java/com/weiktube/app/WeiktubeUi.kt": [
         ("AccountScreen(a.youtubeAccount, a::openAccountUrl, homeConnection = { HomeConnectionEntry(a, a.youtubeAccount) })",
-         "AccountScreen(a.youtubeAccount, a::openAccountUrl)")],
+         "AccountScreen(a.youtubeAccount, a::openAccountUrl)"),
+        ('IconButton(onClick = a::closeVideo) { Icon(Icons.Rounded.Close, "Video schließen") }',
+         'IconButton(onClick = p::close) { Icon(Icons.Rounded.Close, "Video schließen") }')],
     "app/src/main/java/com/weiktube/app/AccountUi.kt": [
         ("subscriptionsOnly: Boolean = false, homeConnection: @Composable () -> Unit = {}", "subscriptionsOnly: Boolean = false"),
         ('            if (!subscriptionsOnly) item(key = "home_connection") { homeConnection() }\n', ""),
@@ -63,4 +134,4 @@ for name, expected in baseline.items():
         failures.append(name + " differs outside reviewed hooks and copy")
 if failures:
     raise SystemExit("FAIL original app scope:\n" + "\n".join(failures))
-print(f"PASS {len(baseline)} original source files preserved; only reviewed entry/clear hooks and website-first copy allowed.")
+print(f"PASS {len(baseline)} original source files preserved; only reviewed Home routing hooks and website-first copy allowed.")

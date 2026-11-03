@@ -3,10 +3,10 @@ package com.weiktube.home
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -43,7 +43,7 @@ class OriginalHomeActivity : ComponentActivity() {
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
     private lateinit var proof: CheckBox
-    private lateinit var enable: Button
+    private lateinit var routingLabel: TextView
     private lateinit var autofill: OriginalHomeAutofill
     private lateinit var autofillButton: Button
     private lateinit var autofillActions: LinearLayout
@@ -58,27 +58,20 @@ class OriginalHomeActivity : ComponentActivity() {
     private var extension: WebExtension? = null
     private var active = false
     private var generation = 0
-    private val approval = OriginalHomeApproval()
-    private var confirmed: Boolean
-        get() = approval.confirmed
-        set(value) { approval.setConfirmed(value) }
+    private var confirmed = false
     private var handoff = false
     private var installing = false
     private var extensionOperation = false
     private val deferredRelease = mutableListOf<HomeExperimentLease.Lease>()
     private var openingPlayer = false
+    private var attemptedResume = false
     private val locations = mutableMapOf<GeckoSession, String>()
     private val history = mutableMapOf<GeckoSession, Boolean>()
     private val documentSerial = mutableMapOf<GeckoSession, Int>()
     private val backgroundAuthentication = mutableSetOf<GeckoSession>()
     private val media = mutableMapOf<GeckoSession, MediaSession>()
-    private val connections = mutableMapOf<GeckoSession, Connection>()
-
-    private class Connection(val port: WebExtension.Port, val serial: Int) {
-        var documentId: String? = null
-        var token: String? = null
-        var acknowledged = false
-    }
+    private val connections = mutableMapOf<GeckoSession, OriginalHomeReturn.Connection>()
+    private val loggedRoutingCauses = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,7 +90,7 @@ class OriginalHomeActivity : ComponentActivity() {
         root.addView(origin)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
         root.addView(progress, LinearLayout.LayoutParams(-1, dp(2)))
-        status = label("Prüfe dein Konto und deine Vorschläge. Anschließend unter „Test“ bestätigen.", 12f).apply { maxLines = 3 }
+        status = label("Die YouTube-Startseite wird vorbereitet. Videotipps öffnen automatisch den Weiktube-Player.", 12f).apply { maxLines = 3 }
         root.addView(status)
         autofillButton = button("Zugangsdaten vorschlagen") { autofill.suggest() }.apply {
             // A touch on this action must not take focus away from Gecko's real virtual input.
@@ -115,7 +108,7 @@ class OriginalHomeActivity : ComponentActivity() {
         }
         root.addView(autofillActions, LinearLayout.LayoutParams(-1, dp(44)))
         panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS }
-        panel.addView(label("Diese Webseite verwendet ihr eigenes gespeichertes Profil. Die Google-API-Anmeldung und Chrome sind davon getrennt. Nur du bestätigst hier, ob wirklich dein Konto und deine Vorschläge sichtbar sind.", 13f))
+        panel.addView(label("Diese Webseite verwendet ihr eigenes gespeichertes Profil. Die Google-API-Anmeldung und Chrome sind davon getrennt. Die optionale Bestätigung prüft nur, ob du dein Konto und deine Vorschläge erkennst; die Videoübergabe ist automatisch aktiv.", 13f))
         proof = CheckBox(this).apply {
             text = "Ich sehe mein angemeldetes Konto und meine echten Vorschläge"; setTextColor(Color.WHITE); textSize = 13f
             setOnCheckedChangeListener { _, checked ->
@@ -123,14 +116,13 @@ class OriginalHomeActivity : ComponentActivity() {
                     isChecked = false; status.text = "Öffne zuerst Home und prüfe dort das angemeldete YouTube-Profil."
                 } else {
                     confirmed = checked
-                    if (!checked) disableHandoff()
                     updateControls()
                 }
             }
         }
         panel.addView(proof)
-        enable = button("Videoübergabe an Originalplayer aktivieren") { enableHandoff() }
-        panel.addView(enable)
+        routingLabel = label("Videoübergabe wird vorbereitet …", 13f)
+        panel.addView(routingLabel)
         panel.addView(button("Chrome-Test als Alternative") {
             AlertDialog.Builder(this).setTitle("Separates Chrome-Profil")
                 .setMessage("Chrome kann eine eigene YouTube-Anmeldung verwenden. Sie wird nicht in diese Gecko-Ansicht übernommen. Im Chrome-Test erfolgt die Videoübergabe über die angebotene manuelle Aktion.")
@@ -155,9 +147,14 @@ class OriginalHomeActivity : ComponentActivity() {
         super.onResume(); active = true
         autofill.start()
         backgroundAuthentication.clear()
-        if (main == null && !openingPlayer) prepare()
+        if (main == null && !openingPlayer) {
+            val retained = if (!attemptedResume) OriginalHomeReturn.take(intent.getStringExtra(OriginalHomeReturn.EXTRA_RESUME_TOKEN)) else null
+            attemptedResume = true
+            if (retained != null) restoreRetained(retained) else prepare()
+        }
         main?.setActive(true); popup?.setActive(true)
         if (main != null) showOrigin()
+        connections.toMap().forEach { (session, connection) -> resumeConnection(session, connection) }
         updateControls()
     }
 
@@ -170,18 +167,15 @@ class OriginalHomeActivity : ComponentActivity() {
                 HomeExperimentLease.acquire(this, engine, { acquired ->
                     if (!current(attempt)) { acquired.release(); return@acquire }
                     lease = acquired
-                    val session = createSession()
-                    main = session
-                    session.open(engine)
-                    mainView = createGeckoView(session, R.id.original_home_gecko_main).also { viewport.addView(it, FrameLayout.LayoutParams(-1, -1)) }
-                    session.setActive(true)
-                    session.loadUri(HOME)
+                    prepareRouting(engine, attempt)
                 }, { if (current(attempt)) status.text = "Der isolierte Webtest konnte nicht vorbereitet werden. Bitte schließen und erneut öffnen." })
             }
         }, { handler.post { if (current(attempt)) status.text = "Das gespeicherte Webprofil ist gerade nicht verfügbar. Bitte schließen und erneut öffnen." } })
     }
 
-    private fun createSession(): GeckoSession = GeckoSession().apply {
+    private fun createSession(): GeckoSession = configureSession(GeckoSession().apply { settings.suspendMediaWhenInactive = true })
+
+    private fun configureSession(existing: GeckoSession): GeckoSession = existing.apply {
         navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
                 if (!owns(session)) return decision(false)
@@ -193,10 +187,13 @@ class OriginalHomeActivity : ComponentActivity() {
                     return decision(false)
                 }
                 if (OriginalHomePolicy.isNormalWebAuthUrl(request.uri)) resetProof()
-                val video = OriginalHomePolicy.videoUrl(request.uri)
-                if (video != null) {
-                    if (handoff && confirmed && request.hasUserGesture) openOriginal(video)
-                    else status.text = "Für Videos zuerst unter „Test“ deinen Feed bestätigen und die Originalplayer-Übergabe aktivieren."
+                if (OriginalHomePolicy.isVideoNavigation(request.uri)) {
+                    val video = OriginalHomePolicy.videoUrl(request.uri)
+                    if (video != null && canRoute(session)) openOriginal(video)
+                    else {
+                        logRoutingCause(if (video == null) "INVALID_VIDEO" else "ROUTING_NOT_READY")
+                        status.text = "Dieser Videolink konnte nicht sicher an den Weiktube-Player übergeben werden. Die Website-Wiedergabe bleibt gesperrt."
+                    }
                     return decision(false)
                 }
                 return decision(OriginalHomePolicy.allowedNavigation(request.uri))
@@ -204,6 +201,7 @@ class OriginalHomeActivity : ComponentActivity() {
             override fun onSubframeLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
                 if (!owns(session)) return decision(false)
                 if (!active) return decision(session in backgroundAuthentication && OriginalHomeBackground.subframe(locations[session].orEmpty(), request.uri))
+                if (OriginalHomePolicy.isVideoNavigation(request.uri)) { logRoutingCause("UNTRUSTED_NAVIGATION"); return decision(false) }
                 return decision(request.uri == "about:blank" || OriginalHomePolicy.allowedNavigation(request.uri) ||
                     OriginalHomePolicy.isNormalWebAuthUrl(locations[session].orEmpty()) && OriginalHomePolicy.allowedAuthSubframe(request.uri))
             }
@@ -212,18 +210,31 @@ class OriginalHomeActivity : ComponentActivity() {
                 invalidateAutofill()
                 locations[session] = url
                 if (!active) return
+                applyMediaPolicy(session)
                 if (OriginalHomePolicy.isNormalWebAuthUrl(url)) resetProof()
-                // Some website SPA changes have no onLoadRequest. Only gesture-backed changes may hand off.
-                OriginalHomePolicy.videoUrl(url)?.let { video ->
-                    if (handoff && confirmed && hasUserGesture) openOriginal(video)
-                    else { session.stop(); media[session]?.pause() }
+                // SPA navigation often loses Gecko's gesture flag. This is still our active, owned YouTube document.
+                if (OriginalHomePolicy.isVideoNavigation(url)) {
+                    media[session]?.pause()
+                    val video = OriginalHomePolicy.videoUrl(url)
+                    if (video != null && canRoute(session)) openOriginal(video)
+                    else {
+                        logRoutingCause(if (video == null) "INVALID_VIDEO" else "ROUTING_NOT_READY")
+                        session.stop(); status.text = "Ungültiger Videolink. Die Website-Wiedergabe bleibt gesperrt."
+                    }
+                    return
                 }
                 showOrigin()
             }
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) { if (owns(session)) history[session] = canGoBack }
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
-                if (!active || !owns(session) || popup != null || OriginalHomePolicy.isExplicitOAuthUrl(uri) ||
-                    (uri != "about:blank" && !OriginalHomePolicy.allowedNavigation(uri)) || OriginalHomePolicy.videoUrl(uri) != null) return null
+                if (!active || !owns(session)) return null
+                if (OriginalHomePolicy.isVideoNavigation(uri)) {
+                    val video = OriginalHomePolicy.videoUrl(uri)
+                    if (video != null && canRoute(session)) openOriginal(video)
+                    else logRoutingCause(if (video == null) "INVALID_VIDEO" else "ROUTING_NOT_READY")
+                    return null
+                }
+                if (popup != null || OriginalHomePolicy.isExplicitOAuthUrl(uri) || (uri != "about:blank" && !OriginalHomePolicy.allowedNavigation(uri))) return null
                 if (OriginalHomePolicy.isNormalWebAuthUrl(uri)) resetProof()
                 invalidateAutofill()
                 val child = createSession()
@@ -275,100 +286,182 @@ class OriginalHomeActivity : ComponentActivity() {
                 if (owns(session)) media[session] = mediaSession
                 // Do not mute an audio challenge on a foreground Google website sign-in page.
                 // YouTube playback and all background media belong outside this experiment.
-                if (!active || !owns(session) || !OriginalHomePolicy.isNormalWebAuthUrl(locations[session].orEmpty())) mediaSession.pause()
+                if (!active || session !== (popup ?: main) || !OriginalHomePolicy.isNormalWebAuthUrl(locations[session].orEmpty())) {
+                    mediaSession.pause(); mediaSession.muteAudio(true)
+                } else mediaSession.muteAudio(false)
+            }
+            override fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
+                if (owns(session)) { media[session] = mediaSession; applyMediaPolicy(session) }
+                else { mediaSession.pause(); mediaSession.muteAudio(true) }
             }
         }
     }
 
-    private fun enableHandoff() {
-        if (!active || !confirmed || installing || extensionOperation || main == null || popup != null || !OriginalHomePolicy.isHomePage(locations[main].orEmpty())) return
-        val engine = runtime ?: return
-        val attempt = generation
-        val authorization = approval.begin() ?: return
+    private fun prepareRouting(engine: GeckoRuntime, attempt: Int) {
         installing = true; extensionOperation = true; updateControls()
-        status.text = "Videoübergabe wird vorbereitet. Home wird dafür einmal neu geladen."
+        status.text = "Videoübergabe wird vor dem Laden der Startseite vorbereitet …"
         handler.postDelayed({
-            if (current(attempt) && approval.permits(authorization) && extensionOperation) {
+            if (current(attempt) && extensionOperation) {
+                logRoutingCause("ROUTING_NOT_READY")
                 stopSessions()
-                status.text = "Die Vorbereitung dauert zu lange. Der Webtest wurde angehalten; bitte später erneut öffnen."
+                status.text = "Die Videoübergabe konnte nicht rechtzeitig vorbereitet werden. Home startet einen neuen Versuch."
             }
         }, 25_000)
         engine.webExtensionController.ensureBuiltIn("resource://android/assets/original-home-navigation/", HomeExperimentLease.CLICK_ID).accept({ found ->
             handler.post {
-                if (!current(attempt) || !approval.permits(authorization)) { operationFinished(); return@post }
-                if (found == null) { operationFinished(); bridgeFailure(); return@post }
+                if (!current(attempt)) { operationFinished(); return@post }
+                if (found == null) { operationFinished(); setupFailed(); return@post }
                 engine.webExtensionController.enable(found, WebExtensionController.EnableSource.APP).accept({ enabled ->
                     handler.post {
                         operationFinished()
-                        if (!current(attempt) || !approval.permits(authorization)) return@post
-                        installing = false
-                        if (enabled == null || !enabled.metaData.enabled) { bridgeFailure(); return@post }
+                        if (!current(attempt)) return@post
+                        if (enabled == null || !enabled.metaData.enabled) { setupFailed(); return@post }
                         extension = enabled; handoff = true
-                        main?.let { bind(it, enabled) }
-                        panel.visibility = View.GONE
-                        status.text = "Feed von dir bestätigt. Die Verbindung für Videotipps wird fertiggestellt …"
-                        updateControls(); main?.loadUri(HOME)
-                        handler.postDelayed({
-                            if (current(attempt) && handoff && connections.values.none { it.acknowledged })
-                                status.text = "Die Klickverbindung wurde noch nicht bestätigt. Home lädt sie erneut; der Webtest gilt noch nicht als bestanden."
-                        }, 15_000)
+                        val session = createSession()
+                        main = session
+                        bind(session, enabled)
+                        session.open(engine)
+                        mainView = createGeckoView(session, R.id.original_home_gecko_main).also { viewport.addView(it, FrameLayout.LayoutParams(-1, -1)) }
+                        session.setActive(true)
+                        status.text = "Videotipps öffnen automatisch den Weiktube-Player."
+                        updateControls()
+                        session.loadUri(HOME)
                     }
-                }, { handler.post { operationFinished(); if (current(attempt) && approval.permits(authorization)) bridgeFailure() } })
+                }, { handler.post { operationFinished(); if (current(attempt)) setupFailed() } })
             }
-        }, { handler.post { operationFinished(); if (current(attempt) && approval.permits(authorization)) bridgeFailure() } })
+        }, { handler.post { operationFinished(); if (current(attempt)) setupFailed() } })
+    }
+
+    private fun setupFailed() {
+        logRoutingCause("BRIDGE_UNAVAILABLE")
+        stopSessions()
+        status.text = "Die Videoübergabe ist nicht bereit. Die Startseite wurde deshalb noch nicht geladen. Home versucht es erneut."
+    }
+
+    private fun restoreRetained(held: OriginalHomeReturn.Retained) {
+        generation++
+        runtime = held.runtime; extension = held.extension; lease = held.lease
+        main = held.main; popup = held.popup; handoff = true; openingPlayer = false
+        locations.putAll(held.locations); history.putAll(held.history); documentSerial.putAll(held.documentSerial)
+        connections.putAll(held.connections); media.putAll(held.media); autofillLoading.addAll(held.loading)
+        held.sessions().forEach { session ->
+            configureSession(session)
+            bind(session, held.extension)
+        }
+        mainView = createGeckoView(held.main, R.id.original_home_gecko_main).also { viewport.addView(it, FrameLayout.LayoutParams(-1, -1)) }
+        held.popup?.let { child ->
+            popupView = createGeckoView(child, R.id.original_home_gecko_popup).also { viewport.addView(it, FrameLayout.LayoutParams(-1, -1)) }
+        }
+        media.keys.toList().forEach(::applyMediaPolicy)
+        connections.toMap().forEach { (session, connection) ->
+            connection.token = null; connection.acknowledged = false
+            attachPort(session, connection)
+        }
+        status.text = "Deine bisherige Startseite ist wieder geöffnet."
+        invalidateAutofill()
+        showOrigin()
+        // No loadUri or restoreState: reattach the same live document and its existing scroll position.
     }
 
     private fun bind(session: GeckoSession, ext: WebExtension) {
         session.webExtensionController.setMessageDelegate(ext, object : WebExtension.MessageDelegate {
             override fun onConnect(port: WebExtension.Port) {
-                if (!active || !owns(session) || !handoff || !confirmed || port.sender.session !== session || !port.sender.isTopLevel || !OriginalHomePolicy.isYoutubePage(port.sender.url)) {
+                if (!active || !owns(session) || !handoff || port.sender.session !== session || !port.sender.isTopLevel || !OriginalHomePolicy.isYoutubePage(port.sender.url)) {
                     port.disconnect(); return
                 }
                 disconnect(session)
-                val state = Connection(port, documentSerial[session] ?: 0)
+                val state = OriginalHomeReturn.Connection(port, documentSerial[session] ?: 0)
                 connections[session] = state
-                port.setDelegate(object : WebExtension.PortDelegate {
-                    override fun onPortMessage(message: Any, source: WebExtension.Port) {
-                        if (!active || !owns(session) || !handoff || !confirmed || connections[session] !== state || source !== port ||
-                            state.serial != (documentSerial[session] ?: 0) || source.sender.session !== session || !source.sender.isTopLevel ||
-                            !OriginalHomePolicy.isYoutubePage(source.sender.url) || !OriginalHomePolicy.isYoutubePage(locations[session].orEmpty())) return
-                        val data = message as? JSONObject ?: return
-                        when (data.optString("type")) {
-                            "ready" -> {
-                                val id = data.optString("documentId")
-                                if (!UUID_PATTERN.matches(id) || state.documentId != null) return
-                                state.documentId = id; state.token = UUID.randomUUID().toString()
-                                runCatching { source.postMessage(JSONObject().put("type", "enable").put("documentId", id).put("generation", state.token)) }
-                                    .onFailure { disconnect(session); bridgeFailure() }
-                            }
-                            "enabled" -> if (matches(state, data)) {
-                                state.acknowledged = true
-                                status.text = "Klickverbindung bereit. Jetzt einen Videotipp im Originalplayer testen."
-                            }
-                            "openVideo" -> if (state.acknowledged && matches(state, data)) OriginalHomePolicy.videoUrl(data.optString("url"))?.let { openOriginal(it) }
-                        }
-                    }
-                    override fun onDisconnect(port: WebExtension.Port) {
-                        if (connections[session] === state) connections.remove(session)
-                    }
-                })
+                attachPort(session, state)
             }
-        }, "weiktubeOriginalHome")
+        }, OriginalHomeReturn.NATIVE_APP)
     }
 
-    private fun matches(state: Connection, message: JSONObject) = state.documentId != null && state.token != null &&
+    private fun attachPort(session: GeckoSession, state: OriginalHomeReturn.Connection) {
+        val port = state.port
+        port.setDelegate(object : WebExtension.PortDelegate {
+            override fun onPortMessage(message: Any, source: WebExtension.Port) {
+                if (!active || !owns(session) || !handoff || openingPlayer || connections[session] !== state || source !== port ||
+                    state.serial != (documentSerial[session] ?: 0) || source.sender.session !== session || !source.sender.isTopLevel ||
+                    !OriginalHomePolicy.isYoutubePage(source.sender.url) || !OriginalHomePolicy.isYoutubePage(locations[session].orEmpty())) return
+                val data = message as? JSONObject ?: run { logRoutingCause("UNTRUSTED_NAVIGATION"); return }
+                when (data.optString("type")) {
+                    "ready" -> {
+                        val id = data.optString("documentId")
+                        if (!UUID_PATTERN.matches(id) || (state.documentId != null && state.documentId != id)) {
+                            logRoutingCause("UNTRUSTED_NAVIGATION"); return
+                        }
+                        state.documentId = id
+                        resumeConnection(session, state)
+                    }
+                    "enabled" -> if (matches(state, data)) {
+                        state.acknowledged = true
+                        if (state.blockedReason == null) status.text = "Videotipps öffnen automatisch den Weiktube-Player."
+                    }
+                    "openVideo" -> {
+                        if (!canRoute(session) || !state.acknowledged || !matches(state, data)) { logRoutingCause("UNTRUSTED_NAVIGATION"); return }
+                        val video = OriginalHomePolicy.videoUrl(data.optString("url"))
+                        if (video != null) openOriginal(video) else logRoutingCause("INVALID_VIDEO")
+                    }
+                    "blocked" -> if (data.optString("documentId") == state.documentId &&
+                        (matches(state, data) || (!state.acknowledged && !data.has("generation")))) {
+                        val reason = data.optString("reason")
+                        logRoutingCause(if (reason in ROUTING_CAUSES) reason else "UNTRUSTED_NAVIGATION")
+                        if (reason in setOf("HISTORY_GUARD_UNAVAILABLE", "MEDIA_GUARD_UNAVAILABLE")) state.blockedReason = reason
+                        status.text = when (reason) {
+                            "INVALID_VIDEO" -> "Dieser Videolink ist ungültig. Website-Wiedergabe bleibt gesperrt."
+                            "BRIDGE_UNAVAILABLE" -> "Die Player-Verbindung ist unterbrochen. Home lädt sie erneut; Website-Wiedergabe bleibt gesperrt."
+                            "HISTORY_GUARD_UNAVAILABLE", "MEDIA_GUARD_UNAVAILABLE" -> "Ein Schutz der Videoübergabe ist nicht verfügbar. Website-Wiedergabe bleibt gesperrt."
+                            "UNTRUSTED_NAVIGATION" -> "Automatische Website-Wiedergabe wurde gesperrt. Tippe direkt auf ein Video."
+                            else -> "Die Website-Wiedergabe wurde gesperrt. Bitte den Videotipp erneut versuchen."
+                        }
+                    }
+                }
+            }
+            override fun onDisconnect(port: WebExtension.Port) {
+                if (connections[session] === state) {
+                    connections.remove(session)
+                    if (active && owns(session)) { logRoutingCause("BRIDGE_UNAVAILABLE"); status.text = "Die Player-Verbindung wurde unterbrochen. Home lädt sie erneut." }
+                }
+            }
+        })
+    }
+
+    private fun resumeConnection(session: GeckoSession, state: OriginalHomeReturn.Connection) {
+        val id = state.documentId ?: return
+        if (!canRoute(session) || !OriginalHomePolicy.isYoutubePage(locations[session].orEmpty())) return
+        state.token = UUID.randomUUID().toString(); state.acknowledged = false
+        runCatching {
+            state.port.postMessage(JSONObject().put("type", "enable").put("documentId", id).put("generation", state.token))
+        }.onFailure { logRoutingCause("BRIDGE_UNAVAILABLE"); disconnect(session); status.text = "Die Player-Verbindung konnte nicht fortgesetzt werden. Home lädt sie erneut." }
+    }
+
+    private fun matches(state: OriginalHomeReturn.Connection, message: JSONObject) = state.documentId != null && state.token != null &&
         message.optString("documentId") == state.documentId && message.optString("generation") == state.token
 
     private fun openOriginal(raw: String) {
-        val url = OriginalHomePolicy.videoUrl(raw) ?: return
-        if (!active || !confirmed || !handoff || openingPlayer) return
+        val url = OriginalHomePolicy.videoUrl(raw) ?: run { logRoutingCause("INVALID_VIDEO"); return }
+        if (!active || !handoff || openingPlayer) return
+        val engine = runtime ?: return
+        val ext = extension ?: return
+        val heldLease = lease ?: return
+        val feed = main ?: return
         openingPlayer = true
-        stopSessions()
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(packageName)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-            finish()
-        } catch (_: Exception) { openingPlayer = false; status.text = "Der Originalplayer konnte nicht geöffnet werden. Home startet den Webtest erneut." }
+        invalidateAutofill(); autofill.stop()
+        media.values.forEach { runCatching { it.pause(); it.muteAudio(true) } }
+        mainView?.let { it.releaseSession(); viewport.removeView(it) }; mainView = null
+        popupView?.let { it.releaseSession(); viewport.removeView(it) }; popupView = null
+        val retained = OriginalHomeReturn.Retained(
+            engine, ext, heldLease, feed, popup, locations.toMutableMap(), history.toMutableMap(),
+            documentSerial.toMutableMap(), connections.toMutableMap(), media.toMutableMap(), autofillLoading.toSet(),
+        )
+        val token = OriginalHomeReturn.park(retained, url)
+        // Ownership has moved to OriginalHomeReturn. Later onStop/onDestroy must not close these objects.
+        main = null; popup = null; lease = null; extension = null; handoff = false
+        connections.clear(); media.clear(); locations.clear(); history.clear(); documentSerial.clear(); autofillLoading.clear()
+        backgroundAuthentication.clear()
+        setResult(RESULT_OK, Intent().putExtra(OriginalHomeReturn.EXTRA_RETURN_TOKEN, token).putExtra(OriginalHomeReturn.EXTRA_VIDEO_URL, url))
+        finish()
     }
 
     private fun disconnect(session: GeckoSession) {
@@ -378,19 +471,11 @@ class OriginalHomeActivity : ComponentActivity() {
         }
     }
 
-    private fun disableHandoff() {
-        handoff = false
-        connections.keys.toList().forEach(::disconnect)
-        media.values.forEach { runCatching { it.pause() } }
-    }
     private fun resetProof() {
-        val wasConfirmed = confirmed
-        confirmed = false; disableHandoff()
+        confirmed = false
         if (::proof.isInitialized) proof.isChecked = false
-        if (wasConfirmed && ::status.isInitialized) status.text = "Bitte das aktuelle Profil erneut prüfen. Die Videoübergabe ist deaktiviert."
         updateControls()
     }
-    private fun bridgeFailure() { installing = false; disableHandoff(); updateControls(); status.text = "Die Videoübergabe ist noch nicht verfügbar. Die sichtbare Webseite bleibt zum Prüfen geöffnet." }
     private fun operationFinished() {
         extensionOperation = false
         installing = false
@@ -420,6 +505,7 @@ class OriginalHomeActivity : ComponentActivity() {
         locations.remove(child); history.remove(child); documentSerial.remove(child); backgroundAuthentication.remove(child); autofillLoading.remove(child)
         runCatching { child.setActive(false); child.close() }
         showOrigin()
+        main?.let { session -> connections[session]?.let { resumeConnection(session, it) } }
     }
     private fun showOrigin() {
         val raw = locations[popup ?: main].orEmpty()
@@ -427,12 +513,20 @@ class OriginalHomeActivity : ComponentActivity() {
         origin.text = if (parsed?.scheme == "https" && parsed.host != null) "Gecko · HTTPS · ${parsed.host}" else "Gecko · Seite wird geladen …"
         // Website content is always visible, including Google's own rejection/error pages.
         mainView?.visibility = if (popup == null) View.VISIBLE else View.INVISIBLE
+        media.keys.toList().forEach(::applyMediaPolicy)
         updateControls()
     }
+    private fun applyMediaPolicy(session: GeckoSession) {
+        val source = media[session] ?: return
+        runCatching {
+            val audibleAuth = active && session === (popup ?: main) && OriginalHomePolicy.isNormalWebAuthUrl(locations[session].orEmpty())
+            source.muteAudio(!audibleAuth)
+            if (!audibleAuth) source.pause()
+        }
+    }
     private fun updateControls() {
-        if (!::enable.isInitialized) return
-        enable.isEnabled = active && confirmed && !installing && !extensionOperation && !handoff && popup == null && main != null
-        enable.text = if (handoff) "Originalplayer-Übergabe aktiv" else "Videoübergabe an Originalplayer aktivieren"
+        if (!::routingLabel.isInitialized) return
+        routingLabel.text = if (handoff) "Videotipps öffnen automatisch im Weiktube-Player." else "Videoübergabe wird vorbereitet …"
         if (::autofillButton.isInitialized) {
             val target = autofillTarget()
             autofillActions.visibility = if (active && target?.authPage == true) View.VISIBLE else View.GONE
@@ -441,7 +535,7 @@ class OriginalHomeActivity : ComponentActivity() {
     }
     private fun stopSessions() {
         invalidateAutofill()
-        generation++; installing = false; resetProof()
+        generation++; installing = false; handoff = false; resetProof()
         connections.keys.toList().forEach(::disconnect)
         media.values.toList().forEach { runCatching { it.pause() } }; media.clear()
         mainView?.let { it.releaseSession(); viewport.removeView(it) }; mainView = null
@@ -457,9 +551,11 @@ class OriginalHomeActivity : ComponentActivity() {
         active = false
         autofill.stop()
         invalidateAutofill()
-        val wasConfirmed = confirmed
         resetProof()
-        if (wasConfirmed) status.text = "Nach der Unterbrechung bitte deinen Feed unter „Test“ erneut bestätigen und die Videoübergabe aktivieren."
+        connections.values.forEach { state ->
+            state.acknowledged = false
+            runCatching { state.port.postMessage(JSONObject().put("type", "disable").put("documentId", state.documentId).put("generation", state.token)) }
+        }
         media.values.toList().forEach { runCatching { it.pause() } }
         main?.setActive(false); popup?.setActive(false)
         super.onPause()
@@ -495,6 +591,11 @@ class OriginalHomeActivity : ComponentActivity() {
         if (::autofill.isInitialized) autofill.invalidate()
     }
     private fun owns(session: GeckoSession) = session === main || session === popup
+    private fun canRoute(session: GeckoSession) = active && handoff && !openingPlayer && session === (popup ?: main)
+    private fun logRoutingCause(code: String) {
+        // Fixed allowlist, at most one line per cause per Activity. Never log URLs, tokens or exceptions.
+        if (code in ROUTING_CAUSES && loggedRoutingCauses.add(code)) Log.w("WeiktubeHomeRouting", code)
+    }
     private fun current(attempt: Int) = active && !isDestroyed && generation == attempt
     private fun decision(allow: Boolean) = GeckoResult.fromValue(if (allow) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
     private fun label(value: String, size: Float) = TextView(this).apply { text = value; textSize = size; setTextColor(Color.WHITE); importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO; setPadding(dp(10), dp(3), dp(10), dp(3)) }
@@ -502,6 +603,7 @@ class OriginalHomeActivity : ComponentActivity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     companion object {
         private const val HOME = "https://m.youtube.com/"
+        private val ROUTING_CAUSES = setOf("INVALID_VIDEO", "ROUTING_NOT_READY", "BRIDGE_UNAVAILABLE", "HISTORY_GUARD_UNAVAILABLE", "MEDIA_GUARD_UNAVAILABLE", "UNTRUSTED_NAVIGATION")
         private val UUID_PATTERN = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     }
 }

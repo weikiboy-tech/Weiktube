@@ -191,7 +191,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                             if (full && p.isYoutube) IconButton(onClick = { p.pause(); actions = true }) { Icon(Icons.Rounded.AccountCircle, "Gefällt mir, Abos und Kommentare mit deinem Konto") }
                             if (full) IconButton(onClick = a::share) { Icon(Icons.Rounded.Share, "Video teilen") }
                             if (full && !p.isYoutube) IconButton(onClick = a::enterPip) { Icon(Icons.Rounded.PictureInPicture, "Bild-in-Bild") }
-                            IconButton(onClick = p::close) { Icon(Icons.Rounded.Close, "Video schließen") }
+                            IconButton(onClick = a::closeVideo) { Icon(Icons.Rounded.Close, "Video schließen") }
                         }
                     }
                 }
