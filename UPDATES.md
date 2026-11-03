@@ -2,23 +2,43 @@
 
 Die App prüft beim Öffnen maximal einmal pro 24 Stunden auf eine neue Version. Das lässt sich unter App-Updates ausschalten. Es gibt keinen permanenten Hintergrunddienst und keine stille Installation: Nach einer verfügbaren Version startet der Nutzer den Download; Android bestätigt die Installation. Fehlgeschlagene automatische Prüfungen werden ebenfalls frühestens am nächsten Tag wiederholt. „Jetzt nach Updates suchen“ ist jederzeit möglich.
 
-Standardquelle: `https://github.com/weikiboy-tech/Weiktube/releases/latest/download/update.json`. Die Quelle kann geändert werden. Version 1.1.0 wurde unter diesem Repository veröffentlicht; der lokale Arbeitsstand 1.2.0 ist damit nicht automatisch veröffentlicht. Fehlt eine Release-Datei oder ist sie nicht erreichbar, meldet die App einen Serverfehler; sie behauptet dann nicht, aktuell zu sein.
+Standardquelle: `https://github.com/weikiboy-tech/Weiktube/releases/latest/download/update.json`. Die Quelle kann geändert werden. Reguläre Version ist 1.3.2 (Versioncode 16). Fehlt eine Release-Datei oder ist sie nicht erreichbar, meldet die App einen Serverfehler; sie behauptet dann nicht, aktuell zu sein.
 
 ## Release-Dateien
 
-Ein neues GitHub-Release erhält mindestens zwei Assets: `Weiktube.apk` und `update.json`. Das folgende Schema ist ein Beispiel für den Arbeitsstand 1.2.0 und keine Behauptung einer bereits verfügbaren Release:
+Ein reguläres GitHub-Release erhält `Weiktube.apk` (ARM64), `Weiktube-x86_64.apk`,
+`update.json`, `update-x86_64.json`, Quellcode und Prüfsummen. Beide eigenständig
+installierbaren APKs bleiben unter dem vorhandenen Limit von 128 MiB. Die bisherige
+Universal-Test-APK mit beiden Architekturen war dafür zu groß.
+
+Das Manifest behält die alten Felder für ältere ARM64-Updater und ergänzt `apks`.
+Ab 1.3.2 wählt die App den ersten passenden Eintrag gemäß `Build.SUPPORTED_ABIS`.
+Ein vorhandenes ungültiges oder unpassendes `apks`-Objekt löst einen Fehler aus;
+es wird nicht still eine andere Architektur verwendet. Alte Feeds ohne `apks`
+bleiben unterstützt. Beispiel mit Platzhaltern statt echten Prüfsummen:
 
 ```json
 {
-  "versionCode": 3,
-  "versionName": "1.2.0",
-  "apkUrl": "https://github.com/weikiboy-tech/Weiktube/releases/download/v1.2.0/Weiktube.apk",
+  "versionCode": 16,
+  "versionName": "1.3.2",
+  "apkUrl": "https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.2/Weiktube.apk",
   "sha256": "SHA256_DER_APK_MIT_64_HEX_ZEICHEN",
-  "notes": "Änderungen dieser Version"
+  "notes": "Änderungen dieser Version",
+  "apks": {
+    "arm64-v8a": {"apkUrl": "https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.2/Weiktube.apk", "sha256": "ARM64_SHA256"},
+    "x86_64": {"apkUrl": "https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.2/Weiktube-x86_64.apk", "sha256": "X86_64_SHA256"}
+  }
 }
 ```
 
 `versionCode` muss exakt mit der APK übereinstimmen und bei jeder Veröffentlichung steigen. Die APK muss denselben Paketnamen und dieselben aktuellen Signierzertifikate wie die installierte App haben. Schlüsselrotation wird absichtlich nicht automatisch akzeptiert. Den Debug-Signierschlüssel des ersten Builds sicher bewahren; eine mit einem anderen Rechner-Schlüssel erzeugte APK wird abgelehnt.
+
+**Umstieg alter x86-64-Installationen:** Einmal die x86-64-APK manuell als Update
+installieren oder als Updatequelle
+`https://github.com/weikiboy-tech/Weiktube/releases/latest/download/update-x86_64.json`
+eintragen. Alte Updater können das neue Architekturfeld noch nicht auswerten.
+ARM64-Installationen können die bisherige Standardquelle weiterverwenden.
+Die Gecko-Version unterstützt ARM64/x86-64, nicht reine 32-Bit-Geräte.
 
 ## Kontofunktion ab Version 1.2
 
@@ -39,7 +59,11 @@ Erforderlich ist die Android-Berechtigung `REQUEST_INSTALL_PACKAGES`. Die Androi
 
 ## Freigabestand
 
-Öffentlicher Feed und APK der Version 1.1.0 wurden heruntergeladen und ihre Prüfsumme verifiziert. Der vollständige Ablauf innerhalb der App – höhere Version erkennen, herunterladen, prüfen, Android-Freigabe, Installation und Rückkehr – ist damit noch nicht abgenommen. Abbruch, Prozessverlust und erneuter Versuch bleiben Teil der Prüfliste in `TESTING.md`.
+Prüfstand und Artefaktprüfung der regulären Version stehen in `RELEASE-1.3.2.md`.
+Der vollständige Ablauf innerhalb der App – höhere Version erkennen, herunterladen,
+prüfen, Android-Freigabe, Installation und Rückkehr – wurde hier nicht auf einem
+Gerät durchgespielt. Abbruch, Prozessverlust und erneuter Versuch bleiben Teil der
+Prüfliste in `TESTING.md`.
 
 Die neue Playerarchitektur und native Kontoaktionen ändern weder Paketname noch erforderliche Signieridentität. Veröffentlichungen erfolgen erst mit zusammenpassender APK, Feed und bereinigtem Quellcode. `scripts/publish-release.ps1` nimmt `AUDIT.md` in die optionalen Projektdokumente auf; lokale Buildlogs, SDK-Pfade, Gerätebilder und Signierschlüssel gehören nicht in das Release.
 

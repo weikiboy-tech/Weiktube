@@ -1,4 +1,28 @@
-# Weiktube 1.3.1-website-login-test
+# Weiktube 1.3.2
+
+Die reguläre öffentliche Version zeigt die originale YouTube-Startseite direkt
+in Weiktube. Videos öffnen im bestehenden Weiktube-Player; beim Zurückgehen bleibt
+die Startseite erhalten. Der Konto-Einstieg öffnet sich einmal automatisch und ist
+überspringbar. Anmeldung und Kontowechsel bleiben unter **Du** erreichbar.
+
+**[APK für Android-Handys herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube.apk)**
+
+- Android 8 oder neuer, **ARM64**. Über eine vorhandene Weiktube-Version installieren,
+  um die Website-Anmeldung zu behalten.
+- **[x86-64-APK](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-x86_64.apk)**
+  für passende Intel-/Emulator-Geräte. Keine Unterstützung für reine 32-Bit-Geräte.
+- Updates über **Einstellungen & Updates → Jetzt nach Updates suchen**. Android
+  bestätigt die Installation; die App installiert Updates nicht still im Hintergrund.
+- [Release- und Prüfbericht](RELEASE-1.3.2.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
+
+Die Website verwendet das dort angemeldete Konto. Die optionale Google-API-Freigabe
+für Abos/Playlists ist separat; die öffentliche APK-Veröffentlichung erweitert
+keine Google-Cloud-Testnutzerfreigaben. Deren öffentlicher Freigabestatus ist nicht
+verifiziert. Weiktube ist ein eigenständiges Projekt, keine offizielle YouTube-App.
+
+## Vorherige Entwicklungsschritte
+
+### Website-Anmeldung aus 1.3.1
 
 Der [YouTube-Kontoeinstieg](WEBSITE-LOGIN-TEST.md) öffnet sich einmal automatisch
 und ist überspringbar. Unter **Du → Deine YouTube-Startseite → Bei YouTube anmelden /

@@ -133,6 +133,12 @@ for name, expected in baseline.items():
         failures.append(name + " missing")
         continue
     content = file.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if name == "app/src/main/java/com/weiktube/app/UpdateController.kt":
+        abi_hook = "UpdateManifest.parse(json, Build.SUPPORTED_ABIS.toList())"
+        original_parser = 'UpdateRelease(json.getLong("versionCode"), json.getString("versionName"), json.getString("apkUrl"), json.getString("sha256"), json.optString("notes")).validate()'
+        if content.count(abi_hook) != 1:
+            failures.append(name + " reviewed architecture selection missing or duplicated")
+        content = content.replace(abi_hook, original_parser, 1)
     if name == "app/src/main/java/com/weiktube/app/MainActivity.kt":
         if content.count(website_login_hook) != 1:
             failures.append(name + " website account hook missing or duplicated")

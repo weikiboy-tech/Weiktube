@@ -3,6 +3,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+val stableApks = providers.gradleProperty("weiktubeStableApks").map(String::toBoolean).getOrElse(false)
 android {
     namespace = "com.weiktube.app"
     compileSdk = 37
@@ -10,16 +11,46 @@ android {
         applicationId = "com.weiktube.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.3.1-website-login-test"
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        versionCode = 16
+        versionName = "1.3.2"
+        if (!stableApks) ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
+    buildTypes {
+        getByName("release") {
+            isDebuggable = false
+            isMinifyEnabled = false
+            // Preserve the signing identity of all previously installed versions.
+            // Only the original local key may be used for published updates.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+    splits {
+        abi {
+            isEnable = stableApks
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+    }
     packaging { jniLibs { useLegacyPackaging = true } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+tasks.register("exportStableApks") {
+    dependsOn("assembleRelease")
+    doLast {
+        check(stableApks) { "Use -PweiktubeStableApks=true for the standalone stable APKs." }
+        val destination = rootProject.layout.projectDirectory.dir("dist/stable").asFile
+        destination.mkdirs()
+        mapOf("arm64-v8a" to "Weiktube.apk", "x86_64" to "Weiktube-x86_64.apk").forEach { (abi, name) ->
+            val apk = layout.buildDirectory.file("outputs/apk/release/app-$abi-release.apk").get().asFile
+            check(apk.length() in 1..(128L * 1024 * 1024)) { "APK must fit the existing updater download limit: $abi" }
+            apk.copyTo(destination.resolve(name), overwrite = true)
+        }
     }
 }
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }

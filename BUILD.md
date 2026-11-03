@@ -1,8 +1,8 @@
-# Weiktube 1.2 bauen und aktualisieren
+# Weiktube 1.3.2 bauen und aktualisieren
 
 ## Voraussetzungen
 
-JDK 17 oder 21, Android SDK Plattform 36 mit Build Tools 35.0.0 und Internet für den ersten Gradle-/Maven-Abruf. Das Zielgerät benötigt Android 8.0+ und einen aktuellen Android System WebView. Für die native Google-Kontofreigabe werden außerdem aktuelle Google Play Services benötigt.
+JDK 21, Android SDK Plattform 37 mit Build Tools 36.0.0 und Internet für den ersten Gradle-/Maven-Abruf. Das Zielgerät benötigt Android 8.0+, ARM64 oder x86-64 und einen aktuellen Android System WebView. Für die native Google-Kontofreigabe werden außerdem aktuelle Google Play Services benötigt.
 
 Projekt in Android Studio öffnen oder `ANDROID_HOME` setzen. Alternativ eine eigene, nicht versionierte `local.properties` anlegen:
 
@@ -33,7 +33,21 @@ chmod +x gradlew
 node scripts/check-player-scripts.cjs
 ```
 
-Werkzeugversionen: Gradle 8.11.1 mit Wrapper-SHA-256, Android Gradle Plugin 8.10.1, Kotlin/Compose-Compiler 2.3.21, Compose BOM 2025.02.00 und Google Play Services Auth 22.0.0. Versionsaktualisierungen sind getrennt von einem erfolgreichen Build zu bewerten.
+Werkzeugversionen: Gradle 9.3.1 mit Wrapper-SHA-256, Android Gradle Plugin 9.1.1, Kotlin/Compose-Compiler 2.4.20, Compose BOM 2025.02.00 und Google Play Services Auth 22.0.0.
+
+## Reguläre APKs
+
+```powershell
+.\gradlew.bat -PweiktubeStableApks=true :app:exportStableApks :app:testDebugUnitTest :home-data:testDebugUnitTest :app:lintRelease :home-data:lintRelease
+```
+
+Ausgabe: `dist/stable/Weiktube.apk` für ARM64 und
+`dist/stable/Weiktube-x86_64.apk`. Jede ist eine vollständige, eigenständig
+installierbare APK; kein Split-Installer erforderlich. Release-Builds sind nicht
+debuggbar. Sie verwenden für Update-Kompatibilität weiterhin die ursprüngliche
+Signieridentität aus dem lokalen Android-Debug-Keystore. Der Schlüssel wird nicht
+veröffentlicht. Auf einem anderen Rechner neu erzeugte Schlüssel sind kein Ersatz.
+CI-Builds dürfen deshalb nicht als offizielle Updates veröffentlicht werden.
 
 ## Installation
 
@@ -89,9 +103,9 @@ Beispielschema mit zu ersetzenden Werten:
 
 ```json
 {
-  "versionCode": 3,
-  "versionName": "1.2.0",
-  "apkUrl": "https://github.com/weikiboy-tech/Weiktube/releases/download/v1.2.0/Weiktube.apk",
+  "versionCode": 16,
+  "versionName": "1.3.2",
+  "apkUrl": "https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.2/Weiktube.apk",
   "sha256": "<64-stelliger SHA-256-Hash der APK>",
   "notes": "Änderungen dieser Version"
 }
@@ -99,7 +113,21 @@ Beispielschema mit zu ersetzenden Werten:
 
 Kein Geheimnis gehört in diese JSON-Datei. Den Signierschlüssel geschützt sichern und niemals ins Repository hochladen. Ein Debug-Build verwendet normalerweise den lokalen Android-Debugschlüssel; ein anderer Rechner oder ein frischer CI-Runner kann einen anderen Schlüssel erzeugen und damit kein kompatibles Update liefern. Der Updater lehnt solche APKs ab. Für eine dauerhaft veröffentlichte App ist eine stabile, geschützt verwaltete Signieridentität erforderlich.
 
-`scripts/publish-release.ps1` kann aus einer fertig geprüften `Weiktube.apk` bereinigten Quellcode und den Feed lokal vorbereiten. Ohne `-Publish` erfolgen keine Remoteänderungen. Die explizite Dateiauswahl nimmt unter anderem `README.md`, `BUILD.md`, `TESTING.md`, `UPDATES.md` und `AUDIT.md` mit; SDK-Pfade, Buildberichte, Geräteaufnahmen und private Schlüssel gehören nicht dazu. Eine vorhandene Vorbereitung wird nicht überschrieben. `-PublishPrepared` prüft APK-Hash, Version und Zielrepository gegen den vorbereiteten Feed und veröffentlicht die geprüfte Vorbereitung. Vor dieser Veröffentlichung Quellcode, APK-Signatur, Versionsangaben und konkrete Release-Notizen kontrollieren. Ein CI-Debug-Build mit frischem Schlüssel ersetzt die bestehende signierte Update-APK nicht.
+Die zusätzlichen Architekturfelder der regulären Version sind in `UPDATES.md`
+dokumentiert und werden vom Veröffentlichungsskript automatisch erzeugt.
+
+`scripts/publish-release.ps1` bereitet aus den geprüften APKs unter `dist/stable/`
+beide Update-Manifeste und Prüfsummen vor. Benötigt werden das aktuelle mit
+`python scripts/package-source.py` erstellte Quellpaket, `RELEASE-1.3.2.md` sowie
+`dist/stable/release-verification.json` mit den geprüften Paket-/Versions-/ABI-/
+Signatur-/Debuggable-/Hash-Angaben. Ohne `-Publish` erfolgen keine Remoteänderungen.
+`-Publish` prüft diese Angaben und die Quellpaketdateien erneut, erhält die
+bisherige Git-Historie, aktualisiert main ohne Force-Push und veröffentlicht erst
+nach verifizierten Uploads das reguläre Latest-Release. Geänderte Remote-Branches,
+vorhandene Tags oder eine vorherige Staging-Mappe führen zum Abbruch statt zum
+Überschreiben. Das Skript benötigt PowerShell 7. SDK-Pfade, Geräteaufnahmen und
+private Schlüssel gehören nicht ins Quellpaket. CI-APKs mit einem anderen Schlüssel
+sind keine kompatiblen Updates.
 
 Automatische Prüfung bedeutet: höchstens täglich bei Vordergrundnutzung. Download und Android-Installation bleiben ausdrückliche Benutzeraktionen. Das laufende Gerät muss dem App-Installer die Berechtigung erteilen; Android bestätigt die Installation selbst.
 

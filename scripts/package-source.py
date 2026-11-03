@@ -10,6 +10,7 @@ REQUIRED_FILES = {
 }
 OPTIONAL_FILES = {"UPDATES.md", "AUDIT.md", "CHANGELOG.md", "PRIVACY.md", "RESTORATION.md", "HOME-CONNECTION-TEST.md", "ORIGINAL-HOME-TEST.md", "WEBSITE-FIRST-TEST.md", "PLAYER-HANDOFF-TEST.md", "PLAYER-RETURN-TEST.md", "GECKO-RETURN-TEST.md", "HOME-TAB-TEST.md", "WEBSITE-LOGIN-TEST.md", "home-data/build.gradle.kts"}
 SOURCE_DIRECTORIES = {"gradle", "scripts", ".github", "app/src", "home-data/src"}
+OPTIONAL_FILES.add("RELEASE-1.3.2.md")
 PRIVATE_PARTS = {
     "build", ".gradle", ".kotlin", ".git", "__pycache__", "validation", "screenshots",
     "signing", "keys", "private", "credentials", ".aws", ".codex", ".agents",

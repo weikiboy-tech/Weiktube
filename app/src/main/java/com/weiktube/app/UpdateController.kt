@@ -69,7 +69,7 @@ class UpdateController(private val activity: Activity) {
                     val bytes = java.io.ByteArrayOutputStream()
                     download(source, UpdatePolicy.MAX_FEED_BYTES) { data, length, _ -> bytes.write(data, 0, length) }
                     val json = JSONObject(bytes.toString("UTF-8"))
-                    UpdateRelease(json.getLong("versionCode"), json.getString("versionName"), json.getString("apkUrl"), json.getString("sha256"), json.optString("notes")).validate()
+                    UpdateManifest.parse(json, Build.SUPPORTED_ABIS.toList())
                 }
                 if (candidate.versionCode > version(installed())) {
                     release = candidate; status = "Weiktube ${candidate.versionName} ist verfügbar."
