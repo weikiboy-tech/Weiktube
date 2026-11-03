@@ -1,92 +1,136 @@
-# Homepage-Verbindungstest in der Original-App
+# CONFIG_UNAVAILABLE: gezielte Korrektur und Diagnose
 
-Version: 1.2.4-home-test, Versionscode 7, Paket `com.weiktube.app`.
-Diese APK aktualisiert die Original-App unter derselben Signatur. Sie ist keine
-zweite Anwendung und ersetzt weder den Player noch die vorhandene Startseite.
+Version 1.2.4-home-test.2, Versionscode 8, Paket `com.weiktube.app`.
+Die APK aktualisiert die bisherige App mit derselben Signatur. Originalplayer,
+Miniplayer, Navigation, Oberfläche, Google-API-Anmeldung und Adblock bleiben erhalten.
+Die neue Datenquelle wird ohne nachgewiesenen Abruf nicht zur Startseite erklärt.
 
-## Stand und verpflichtende Freigabeschwelle
+## Reproduzierte Ursache
 
-Dies ist die erste, vorgeschaltete Phase des vereinbarten Plans: Anmeldung und
-echten Home-Datenabruf auf dem Zielgerät nachweisen. Ein erfolgreicher Build oder
-Parser-Test beweist keine funktionierende Google-Anmeldung. Die native Homepage
-wird erst nach erfolgreicher Prüfung dieser Sitzung an die Datenquelle gebunden.
-Es gibt in dieser Phase bewusst keinen Schalter, der ein unbestätigtes Ergebnis
-als fertige persönliche Startseite aktiviert.
+Der Fehler entstand in `home-data/src/main/assets/home-bridge/bridge.js`,
+`currentConfig()`. Bisher wurde ausschließlich `window.wrappedJSObject.ytcfg.data_`
+gelesen. Fehlender Kontext, fehlender numerischer Clientname oder API-Schlüssel
+wurden pauschal als `CONFIG_UNAVAILABLE` ausgegeben. Fehlendes `LOGGED_IN` wurde
+zusätzlich fälschlich wie `false` behandelt.
 
-Unter **Du / Konto → YouTube-Startseite verbinden** erscheint die eigene
-Anmeldeseite der Verbindungskomponente. Sie ist ausschließlich für Anmeldung und
-Verbindungsprüfung vorhanden, nicht als Feed-Oberfläche oder Videoplayer. Die
-Website-Sitzung bleibt in einem eigenen lokalen Gecko-Profil; die native
-Google-API-Freigabe und die bestehenden WebView-Sitzungen werden nicht ersetzt.
+Die Verbindung startete auf
+`https://www.youtube.com/signin?action_handle_signin=true&next=%2F`.
+Ein öffentlicher, nicht angemeldeter HTTP-Abruf am 3. November 2026 landete auf
+`https://www.youtube.com/oops`: HTTP 200, YouTube-Fehlertitel, kein `ytcfg`,
+`ytInitialData` oder InnerTube-Kontext. Eine solche Fehlerseite liefert tatsächlich
+keine Konfiguration. Das reproduziert einen konkreten Fehler im Startpfad;
+die finale URL auf dem Nutzergerät ist damit rückwirkend nicht bewiesen.
 
-Der Datenabruf verwendet YouTubes private Web-Schnittstelle mit
-`FEwhat_to_watch` und den von ihr gelieferten Fortsetzungen. Ein falsches oder
-nicht nachweisbares aktives YouTube-Profil wird abgelehnt. Es gibt keine
-Übernahme von Chrome-Cookies, fremde TV-OAuth-Clientdaten oder eine geänderte
-Browserkennung. Googles Ablehnung einer eingebetteten Anmeldung wird nicht
-umgangen. Kontodaten, Cookies und Tokens sind nicht in der APK enthalten.
+Die öffentlich abgerufene mobile Startadresse führte mit dem normalen Python-
+HTTP-Client zur www-Startseite (HTTP 200, Titel YouTube). Dort waren die erwarteten
+Felder und `LOGGED_IN=false` vorhanden. Dieser HTTP-Test führt kein JavaScript aus
+und ist kein Beleg für eine angemeldete mobile Sitzung oder global geänderte Feldnamen.
+
+Zusätzlich wird das aktuelle öffentliche HTML durch die echte Bridge im lokalen
+JavaScript-Testkontext ausgewertet (`node scripts/check-home-bridge.cjs --public`):
+Home ergibt korrekt `SIGNED_OUT`, die alte Anmelde-URL korrekt `PAGE_ERROR`.
+Dabei wurde die zunächst zu enge JSON-Literalgrenze korrigiert: YouTubes aktueller
+Konfigurationsblock ist etwa 757 KB groß. Die Suche bleibt auf 4 MB begrenzt,
+und ausschließlich erlaubte Konfigurationsfelder werden begrenzt kopiert.
+
+## Änderungen
+
+- Start direkt auf `https://m.youtube.com/`; Klassifikation der tatsächlichen
+  Zielseite. `/oops` bleibt auch bei HTTP 200 ein Seitenfehler.
+- Unterstützung weiterer tatsächlich gelieferter Konfigurationsformen und
+  begrenzter JSON-Literale in Initialisierungsskripten, ohne `eval` oder Aufruf
+  von Seitenfunktionen. Keine erfundenen Clientversionen.
+- Unbekannter Loginstatus bleibt unbekannt; keine Gleichsetzung mit `false`.
+- Eigene Meldungen für Anmeldung, Consent, Fehlerseite, fehlende Konfiguration,
+  falsches/nicht bestätigtes Profil und fehlende Feed-Daten.
+- Optionaler Diagnosemodus mit bereinigter Zieladresse, Seitentitel-Kategorie,
+  JavaScript-Verbindung, Ladezustand und fehlenden Feldnamen. HTTP-Status nur,
+  wenn tatsächlich beobachtet, andernfalls ausdrücklich nicht verfügbar.
+  Gecko meldet in gewöhnlichen Navigationscallbacks keinen Dokument-HTTP-Status.
+- Google-Anmeldeseiten werden nicht eingebettet geöffnet. Eine ausdrückliche
+  Browserprüfung öffnet den Systembrowser; die Rückkehr gilt nicht als Verbindung.
+
+## Konkrete technische Grenze
+
+Die vorhandene Google-API-Anmeldung liefert Kanaldaten, Abos und Playlists.
+Sie erzeugt keine authentifizierte Website-Sitzung in der zusätzlichen Gecko-
+Engine. Anmeldung im Systembrowser oder Chrome Custom Tab überträgt ebenfalls
+keine Cookies in dieses lokale Engine-Profil.
+
+Die offizielle YouTube Data API liefert den persönlichen Home-Empfehlungsfeed
+nicht. Der eingestellte `activities.list`-Parameter `home` ist kein Ersatz.
+Die private Web-Schnittstelle benötigt eine passende Website-Sitzung. Ohne sie
+bleibt der Zugriff blockiert; der Konfigurationsfix erzeugt keinen fehlenden
+Authentifizierungsweg. Es werden keine Abo-Videos als Personalisierung ausgegeben.
+
+Kein Chrome-Cookie-Import, keine fremden TV-OAuth-Zugangsdaten, keine geänderte
+Browserkennung. OAuth bleibt bei der vorhandenen Google-Android-Autorisierung.
+Die eingebettete Engine führt keinen neuen Google-OAuth-Flow aus.
+
+Quellen:
+
+- [YouTube Data API: activities.list / home](https://developers.google.com/youtube/data/reference/rest/v3/activities/list)
+- [Google OAuth-Richtlinien](https://developers.google.com/identity/protocols/oauth2/policies)
+- [Android-Autorisierung](https://developer.android.com/identity/authorization)
+- [Chrome Custom Tabs und Browsersitzungen](https://developer.chrome.com/docs/android/custom-tabs)
+- [YouTube.js: Authentifizierung](https://ytjs.dev/guide/authentication)
+- [Mozilla: Content-Script-Fetch-Kontext](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Content_scripts#xhr_and_fetch)
+
+## Datenschutz und Feed
+
+Diagnosen werden nur lokal angezeigt, nicht in Logcat, Dateien oder einen Server
+geschrieben. Keine Passwörter, Cookies, Tokens, API-Schlüssel, vollständigen
+Antworten oder unbereinigten URLs/Seitentitel. Queryparameter und Fragmente werden
+entfernt; unbekannte Pfade werden kategorisiert. Konto- und Video-Prüfvorschauen
+sind getrennte lokale Nutzdaten, keine Diagnose.
+
+Erfolgreicher Abruf setzt ein bestätigtes, mit dem vorhandenen Konto identisches
+Website-Profil voraus. Prüfung vor und nach `FEwhat_to_watch`. Nur echte Home-
+Einträge in YouTubes Reihenfolge; Werbung und nicht unterstützte Container werden
+übersprungen. Fortsetzungen müssen aus der vorherigen Antwort stammen. Keine
+Abo-, Such- oder selbst berechneten Ersatzempfehlungen. Die native Prüfvorschau
+öffnet das erste echte Ergebnis über den vorhandenen Link-Einstieg des Originalplayers.
 
 ## Test auf dem Zielgerät
 
-1. APK als Update installieren, ohne die Original-App oder deren Daten zu löschen.
-2. Im vorhandenen Kontobereich das gewünschte Google-/YouTube-Konto verbinden und
-   dessen Kanaldaten laden lassen. Dann **YouTube-Startseite verbinden** antippen.
-3. In der sichtbaren Google-/YouTube-Seite regulär anmelden und dasselbe
-   YouTube-Profil auswählen. Anschließend **Verbindung prüfen** verwenden.
-4. Die native Diagnose muss das passende Profil und tatsächlich gelieferte
-   Home-Videos melden. **Weitere Ergebnisse prüfen** muss eine Folgeseite liefern.
-   Die ersten drei Titel erscheinen als native Prüfvorschau. **Erstes Video im
-   Originalplayer prüfen** verwendet den vorhandenen Video-Link-Einstieg der App.
-   Bei falschem Profil **YouTube-Profil wechseln** verwenden.
-5. Verbindung schließen, App neu starten und erneut prüfen. Es muss dieselbe
-   Website-Sitzung nutzbar sein. Bei einem anderen Profil darf kein Feed als
-   passend akzeptiert werden.
-6. **Webverbindung trennen** prüfen: danach muss eine erneute Anmeldung nötig sein.
-7. Bestehende Startseite, Suche, Videotipp, Miniplayer, Zurück und Vollbild wie
-   gewohnt prüfen. Diese Wiedergabewege wurden nicht neu implementiert.
+1. APK als Update installieren, keine Appdaten löschen.
+2. **Du / Konto → YouTube-Startseite verbinden → Diagnosemodus** öffnen.
+3. **Verbindung prüfen**. Diagnose zeigt tatsächliche Zielseite und Prüfschritt.
+4. Fehlende interne Website-Sitzung muss als Blockade erscheinen. Alleinige
+   Anmeldung im externen Browser darf keinen erfolgreichen Home-Abruf melden.
+5. Falls eine gültige Engine-Sitzung besteht: passendes Profil, echte Home-Videos
+   und **Weitere Ergebnisse prüfen** testen. Falsches Profil darf keinen Feed liefern.
+6. Bei echten Ergebnissen erstes Video im Originalplayer öffnen; App schließen
+   und neu öffnen, Sitzung erneut prüfen.
+7. Vorhandene Suche, Videoöffnung, Miniplayer, Zurück, Vollbild und Adblock prüfen.
 
-Bei einem Google-Fehler nur den sichtbaren Fehlertext zurückmelden, keine Cookies,
-Tokens oder Passwörter. Erst nach der erfolgreichen Geräteprüfung folgen die
-native Kartenanbindung und ein regulärer Release. Die bestehende Startseite wird
-bis dahin nicht als persönlicher YouTube-Empfehlungsfeed bezeichnet.
-
-## Technische Trennung
-
-- `home-data` ist eine Android-Bibliothek, keine eigenständige App.
-- GeckoView 159 erfordert SDK 37 und neuere Buildwerkzeuge. Dafür werden Gradle
-  9.3.1, AGP 9.1.1 und Kotlin 2.4.20 verwendet. minSdk 26 und targetSdk 36 bleiben.
-- Die zusätzliche Engine wird nur beim ausdrücklichen Öffnen der Verbindung
-  initialisiert. Native Bibliotheken werden für den APK-Download komprimiert.
-- Der Feed-Parser erhält strukturierte Antworten; er erfindet keine Einträge,
-  bewahrt die Reihenfolge und verarbeitet nur unterstützte Home-Container.
-- Konto-/Anmeldedaten verlassen das lokale Engine-Profil nicht über die
-  Nachrichtenbrücke. Deren Antworten enthalten nur Feed-Daten und das ausgewählte
-  YouTube-Profil; Fehler werden als begrenzte Codes ohne Antworttexte ausgegeben.
-- Veröffentlichungen bleiben Vorabversionen ohne Änderung des stabilen Updatefeeds.
+Nur bereinigte Diagnose oder Fehlercode weitergeben, keine Zugangsdaten.
+Hier steht kein Smartphone zur Verfügung. Lokale Tests beweisen keine erfolgreiche
+Anmeldung oder Feed-Abfrage mit dem Nutzerkonto. Der lokale Emulator scheiterte
+bereits beim Start; es wird keine Geräteprüfung behauptet.
 
 ## Lokale Prüfungen
 
 ```powershell
 .\gradlew.bat :app:exportHomeConnectionApk :app:testDebugUnitTest :home-data:testDebugUnitTest :app:lintDebug :home-data:lintDebug --no-daemon --max-workers=1
+python scripts/check-home-scope.py
 node scripts/check-player-scripts.cjs
 node scripts/check-browser-scripts.cjs
 node scripts/check-watch-navigation.cjs
 node scripts/check-home-bridge.cjs
 ```
 
-Die APK wird als `Weiktube-Home-Test.apk` exportiert. Die erhaltene
-`Weiktube.apk` ist weiterhin die gesicherte Originalversion 1.2.3.
-Die Test-APK enthält ARM64- und x86-64-Bibliotheken; 32-Bit-Geräte sind damit nicht
-unterstützt.
-Ein Smartphone steht für diese Entwicklung nicht zur Verfügung. Gerätestatus,
-Anmeldung, Kontozuordnung und Wiedergabe dürfen nicht aus lokalen Tests abgeleitet
-werden. Die frühere lokale Emulator-Umgebung scheiterte bereits beim Start.
+Der Scope-Check schützt alle 46 ursprünglichen Quelldateien und erlaubt nur die
+bereits vorhandenen drei Verbindungseinstiege. `Weiktube.apk` bleibt die originale
+Version 1.2.3; die neue APK heißt `Weiktube-Home-Test.apk`. ARM64 und x86-64 ab Android8.
+Veröffentlichung als Vorabversion; der stabile Updatefeed bleibt erhalten.
 
-Ergebnis am 3. November 2026: Build erfolgreich; 81 bestehende JVM-Tests und 10
-neue Feed-Parser-Tests bestanden, keine Fehler oder übersprungenen Tests. Alle
-vier JavaScript-Prüfprogramme bestanden. Lint: App 0 Fehler/20 Warnungen,
-home-data 0 Fehler/16 Warnungen. Signatur geprüft und mit der ursprünglichen APK
-identisch; gepackte Bridge-Dateien stimmen mit den getesteten Quelldateien überein.
-Der Scope-Check schützt alle 46 ursprünglichen Quelldateien und erlaubt lediglich
-den Kontoeinstieg und den zusätzlichen Webdaten-Löschaufruf. Die ursprüngliche
-APK bleibt bytegleich erhalten.
+Ergebnis am 3. November 2026: finaler Build erfolgreich; 101 JVM-Tests ohne Fehler
+oder übersprungene Tests. Alle vier JavaScript-Prüfprogramme und der zusätzliche
+öffentliche HTML-Test bestanden. Lint: jeweils 0 Fehler / 20 Warnungen für App
+und home-data. Originaldatei-Scope geprüft, ursprüngliche APK bytegleich.
+Signatur der neuen APK stimmt mit der Original-APK überein; die gepackten Bridge-
+Dateien stimmen bytegenau mit dem getesteten Quellcode überein.
+
+APK SHA-256:
+`6158f149030c49420d25e2fae48ae0fb09218e1b86aea810251a9c8fe2c55251`

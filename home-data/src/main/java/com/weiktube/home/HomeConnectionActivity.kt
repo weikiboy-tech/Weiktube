@@ -2,6 +2,8 @@ package com.weiktube.home
 
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
@@ -15,6 +17,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.CheckBox
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.ViewCompat
@@ -47,6 +50,11 @@ class HomeConnectionActivity : ComponentActivity() {
     private lateinit var next: Button
     private lateinit var preview: TextView
     private lateinit var openFirst: Button
+    private lateinit var diagnosticView: TextView
+    private lateinit var diagnosticCopy: Button
+    private val diagnostics = HomeConnectionDiagnostics()
+    private var diagnosticRequestId: String? = null
+    private var navigationSerial = 0
     private var runtime: GeckoRuntime? = null
     private var extension: WebExtension? = null
     private var main: GeckoSession? = null
@@ -107,14 +115,15 @@ class HomeConnectionActivity : ComponentActivity() {
         root.addView(report, LinearLayout.LayoutParams(-1, 0, 1f))
         val name = intent.getStringExtra(EXTRA_EXPECTED_CHANNEL_TITLE)?.take(100).orEmpty().ifBlank { expected }
         panel.addView(text("Erwartetes YouTube-Profil: $name", 14f))
-        panel.addView(text("Einmalige Website-Anmeldung. Danach werden nur Feed-Daten geprüft; deine bisherige Startseite und dein Player bleiben erhalten.", 13f))
-        status = text(if (previousProof) "Vorheriger Datenabruf vorhanden. Bitte Sitzung erneut prüfen." else "Bitte melde dich mit dem passenden YouTube-Profil an.", 14f)
+        panel.addView(text("Hier wird die separate Gecko-Websitzung geprüft. Deine Google-API-Anmeldung und eine Anmeldung im externen Browser sind davon getrennt. Browser-Cookies werden nicht übernommen.", 13f))
+        status = text(if (previousProof) "Vorheriger Datenabruf vorhanden. Bitte Sitzung erneut prüfen." else "Die echte mobile YouTube-Startseite wird geladen. Die bestehende Google-API-Anmeldung meldet diese Websitzung nicht automatisch an.", 14f)
         panel.addView(status)
         val actions = LinearLayout(this)
-        actions.addView(button("Anmeldung öffnen") { openLogin() }, LinearLayout.LayoutParams(0, -2, 1f))
+        actions.addView(button("YouTube neu laden") { openLogin() }, LinearLayout.LayoutParams(0, -2, 1f))
         verify = button("Verbindung prüfen") { requestPage(false) }.apply { isEnabled = false }
         actions.addView(verify, LinearLayout.LayoutParams(0, -2, 1f))
         panel.addView(actions)
+        panel.addView(button("YouTube im Browser prüfen") { openExternalBrowser() })
         panel.addView(button("YouTube-Profil wechseln") {
             if (!active) return@button
             clearResults(); closeChild(false)
@@ -134,6 +143,23 @@ class HomeConnectionActivity : ComponentActivity() {
             } catch (_: Exception) { fail("Der Originalplayer konnte nicht geöffnet werden. [PLAYER_UNAVAILABLE]") }
         }.apply { isEnabled = false }
         panel.addView(openFirst)
+        panel.addView(CheckBox(this).apply {
+            text = "Diagnosemodus (ohne Kontodaten)"; setTextColor(Color.WHITE)
+            setOnCheckedChangeListener { _, checked ->
+                diagnostics.enabled = checked
+                if (checked) requestDiagnostics() else diagnosticRequestId = null
+                updateDiagnostics()
+            }
+        })
+        diagnosticView = text("", 12f).apply { visibility = View.GONE; setTextIsSelectable(true) }
+        panel.addView(diagnosticView)
+        diagnosticCopy = button("Bereinigte Diagnose kopieren") {
+            if (diagnostics.enabled) {
+                (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Weiktube-Diagnose", diagnostics.render()))
+                status.text = "Bereinigte Diagnose kopiert. Keine Cookies, Anmelde-URLs oder Kontodaten enthalten."
+            }
+        }.apply { visibility = View.GONE }
+        panel.addView(diagnosticCopy)
         container = FrameLayout(this)
         root.addView(container, LinearLayout.LayoutParams(-1, 0, 1f))
         panel.addView(button("Webverbindung trennen") {
@@ -174,7 +200,7 @@ class HomeConnectionActivity : ComponentActivity() {
                         session.open(engine)
                         mainView = GeckoView(this).also { it.setSession(session); container.addView(it, FrameLayout.LayoutParams(-1, -1)) }
                         session.setActive(true)
-                        session.loadUri(SIGNIN)
+                        session.loadUri(HOME)
                     }
                 }, { handler.post { if (active && generation == expectedGeneration) fail("Die interne Datenverbindung konnte nicht gestartet werden.") } })
             }
@@ -187,27 +213,66 @@ class HomeConnectionActivity : ComponentActivity() {
         clearResults()
         closeChild(false)
         val session = main
-        if (session == null) prepare() else session.loadUri(SIGNIN)
+        if (session == null) prepare() else session.loadUri(HOME)
+    }
+
+    private fun openExternalBrowser() {
+        if (!active) return
+        AlertDialog.Builder(this).setTitle("Separater Browser")
+            .setMessage("YouTube wird in Chrome oder deinem Systembrowser geöffnet. Eine dortige Anmeldung verbindet nicht die Gecko-Websitzung in Weiktube. Es werden keine Cookies importiert und keine erfolgreiche Feed-Verbindung vorgetäuscht.")
+            .setNegativeButton("Abbrechen", null).setPositiveButton("Browser öffnen") { _, _ ->
+                val target = Intent(Intent.ACTION_VIEW, Uri.parse(HOME)).addCategory(Intent.CATEGORY_BROWSABLE)
+                try {
+                    val browserProbe = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.example.com/")).addCategory(Intent.CATEGORY_BROWSABLE)
+                    val browsers = packageManager.queryIntentActivities(browserProbe, 0).filter { it.activityInfo.packageName != packageName }
+                    val chrome = browsers.firstOrNull { it.activityInfo.packageName == "com.android.chrome" }
+                    val intents = browsers.map { Intent(target).setClassName(it.activityInfo.packageName, it.activityInfo.name) }
+                    if (chrome != null) startActivity(Intent(target).setClassName(chrome.activityInfo.packageName, chrome.activityInfo.name))
+                    else if (intents.isNotEmpty()) startActivity(Intent.createChooser(intents.first(), "Systembrowser wählen").putExtra(Intent.EXTRA_INITIAL_INTENTS, intents.drop(1).toTypedArray()))
+                    else { fail("Kein Systembrowser verfügbar. Die interne Websitzung bleibt unverändert."); return@setPositiveButton }
+                    diagnostics.failure("EXTERNAL_BROWSER_OPENED"); updateDiagnostics()
+                } catch (_: Exception) { fail("Der externe Browser konnte nicht geöffnet werden. Die interne Websitzung bleibt unverändert.") }
+            }.show()
     }
 
     private fun createSession(): GeckoSession = GeckoSession().apply {
         navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
+                if (!active || !owns(session)) return GeckoResult.fromValue(AllowOrDeny.DENY)
                 if (request.uri == "about:blank") return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+                if (HomeConnectionDiagnostics.isExternalSignIn(request.uri)) {
+                    diagnostics.location(request.uri, "blocked"); diagnostics.failure("SIGNIN_EXTERNAL_REQUIRED")
+                    handler.post { if (active && owns(session)) fail(failureText("SIGNIN_EXTERNAL_REQUIRED")) }
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
+                }
                 val uri = parseHttps(request.uri)
-                if (uri == null || (youtube(uri) && (uri.path == "/watch" || uri.path.startsWith("/shorts/") || uri.path.startsWith("/live/"))))
+                if (uri == null || !HomeConnectionDiagnostics.allowedEmbedded(request.uri) || (youtube(uri) && (uri.path == "/watch" || uri.path.startsWith("/shorts/") || uri.path.startsWith("/live/"))))
                     return GeckoResult.fromValue(AllowOrDeny.DENY)
                 return GeckoResult.fromValue(AllowOrDeny.ALLOW)
             }
+            override fun onSubframeLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> =
+                GeckoResult.fromValue(if (active && owns(session) && (request.uri == "about:blank" || HomeConnectionDiagnostics.allowedEmbedded(request.uri))) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
                 if (!active || !owns(session) || url == null) return
                 urls[session] = url
+                if (session === main) { diagnostics.location(url, "location"); updateDiagnostics() }
+                if (HomeConnectionDiagnostics.isExternalSignIn(url)) {
+                    session.stop()
+                    diagnostics.failure("SIGNIN_EXTERNAL_REQUIRED")
+                    fail(failureText("SIGNIN_EXTERNAL_REQUIRED"))
+                }
                 if (session === main) clearResults()
                 displayOrigin()
             }
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) { back[session] = canGoBack }
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
-                if (!active || child != null || !owns(session) || (uri != "about:blank" && parseHttps(uri) == null)) return null
+                if (!active || !owns(session)) return null
+                if (HomeConnectionDiagnostics.isExternalSignIn(uri)) {
+                    diagnostics.location(uri, "blocked"); diagnostics.failure("SIGNIN_EXTERNAL_REQUIRED")
+                    handler.post { if (active && owns(session)) fail(failureText("SIGNIN_EXTERNAL_REQUIRED")) }
+                    return null
+                }
+                if (child != null || (uri != "about:blank" && !HomeConnectionDiagnostics.allowedEmbedded(uri))) return null
                 val popup = createSession()
                 child = popup
                 extension?.let { bind(popup, it) }
@@ -222,21 +287,46 @@ class HomeConnectionActivity : ComponentActivity() {
                 return GeckoResult.fromValue(popup)
             }
             override fun onLoadError(session: GeckoSession, uri: String?, error: WebRequestError): GeckoResult<String>? {
-                if (owns(session)) fail("Die Anmeldeseite konnte nicht geladen werden. Falls Google die Anmeldung ablehnt, bleibt die Verbindung ungeprüft.")
+                if (owns(session)) {
+                    diagnostics.error(error.code, error.category)
+                    fail("Gecko konnte die Seite nicht laden. [GECKO_ERROR ${error.category}/${error.code}]")
+                }
                 return null
             }
         }
         progressDelegate = object : GeckoSession.ProgressDelegate {
+            override fun onPageStart(session: GeckoSession, url: String) {
+                if (!active || !owns(session)) return
+                urls[session] = url
+                if (session === main) {
+                    ports.remove(session)?.let { old -> runCatching { old.postMessage(JSONObject().put("type", "pause")); old.disconnect() } }
+                    navigationSerial++; diagnosticRequestId = null; clearResults()
+                    diagnostics.location(url, "start"); diagnostics.bridge(false); updateDiagnostics()
+                }
+            }
             override fun onProgressChange(session: GeckoSession, value: Int) {
                 if (!owns(session)) return
                 progress.progress = value
                 progress.visibility = if (value >= 100) View.GONE else View.VISIBLE
             }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
+                if (session === main && active) {
+                    val serial = navigationSerial
+                    handler.postDelayed({
+                        if (active && main === session && serial == navigationSerial && ports[session] == null) {
+                            val code = diagnostics.missingBridgeCode(); diagnostics.failure(code); fail(failureText(code))
+                        }
+                    }, 8_000L)
+                    if (diagnostics.current.kind == "PAGE_ERROR") { diagnostics.failure("PAGE_ERROR"); fail(failureText("PAGE_ERROR")) }
+                    else if (diagnostics.enabled) requestDiagnostics()
+                }
                 if (success && session === child && homeDocument(urls[session].orEmpty())) handler.post { if (session === child) closeChild() }
             }
         }
         contentDelegate = object : GeckoSession.ContentDelegate {
+            override fun onTitleChange(session: GeckoSession, title: String?) {
+                if (session === main) { diagnostics.title(title); updateDiagnostics() }
+            }
             override fun onCloseRequest(session: GeckoSession) { if (session === child) closeChild() }
             override fun onCrash(session: GeckoSession) { if (owns(session)) { stopSessions(); fail("Die Anmelde-Engine wurde beendet. Bitte Anmeldung erneut öffnen.") } }
         }
@@ -259,14 +349,27 @@ class HomeConnectionActivity : ComponentActivity() {
                 if (!active || !owns(session) || port.sender.session !== session || !port.sender.isTopLevel || !homeOrigin(port.sender.url)) { port.disconnect(); return }
                 ports.remove(session)?.disconnect()
                 ports[session] = port
+                val portDocumentSerial = navigationSerial
+                if (session === main) { diagnostics.bridge(true); updateDiagnostics() }
                 port.setDelegate(object : WebExtension.PortDelegate {
                     override fun onPortMessage(message: Any, source: WebExtension.Port) {
-                        if (!active || session !== main || ports[session] !== source || source.sender.session !== session || !source.sender.isTopLevel || !homeOrigin(source.sender.url)) return
+                        if (!active || session !== main || portDocumentSerial != navigationSerial || ports[session] !== source || source.sender.session !== session || !source.sender.isTopLevel || !homeOrigin(source.sender.url)) return
                         val obj = message as? JSONObject ?: return
+                        if (obj.toString().length > MAX_RESPONSE) { fail("Die Feed-Antwort ist zu groß. Keine Daten übernommen."); return }
+                        if (obj.optString("type") == "ready") {
+                            if (diagnostics.enabled) diagnostics.details(obj.optJSONObject("diagnostics"))
+                            updateDiagnostics(); return
+                        }
+                        if (obj.optString("type") == "diagnostics") {
+                            if (diagnostics.enabled && diagnosticRequestId != null && obj.optString("requestId") == diagnosticRequestId) {
+                                diagnosticRequestId = null; diagnostics.details(obj.optJSONObject("diagnostics")); updateDiagnostics()
+                            }
+                            return
+                        }
                         val id = pendingId ?: return
                         if (obj.optString("requestId") != id) return
-                        if (obj.toString().length > MAX_RESPONSE) { fail("Die Feed-Antwort ist zu groß. Keine Daten übernommen."); return }
-                        if (obj.optString("type") == "failure") { fail(failureText(obj.optString("code"))); return }
+                        if (diagnostics.enabled) diagnostics.details(obj.optJSONObject("diagnostics"))
+                        if (obj.optString("type") == "failure") { diagnostics.failure(obj.optString("code")); fail(failureText(obj.optString("code"))); return }
                         if (obj.optString("type") != "home") return
                         if (obj.optString("channelId") != expected) { clearResults(); fail("Das angemeldete YouTube-Profil stimmt nicht mit deinem Weiktube-Konto überein. Bitte das passende Profil wählen."); return }
                         val response = obj.optJSONObject("response") ?: run { fail("YouTube hat keine auswertbaren Feed-Daten geliefert."); return }
@@ -274,6 +377,7 @@ class HomeConnectionActivity : ComponentActivity() {
                         val wasNext = pendingNext
                         cancelRequest()
                         if (!wasNext) {
+                            diagnostics.failure(if (page.videos.isEmpty()) "NO_FEED" else "FEED_RECEIVED")
                             firstCount = page.videos.size; videoIds = page.videos.map { it.id }.toSet(); continuation = page.continuation
                             firstVideoId = page.videos.firstOrNull()?.id
                             preview.text = page.videos.take(3).mapIndexed { index, video -> "${index + 1}. ${video.title.take(160)}" }.joinToString("\n")
@@ -287,23 +391,25 @@ class HomeConnectionActivity : ComponentActivity() {
                                 status.text = "Profil und Datenabruf geprüft: $firstCount Videos und $freshCount weitere. Dies aktiviert noch keine neue Startseite. Bitte Weiktube schließen und die Sitzung erneut prüfen."
                             } else status.text = "Weitere Seite empfangen, aber keine zusätzlichen unterstützten Videos. Nachladen noch nicht nachgewiesen."
                         }
-                        updateButtons()
+                        updateButtons(); updateDiagnostics()
                     }
                     override fun onDisconnect(port: WebExtension.Port) {
-                        if (ports[session] === port) { ports.remove(session); if (session === main) clearResults(); updateButtons() }
+                        if (ports[session] === port) { ports.remove(session); if (session === main) { diagnostics.bridge(false); diagnosticRequestId = null; clearResults() }; updateButtons(); updateDiagnostics() }
                     }
                 })
                 port.postMessage(JSONObject().put("type", "pause"))
+                if (diagnostics.enabled && session === main) requestDiagnostics()
                 updateButtons()
             }
         }, "weiktubeHome")
     }
 
     private fun requestPage(more: Boolean) {
-        val session = main ?: return
-        val port = ports[session] ?: return
+        val session = main ?: run { fail("Die Gecko-Seite wurde noch nicht vorbereitet. Bitte YouTube neu laden."); return }
+        val port = ports[session] ?: run { val code = diagnostics.missingBridgeCode(); diagnostics.failure(code); fail(failureText(code)); return }
         if (!active || child != null || pendingId != null || (more && continuation == null)) return
         val id = UUID.randomUUID().toString()
+        diagnostics.failure("none"); updateDiagnostics()
         pendingId = id; pendingNext = more
         if (!more) { firstCount = 0; videoIds = emptySet(); firstVideoId = null; preview.text = ""; continuation = null }
         status.text = "Angemeldetes Profil und echte Home-Daten werden geprüft …"
@@ -314,7 +420,24 @@ class HomeConnectionActivity : ComponentActivity() {
             return
         }
         updateButtons()
-        handler.postDelayed({ if (pendingId == id && active) fail("Zeitüberschreitung. Bitte Anmeldung prüfen und erneut versuchen.") }, 30_000L)
+        handler.postDelayed({ if (pendingId == id && active) { diagnostics.failure("TIMEOUT"); fail(failureText("TIMEOUT")) } }, 30_000L)
+    }
+
+    private fun requestDiagnostics() {
+        if (!active || !diagnostics.enabled || child != null) return
+        val port = main?.let { ports[it] } ?: return
+        val id = UUID.randomUUID().toString(); diagnosticRequestId = id
+        if (runCatching { port.postMessage(JSONObject().put("type", "diagnose").put("requestId", id)) }.isFailure) {
+            diagnosticRequestId = null; diagnostics.failure("BRIDGE_DISCONNECTED"); updateDiagnostics()
+        }
+        handler.postDelayed({ if (active && diagnosticRequestId == id) { diagnosticRequestId = null; diagnostics.failure("TIMEOUT"); updateDiagnostics() } }, 8_000L)
+    }
+
+    private fun updateDiagnostics() {
+        if (!::diagnosticView.isInitialized) return
+        diagnosticView.visibility = if (diagnostics.enabled) View.VISIBLE else View.GONE
+        diagnosticCopy.visibility = if (diagnostics.enabled) View.VISIBLE else View.GONE
+        if (diagnostics.enabled) diagnosticView.text = diagnostics.render()
     }
 
     private fun closeChild(reload: Boolean = true) {
@@ -331,7 +454,7 @@ class HomeConnectionActivity : ComponentActivity() {
         val session = child ?: main
         val raw = session?.let { urls[it] }.orEmpty()
         val uri = parseHttps(raw)
-        domain.text = uri?.host?.let { "HTTPS · $it" } ?: "Anmeldung wird geladen …"
+        domain.text = uri?.host?.let { "Gecko · HTTPS · $it" } ?: "Gecko-Seite wird geladen …"
         // Only login/profile-selection is visible. No YouTube Home, channel or watch browser UI.
         mainView?.visibility = if (child == null && loginDocument(urls[main].orEmpty())) View.VISIBLE else View.INVISIBLE
         childView?.visibility = if (loginDocument(urls[child].orEmpty())) View.VISIBLE else View.INVISIBLE
@@ -344,7 +467,7 @@ class HomeConnectionActivity : ComponentActivity() {
     private fun updateButtons() {
         if (!::verify.isInitialized) return
         val available = active && child == null && ports[main] != null && pendingId == null
-        verify.isEnabled = available
+        verify.isEnabled = active && child == null && main != null && pendingId == null
         next.isEnabled = available && continuation != null && firstCount > 0
         if (::openFirst.isInitialized) openFirst.isEnabled = available && firstVideoId != null
     }
@@ -358,19 +481,21 @@ class HomeConnectionActivity : ComponentActivity() {
         clearResults()
         if (::status.isInitialized) status.text = text
         if (::report.isInitialized) report.visibility = View.VISIBLE
+        updateDiagnostics()
     }
     private fun stopSessions() {
-        generation++; clearResults()
+        generation++; navigationSerial++; diagnosticRequestId = null; clearResults()
         ports.values.toList().forEach { runCatching { it.postMessage(JSONObject().put("type", "pause")); it.disconnect() } }; ports.clear()
         media.values.toList().forEach { runCatching { it.pause() } }; media.clear()
         mainView?.let { it.releaseSession(); container.removeView(it) }; mainView = null
         childView?.let { it.releaseSession(); container.removeView(it) }; childView = null
         val sessions = listOfNotNull(main, child); main = null; child = null
         sessions.forEach { runCatching { it.setActive(false); it.close() } }
-        urls.clear(); back.clear(); updateButtons()
+        urls.clear(); back.clear(); diagnostics.bridge(false); updateButtons(); updateDiagnostics()
     }
     override fun onPause() {
         active = false
+        diagnosticRequestId = null
         if (::root.isInitialized) {
             clearResults()
             ports.values.toList().forEach { runCatching { it.postMessage(JSONObject().put("type", "pause")) } }
@@ -398,8 +523,7 @@ class HomeConnectionActivity : ComponentActivity() {
         const val EXTRA_EXPECTED_CHANNEL_ID = "com.weiktube.home.EXPECTED_CHANNEL_ID"
         const val EXTRA_EXPECTED_CHANNEL_TITLE = "com.weiktube.home.EXPECTED_CHANNEL_TITLE"
         private const val EXTENSION_ID = "home-data@weiktube.local"
-        private const val HOME = "https://www.youtube.com/"
-        private const val SIGNIN = "https://www.youtube.com/signin?action_handle_signin=true&next=%2F"
+        private const val HOME = "https://m.youtube.com/"
         private const val MAX_RESPONSE = 4 * 1024 * 1024
         private val CHANNEL = Regex("UC[A-Za-z0-9_-]{22}")
         private val VIDEO = Regex("[A-Za-z0-9_-]{11}")
@@ -408,11 +532,18 @@ class HomeConnectionActivity : ComponentActivity() {
         private fun homeOrigin(value: String) = parseHttps(value)?.let(::youtube) == true
         private fun homeDocument(value: String): Boolean = parseHttps(value)?.let { youtube(it) && (it.path.isNullOrEmpty() || it.path == "/" || it.path == "/feed/what_to_watch") } == true
         private fun loginDocument(value: String): Boolean = parseHttps(value)?.let {
-            // Google error/help/consent pages must remain visible instead of being disguised as success.
-            !youtube(it) || it.path in setOf("/signin", "/channel_switcher", "/account_switcher", "/select_site", "/t/signin")
-        } ?: true
+            // Authentication is never embedded. Consent/profile selection may be shown; Home is data-only.
+            val kind = HomeConnectionDiagnostics.locationOf(value).kind
+            kind in setOf("CONSENT", "PROFILE_SELECTION")
+        } ?: false
         private fun failureText(code: String): String = when (code) {
-            "SIGNED_OUT" -> "YouTube ist noch nicht angemeldet. Bitte Anmeldung öffnen. [SIGNED_OUT]"
+            "SIGNED_OUT" -> "Diese Gecko-Websitzung ist nicht angemeldet. Die Google-API-Freigabe und eine Chrome-Anmeldung sind getrennt; es gibt derzeit keine bestätigte Sitzungsübernahme. [SIGNED_OUT]"
+            "PAGE_ERROR" -> "YouTube hat eine Fehlerseite statt der Startseite geliefert. Das ist keine fehlende Anmeldungskonfiguration. Bitte YouTube neu laden. [PAGE_ERROR]"
+            "SIGNIN_REQUIRED", "SIGNIN_EXTERNAL_REQUIRED" -> "Google-Anmeldung wird nicht in Gecko eingebettet. Über „YouTube im Browser prüfen“ kannst du den Systembrowser öffnen; dessen Anmeldung verbindet diese Websitzung nicht. [SIGNIN_EXTERNAL_REQUIRED]"
+            "CONSENT_REQUIRED" -> "YouTube zeigt zuerst eine Zustimmungsseite. Bitte die sichtbare Auswahl treffen und anschließend erneut prüfen. [CONSENT_REQUIRED]"
+            "BRIDGE_UNAVAILABLE" -> "Die YouTube-Seite wurde erreicht, aber die JavaScript-Verbindung fehlt. Diagnosemodus aktivieren und YouTube neu laden. [BRIDGE_UNAVAILABLE]"
+            "WRONG_PAGE" -> "Die aktuelle Seite ist keine auswertbare YouTube-Startseite. Bitte YouTube neu laden. [WRONG_PAGE]"
+            "GECKO_ERROR" -> "Gecko meldet einen Ladefehler. Im Diagnosemodus stehen Fehlercode und Kategorie; ein HTTP-Status ist dadurch nicht bekannt. [GECKO_ERROR]"
             "ACCOUNT_MISMATCH" -> "Das YouTube-Profil stimmt nicht mit deinem Weiktube-Konto überein. Bitte das passende Profil wählen. [ACCOUNT_MISMATCH]"
             "PROFILE_UNVERIFIED" -> "Das aktive YouTube-Profil konnte nicht sicher bestätigt werden. Keine Feed-Daten übernommen. [PROFILE_UNVERIFIED]"
             "CONFIG_UNAVAILABLE" -> "YouTube hat keine unterstützte Seitenkonfiguration geliefert. [CONFIG_UNAVAILABLE]"

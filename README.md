@@ -1,10 +1,12 @@
-# Weiktube 1.2.4-home-test
+# Weiktube 1.2.4-home-test.2
 
 Dieser Entwicklungsstand ergänzt ausschließlich den ausdrücklichen
 [Homepage-Verbindungstest](HOME-CONNECTION-TEST.md) unter „Du / Konto“. Player und
-bisherige Startseite bleiben erhalten. Eine echte Google-Anmeldung und der
-personalisierte Home-Abruf sind noch nicht auf dem Zielgerät bestätigt; die neue
-Datenquelle ist deshalb noch nicht an die native Startseite angeschlossen.
+bisherige Startseite bleiben erhalten. Test.2 korrigiert den fehlerhaften
+Anmelde-Startpfad und ergänzt eine bereinigte Diagnose für `CONFIG_UNAVAILABLE`.
+Die bestehende Google-API-Anmeldung ist von der dafür nötigen Website-Sitzung
+getrennt. Ein authentifizierter Home-Abruf ist noch nicht auf dem Zielgerät
+bestätigt; die neue Datenquelle ist deshalb noch nicht an die Startseite angeschlossen.
 
 ## Erhaltener Ausgangsstand 1.2.3
 
