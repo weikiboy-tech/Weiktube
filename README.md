@@ -1,10 +1,8 @@
 # Weiktube 1.2.3
 
-**Neue getrennte Test-App:** `engine-probe/` enthält Weiktube Test 0.1.0 mit eigener
-GeckoView-Engine, Original-Webstartseite und direkter interner Video-Navigation.
-Sie ersetzt die folgende Bestands-App nicht. Echte Google-Anmeldung und persönliche
-Empfehlungen müssen noch auf dem Zielgerät geprüft werden. Build, Grenzen und
-Abnahmeschritte stehen in [ENGINE-TEST.md](ENGINE-TEST.md).
+Der separate GeckoView-Test wurde zurückgenommen. Die Original-App und ihre APK
+sind unverändert erhalten. Sicherung, Dateivergleich und die konkrete Grenze der
+persönlichen Home-Empfehlungen sind in [RESTORATION.md](RESTORATION.md) dokumentiert.
 
 Android-App mit Kotlin, Jetpack Compose und Material 3. Paket und Namespace: `com.weiktube.app`. Benötigt Android 8.0 oder neuer, einen aktuellen Android System WebView und Internetzugang.
 

@@ -8,10 +8,8 @@ REQUIRED_FILES = {
     "settings.gradle.kts", "build.gradle.kts", "gradle.properties", "gradlew", "gradlew.bat",
     ".gitignore", "README.md", "BUILD.md", "TESTING.md", "app/build.gradle.kts",
 }
-OPTIONAL_FILES = {"UPDATES.md", "AUDIT.md", "CHANGELOG.md", "PRIVACY.md", "ENGINE-TEST.md",
-                  "engine-probe/build.gradle.kts", "engine-probe/settings.gradle.kts",
-                  "engine-probe/gradle.properties", "engine-probe/gradlew", "engine-probe/gradlew.bat"}
-SOURCE_DIRECTORIES = {"gradle", "scripts", ".github", "app/src", "engine-probe/src", "engine-probe/gradle"}
+OPTIONAL_FILES = {"UPDATES.md", "AUDIT.md", "CHANGELOG.md", "PRIVACY.md", "RESTORATION.md"}
+SOURCE_DIRECTORIES = {"gradle", "scripts", ".github", "app/src"}
 PRIVATE_PARTS = {
     "build", ".gradle", ".kotlin", ".git", "__pycache__", "validation", "screenshots",
     "signing", "keys", "private", "credentials", ".aws", ".codex", ".agents",

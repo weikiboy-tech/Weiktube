@@ -1,8 +1,0 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.INTERNET" />
-    <application android:name=".ProbeApplication" android:label="Weiktube Test" android:icon="@drawable/ic_weiktube" android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.NoActionBar">
-        <activity android:name=".ProbeActivity" android:exported="true" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" android:windowSoftInputMode="adjustResize">
-            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-        </activity>
-    </application>
-</manifest>
