@@ -1,12 +1,16 @@
 package com.weiktube.app
 
 import android.content.Context
+import android.content.res.Configuration
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 /** Retains one existing WebView and intercepts only an intentional video-origin downward drag. */
 class PlayerGestureLayout(context: Context) : FrameLayout(context) {
@@ -22,12 +26,60 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     private var tracker: VelocityTracker? = null
     private var ownsTouch = false
     private var childDisallowed = false
+    private var systemInsetsHandledByHost = true
+    private val replayInsets = Runnable {
+        if (isAttachedToWindow) ViewCompat.getRootWindowInsets(this)?.let(::dispatchPlayerInsets)
+    }
 
     fun attach(webView: WebView) {
         if (webView.parent === this) return
         check(childCount == 0) { "PlayerGestureLayout must retain exactly one player view" }
         (webView.parent as? ViewGroup)?.removeView(webView)
         addView(webView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        scheduleInsetsReplay()
+    }
+
+    /** Compose pads portrait/mini itself; landscape passes the screen's real safe area. */
+    fun setSystemInsetsHandledByHost(handled: Boolean) {
+        if (systemInsetsHandledByHost == handled) return
+        systemInsetsHandledByHost = handled
+        scheduleInsetsReplay()
+    }
+
+    internal fun dispatchPlayerInsets(insets: WindowInsetsCompat) {
+        val web = getChildAt(0) as? WebView ?: return
+        val forwarded = if (systemInsetsHandledByHost) {
+            val handledTypes = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            WindowInsetsCompat.Builder(insets)
+                .setInsets(handledTypes, Insets.NONE)
+                .setInsetsIgnoringVisibility(handledTypes, Insets.NONE)
+                .setDisplayCutout(null)
+                .build()
+        } else insets
+        // Compose 1.7 consumes the portrait update before AndroidView receives it.
+        // Explicit zeros clear the WebView's previous landscape safe-area values.
+        // Dispatch only to this retained child, retaining default WebView overlap/IME handling.
+        ViewCompat.dispatchApplyWindowInsets(web, forwarded)
+    }
+
+    private fun scheduleInsetsReplay() {
+        removeCallbacks(replayInsets)
+        postOnAnimation(replayInsets)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        scheduleInsetsReplay()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        scheduleInsetsReplay()
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        if (changed) scheduleInsetsReplay()
     }
 
     fun configure(enabled: Boolean, youtube: Boolean, onDrag: (Float) -> Unit, onMinimize: () -> Unit) {
@@ -123,6 +175,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     }
 
     override fun onDetachedFromWindow() {
+        removeCallbacks(replayInsets)
         reset()
         super.onDetachedFromWindow()
     }

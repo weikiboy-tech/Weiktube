@@ -1,6 +1,6 @@
 param(
-    [int]$VersionCode = 19,
-    [string]$VersionName = '1.3.5',
+    [int]$VersionCode = 20,
+    [string]$VersionName = '1.3.6',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
     [switch]$Publish
@@ -11,7 +11,7 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = "v$VersionName"
-$expectedMain = '5849277de8738100d78c993fe5dc60c68cebe2ca'
+$expectedMain = '633000d53de4ebb18fa21a82be1677081be5dcab'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
 $output = Join-Path $project "dist/stable-$VersionName"
 $source = Join-Path $project 'Weiktube-Quellcode.zip'
@@ -23,7 +23,7 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'YouTube-Werbefilter für Player, Shorts und originale Startseite, mit signierten Filterupdates und Diagnose. Enthält den kompakten Miniplayer mit Ziehgeste, den X-Schließen-Fix und automatisches Vollbild beim Drehen. 202 automatisierte JVM-Tests und JavaScript-Prüfungen bestanden; keine Geräteabnahme des Werbeschutzes und keine Garantie vollständiger Werbefreiheit. Über die bestehende App installieren, um deine Anmeldung zu behalten.'
+$updateNotes = 'Gezielter Layout-Fix: Nach dem automatischen Vollbild im Querformat erhält der Player beim Zurückdrehen ins Hochformat wieder die richtigen Bildschirmabstände. Das behebt hängenbleibenden seitlichen Abstand und abgeschnittene Inhalte. Bestehendes Video, Position, Anmeldung und Werbeschutz bleiben erhalten. Keine Geräteabnahme; bitte über die vorhandene App installieren.'
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or
     $build -notmatch ('(?m)^\s*versionName\s*=\s*"' + [regex]::Escape($VersionName) + '"\s*$')) {

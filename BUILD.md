@@ -116,10 +116,10 @@ Kein Geheimnis gehört in diese JSON-Datei. Den Signierschlüssel geschützt sic
 Die zusätzlichen Architekturfelder der regulären Version sind in `UPDATES.md`
 dokumentiert und werden vom Veröffentlichungsskript automatisch erzeugt.
 
-`scripts/publish-release.ps1` bereitet aus den geprüften APKs unter `dist/stable/`
+`scripts/publish-release.ps1` bereitet aus den geprüften APKs unter `dist/stable-<Version>/`
 beide Update-Manifeste und Prüfsummen vor. Benötigt werden das aktuelle mit
-`python scripts/package-source.py` erstellte Quellpaket, `RELEASE-1.3.2.md` sowie
-`dist/stable/release-verification.json` mit den geprüften Paket-/Versions-/ABI-/
+`python scripts/package-source.py` erstellte Quellpaket, `RELEASE-<Version>.md` sowie
+`dist/stable-<Version>/release-verification.json` mit den geprüften Paket-/Versions-/ABI-/
 Signatur-/Debuggable-/Hash-Angaben. Ohne `-Publish` erfolgen keine Remoteänderungen.
 `-Publish` prüft diese Angaben und die Quellpaketdateien erneut, erhält die
 bisherige Git-Historie, aktualisiert main ohne Force-Push und veröffentlicht erst
