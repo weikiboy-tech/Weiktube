@@ -12,7 +12,7 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = if ($Preview) { "v$VersionName-preview" } else { "v$VersionName" }
-$expectedMain = 'a0a60a6b1205ee299ded19166c8315c1de43e622'
+$expectedMain = 'dd39444ac6cf80f4c6d0b1feb2a05a76281d7f5f'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
 $channel = if ($Preview) { 'preview' } else { 'stable' }
 $output = Join-Path $project "dist/$channel-$VersionName"
@@ -25,8 +25,8 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Diagnose-Vorabversion: Miniplayer-Schaltfläche sendet eindeutige Play/Pause-Befehle; begrenzte Diagnose unterscheidet App-Befehle und unzugeordnete Medienereignisse. Die YouTube-seitige PiP-Pause ist weiterhin offen und wird nicht umgangen. Darstellung unverändert. Kein Nachweis zuverlässiger YouTube-Mini-/PiP-Wiedergabe, keine Gerätetests. Kein automatisches Update des stabilen Kanals.'
-if (-not $Preview -and $VersionName -eq '1.3.11') { throw '1.3.11 is a diagnostic preview only; use -Preview. The stable updater must remain unchanged.' }
+$updateNotes = 'Diagnose-Update: Miniplayer-Schaltfläche sendet eindeutige Play/Pause-Befehle; begrenzte Diagnose unterscheidet App-Befehle und unzugeordnete Medienereignisse. Die YouTube-seitige PiP-Pause ist weiterhin offen und wird nicht umgangen. Darstellung unverändert. Kein Nachweis zuverlässiger YouTube-Mini-/PiP-Wiedergabe, keine Gerätetests. Auf Wunsch über den regulären Updatekanal verfügbar; dieselbe geprüfte APK wie in 1.3.11-preview.'
+if ($Preview) { $updateNotes += ' Dies ist eine Vorabveröffentlichung ohne Änderung des regulären Updatekanals.' }
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or
     $build -notmatch ('(?m)^\s*versionName\s*=\s*"' + [regex]::Escape($VersionName) + '"\s*$')) {
@@ -171,7 +171,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create source tree.' }
     # A new isolated repository: preserve the reviewed history without replacing
     # any existing working tree or rewriting any local/remote branch.
-    $commit = git commit-tree $tree -p $main -m "Use explicit mini playback commands and trace pause origins in Weiktube $VersionName preview"
+    $commit = git commit-tree $tree -p $main -m "Publish Weiktube $VersionName diagnostic build to the requested update channel"
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create release commit.' }
     git update-ref refs/heads/main $commit ('0' * 40)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated main ref.' }
@@ -181,7 +181,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Normal fast-forward push failed; review remote state before retrying.' }
 } finally { Pop-Location }
 
-$releaseName = if ($Preview) { "Weiktube $VersionName – Diagnose-Vorabversion" } else { "Weiktube $VersionName" }
+$releaseName = if ($Preview) { "Weiktube $VersionName – Diagnose-Vorabversion" } else { "Weiktube $VersionName – Diagnose-Update" }
 $body = @{tag_name=$tag;target_commitish=$commit;name=$releaseName;body=$notes;draft=$true;prerelease=[bool]$Preview;make_latest='false'} | ConvertTo-Json
 $release = Invoke-RestMethod "https://api.github.com/repos/$Repository/releases" -Headers $headers -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body))
 $upload = $release.upload_url -replace '\{.*$', ''

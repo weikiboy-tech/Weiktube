@@ -3,8 +3,9 @@
 Dieser Bericht beschreibt einen reproduzierten öffentlichen Browsertest und
 die begrenzte Diagnose im vorhandenen Weiktube-Player. **Die browserseitige
 Mini-/PiP-Pause ist damit noch nicht behoben.** Es wurde kein Android-Handy-,
-Emulator- oder angemeldeter Kontotest durchgeführt. Ein Release- oder
-Veröffentlichungserfolg wird hier nicht behauptet.
+Emulator- oder angemeldeter Kontotest durchgeführt. Der Prüfstand ist
+unabhängig davon, ob dieselben Diagnose-APKs als Vorabversion oder über den
+regulären Updatekanal verteilt werden.
 
 ## Belegter Browserbefund
 
@@ -216,7 +217,7 @@ beobachtete Bedingung zu umgehen.
 ## Teststand und noch offene Geräteabnahme
 
 Der öffentliche Browservergleich und die beschriebenen A/B-Befunde sind
-durchgeführt. Der abschließende Build des Diagnose-Previews 1.3.11 / Code 25
+durchgeführt. Der abschließende Build des Diagnose-Updates 1.3.11 / Code 25
 ist erfolgreich; das lokale Protokoll liegt unter
 `validation/pause-1.3.11-build.log`. Die folgenden Prüfungen wurden für diesen
 Stand abgeschlossen, statt nur frühere Ergebnisse als Nachweis zu übernehmen:
@@ -233,9 +234,11 @@ Stand abgeschlossen, statt nur frühere Ergebnisse als Nachweis zu übernehmen:
 | Offline-Chromium-Pixel-/Layoutfixture | Echte Pixelprüfung mit negativen Überdeckungskontrollen und zehn Mini-/PiP-/Rückkehrzyklen bestanden |
 | Android-Gerät, Android-Emulator und fünfminütige Live-YouTube-Abnahme | Nicht durchgeführt |
 
-Die APKs tragen das ursprüngliche Signierzertifikat. Dies dokumentiert
-geprüfte lokale Artefakte, keinen erfolgten Upload und keine Aufnahme in den
-regulären Updatekanal:
+Die APKs tragen das ursprüngliche Signierzertifikat. Für die Veröffentlichung
+im regulären Updatekanal werden dieselben geprüften Artefakte der vorherigen
+Vorabversion verwendet; ein Kanalwechsel ändert weder ihre Prüfsummen noch
+die oben beschriebenen Testgrenzen. Angaben zur Verteilung stehen in
+[Release 1.3.11](../RELEASE-1.3.11.md).
 
 | APK | Größe | SHA-256 |
 | --- | ---: | --- |

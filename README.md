@@ -1,12 +1,14 @@
-# Weiktube 1.3.11 – Diagnose-Vorabversion
+# Weiktube 1.3.11 – Diagnose-Update
 
 **Noch kein fertiger PiP-Wiedergabefix:** Der Miniplayer sendet jetzt eindeutige
 Play-/Pause-Befehle, und eine begrenzte Diagnose zeichnet deren Herkunft auf.
 Die mobile YouTube-Seite pausiert im öffentlichen Größenwechseltest selbst,
 wenn ihr interner PiP-Zustand aktiv und das Video nicht hintergrundfähig ist.
 Diese Prüfung wird nicht umgangen. Darstellung und Adblock bleiben unverändert.
-Der stabile Updatekanal bleibt auf 1.3.10. Befunde und Testgrenzen:
-[Wiedergabediagnose](docs/PLAYBACK-DIAGNOSTICS.md), [Vorabversion 1.3.11](RELEASE-1.3.11.md).
+1.3.11 wird über den regulären In-App-Updatekanal veröffentlicht. Die APKs sind
+identisch mit der vorherigen Diagnose-Vorabversion (Code 25); die Kanaländerung
+ist kein zusätzlicher Wiedergabefix. Befunde und Testgrenzen:
+[Wiedergabediagnose](docs/PLAYBACK-DIAGNOSTICS.md), [Release 1.3.11](RELEASE-1.3.11.md).
 
 **Neu in 1.3.10:** Gezielte Wiederherstellung nach beendetem Player- oder
 Gecko-Inhaltsprozess. Tote Ansichten werden nicht wiederverwendet, veraltete
@@ -84,7 +86,7 @@ die Startseite erhalten. Der Konto-Einstieg öffnet sich einmal automatisch und 
   für passende Intel-/Emulator-Geräte. Keine Unterstützung für reine 32-Bit-Geräte.
 - Updates über **Einstellungen & Updates → Jetzt nach Updates suchen**. Android
   bestätigt die Installation; die App installiert Updates nicht still im Hintergrund.
-- [Release 1.3.10](RELEASE-1.3.10.md), [Release 1.3.9](RELEASE-1.3.9.md), [Release 1.3.8](RELEASE-1.3.8.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
+- [Release 1.3.11](RELEASE-1.3.11.md), [Release 1.3.10](RELEASE-1.3.10.md), [Release 1.3.9](RELEASE-1.3.9.md), [Release 1.3.8](RELEASE-1.3.8.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
 
 Die Website verwendet das dort angemeldete Konto. Die optionale Google-API-Freigabe
 für Abos/Playlists ist separat; die öffentliche APK-Veröffentlichung erweitert

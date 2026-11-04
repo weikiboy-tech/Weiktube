@@ -1,8 +1,11 @@
-# Weiktube 1.3.11 – Diagnose-Vorabversion, kein fertiger PiP-Fix
+# Weiktube 1.3.11 – Diagnose-Update, kein fertiger PiP-Fix
 
 Versioncode 25, Paket `com.weiktube.app`. **Die YouTube-seitige Wiedergabepause
-im Miniplayer/PiP bleibt offen.** Diese Vorabversion ersetzt das stabile
-Update 1.3.10 nicht. Es wurde kein Android-Gerätetest durchgeführt.
+im Miniplayer/PiP bleibt offen.** Dieses Release bringt das Diagnose-Update
+in den regulären In-App-Updatekanal. Es verwendet unverändert dieselben APKs
+und denselben Code 25 wie die vorherige Vorabversion; der Kanalwechsel enthält
+keinen neuen Build oder zusätzlichen App-Fix. Es wurde kein Android-Gerätetest
+durchgeführt.
 
 ## Was tatsächlich gefunden wurde
 
@@ -61,15 +64,24 @@ pausiert weiterhin den vorherigen Player, damit keine zwei Videos konkurrieren.
 Details, Logschema, Quellen und Testgrenzen:
 [Wiedergabediagnose](docs/PLAYBACK-DIAGNOSTICS.md).
 
-## Diagnose-APK
+## Installation und regulärer Updatekanal
 
-Die Vorabversion lässt sich über die bisherige App installieren; die
+Das Diagnose-Update lässt sich über die bisherige App installieren; die
 gespeicherte Anmeldung wird dabei nicht gelöscht. Das höhere Versionscode-
 Update kann Android nicht ohne Weiteres auf eine ältere APK zurückstufen.
 Eine spätere höhere Version kann regulär darüber installiert werden.
 
-- [ARM64-APK](https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.11-preview/Weiktube.apk)
-- [x86-64-APK](https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.11-preview/Weiktube-x86_64.apk)
+Die Veröffentlichung erfolgt als neues `v1.3.11`; die frühere
+`v1.3.11-preview` bleibt erhalten. Mit dieser Veröffentlichung liefert die
+bestehende `latest`-Quelle das Update für ältere Installationen. Eine bereits
+installierte 1.3.11-Vorabversion braucht wegen gleicher APKs und gleichem
+Versionscode kein weiteres Update. Der reguläre Kanal bedeutet nicht, dass
+die offene YouTube-Pause gelöst oder auf einem Handy abgenommen wurde.
+
+- [ARM64-APK](https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.11/Weiktube.apk)
+- [x86-64-APK](https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.11/Weiktube-x86_64.apk)
+- [Quellcode](https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.11/Weiktube-Quellcode.zip)
+- [Update-Feed](https://github.com/weikiboy-tech/Weiktube/releases/download/v1.3.11/update.json)
 
 ARM64: 106595947 Bytes,
 SHA-256 `7596d56c7ce3dcfb84dda00bd3dcde17e6bc3d7b6102b953fb0a738373a1171f`.

@@ -1,13 +1,28 @@
 # Weiktube-Updates
 
-**1.3.11 ist nur eine Diagnose-Vorabversion.** Die Miniplayer-Schaltfläche
+**1.3.11 ist ein Diagnose-Update für den regulären In-App-Updatekanal.** Die Miniplayer-Schaltfläche
 sendet eindeutige Play-/Pause-Befehle; die YouTube-seitige PiP-Pause ist noch
-nicht gelöst. Der stabile automatische Updatekanal bleibt auf 1.3.10.
+nicht gelöst. Die Veröffentlichung als `v1.3.11` übernimmt dieselben geprüften
+APKs mit Code 25 aus der vorherigen Vorabversion; es gibt keinen neuen Build
+und keine zusätzlichen App-Änderungen für den Kanalwechsel.
 [Befunde und Testgrenzen](RELEASE-1.3.11.md).
 
 Die App prüft beim Öffnen maximal einmal pro 24 Stunden auf eine neue Version. Das lässt sich unter App-Updates ausschalten. Es gibt keinen permanenten Hintergrunddienst und keine stille Installation: Nach einer verfügbaren Version startet der Nutzer den Download; Android bestätigt die Installation. Fehlgeschlagene automatische Prüfungen werden ebenfalls frühestens am nächsten Tag wiederholt. „Jetzt nach Updates suchen“ ist jederzeit möglich.
 
 Standardquelle: `https://github.com/weikiboy-tech/Weiktube/releases/latest/download/update.json`. Die Quelle kann geändert werden. Die tatsächlich angebotene Version steht im veröffentlichten Feed. Ein lokal vorbereiteter Versionsstand ist noch kein verfügbares Update. Fehlt eine Release-Datei oder ist sie nicht erreichbar, meldet die App einen Serverfehler; sie behauptet dann nicht, aktuell zu sein.
+
+## Version 1.3.11 – Diagnose-Update im regulären Kanal
+
+Mit der Veröffentlichung von `v1.3.11` bietet die bestehende `latest`-Quelle
+Code 25 an. Nutzer von 1.3.10 können unter **Einstellungen & Updates → Jetzt
+nach Updates suchen** aktualisieren. Wer die frühere 1.3.11-Vorabversion schon
+installiert hat, besitzt dieselben APKs und denselben Versionscode; der Updater
+muss dafür kein weiteres Update anbieten. Die Vorabveröffentlichung bleibt
+historisch erhalten und wird nicht umgeschrieben.
+
+Die reguläre Verteilung ist keine Qualitäts- oder PiP-Erfolgsgarantie. Die
+270 JVM-Tests, Script-/Pixelprüfungen und der Release-Build sind bestanden;
+Android-Gerätetests und die fünfminütige Live-Wiedergabeabnahme fehlen weiterhin.
 
 ## Version 1.3.10 – Wiederherstellung nach Prozessverlust
 
