@@ -1,6 +1,6 @@
 param(
-    [int]$VersionCode = 25,
-    [string]$VersionName = '1.3.11',
+    [int]$VersionCode = 26,
+    [string]$VersionName = '1.3.12',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
     [switch]$Publish,
@@ -12,7 +12,7 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = if ($Preview) { "v$VersionName-preview" } else { "v$VersionName" }
-$expectedMain = 'dd39444ac6cf80f4c6d0b1feb2a05a76281d7f5f'
+$expectedMain = 'fa678bcf0a8a46b76028e226198e2e7d9425af2b'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
 $channel = if ($Preview) { 'preview' } else { 'stable' }
 $output = Join-Path $project "dist/$channel-$VersionName"
@@ -25,7 +25,7 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Diagnose-Update: Miniplayer-Schaltfläche sendet eindeutige Play/Pause-Befehle; begrenzte Diagnose unterscheidet App-Befehle und unzugeordnete Medienereignisse. Die YouTube-seitige PiP-Pause ist weiterhin offen und wird nicht umgangen. Darstellung unverändert. Kein Nachweis zuverlässiger YouTube-Mini-/PiP-Wiedergabe, keine Gerätetests. Auf Wunsch über den regulären Updatekanal verfügbar; dieselbe geprüfte APK wie in 1.3.11-preview.'
+$updateNotes = 'Player-Zustand: Veraltete Seiten-Callbacks können neue Videoauswahlen nicht mehr überschreiben. Letzte Position bleibt bei vorübergehend fehlendem Videoelement erhalten. Ein nachweislich verlorenes leeres Dokument wird höchstens einmal wiederhergestellt; gesunde WebViews werden nicht neu geladen. Prozess-, Activity- und View-Diagnose ergänzt. Kein Gerätetest und noch kein Nachweis, dass der gemeldete Schwarzbildfehler dauerhaft behoben ist. Die YouTube-seitige PiP-Pause bleibt offen.'
 if ($Preview) { $updateNotes += ' Dies ist eine Vorabveröffentlichung ohne Änderung des regulären Updatekanals.' }
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or

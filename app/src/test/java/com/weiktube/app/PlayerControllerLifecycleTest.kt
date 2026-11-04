@@ -111,6 +111,7 @@ class PlayerControllerLifecycleTest {
 
     @Test fun pendingPollFromDeadRendererCannotOverwriteTheSavedPosition() {
         player.open(VIDEO_A)
+        finishPage()
         reportPosition(23.5)
         player.poll()
         val stale = shadowOf(player.view).lastEvaluatedJavascriptCallback
@@ -169,6 +170,7 @@ class PlayerControllerLifecycleTest {
 
     @Test fun backgroundRendererLossWaitsForForegroundAndRestoresPausedPosition() {
         player.open(VIDEO_A)
+        finishPage()
         reportPosition(23.5)
         player.expanded = false
         hostVisible(false)
@@ -511,7 +513,11 @@ class PlayerControllerLifecycleTest {
     }
 
     private fun client(web: WebView = player.view): WebViewClient = shadowOf(web).webViewClient
-    private fun finishPage() = client().onPageFinished(player.view, shadowOf(player.view).lastLoadedUrl ?: WATCH_A)
+    private fun finishPage() {
+        val url = shadowOf(player.view).lastLoadedUrl ?: WATCH_A
+        client().onPageCommitVisible(player.view, url)
+        client().onPageFinished(player.view, url)
+    }
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
     private fun lastScriptRequestsStart() = shadowOf(player.view).lastEvaluatedJavascript
         .orEmpty().contains("window.weiktubeSetPlayback(true,true)")
@@ -522,6 +528,7 @@ class PlayerControllerLifecycleTest {
     }
 
     private fun pollResult(seconds: Double, playing: Boolean = false): String = JSONObject.quote(JSONObject()
+        .put("hasVideo", true)
         .put("playing", playing).put("position", seconds).put("duration", 120.0)
         .put("width", 1920).put("height", 1080).put("title", "").put("url", WATCH_A).toString())
 

@@ -22,6 +22,10 @@ import com.weiktube.home.OriginalHomeController
 import com.weiktube.home.OriginalHomeReturn
 
 class MainActivity : ComponentActivity() {
+    internal val diagnosticActivityId = PlayerDiagnostics.nextActivityId()
+    private fun traceLifecycle(event: PlayerDiagnostics.Event, state: String = "HOST") =
+        PlayerDiagnostics.record(event, state = state, activityId = diagnosticActivityId)
+
     val model: WeiktubeModel by viewModels()
     val shield = ShieldEngine()
     lateinit var player: PlayerController
@@ -127,7 +131,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        PlayerDiagnostics.record(if (savedInstanceState == null) PlayerDiagnostics.Event.ACTIVITY_CREATE else PlayerDiagnostics.Event.ACTIVITY_RESTORE)
+        val restoreKind = PlayerDiagnostics.classifyRestore(savedInstanceState != null,
+            savedInstanceState?.getString(PlayerDiagnostics.PROCESS_MARKER_STATE_KEY))
+        traceLifecycle(if (savedInstanceState == null) PlayerDiagnostics.Event.ACTIVITY_CREATE else PlayerDiagnostics.Event.ACTIVITY_RESTORE,
+            state = restoreKind.name)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         com.weiktube.filter.YoutubeAdBlock.initialize(this)
         player = PlayerController(this)
@@ -269,7 +276,7 @@ class MainActivity : ComponentActivity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pip = isInPictureInPictureMode
-        PlayerDiagnostics.record(if (pip) PlayerDiagnostics.Event.PIP_ENTER else PlayerDiagnostics.Event.PIP_EXIT)
+        traceLifecycle(if (pip) PlayerDiagnostics.Event.PIP_ENTER else PlayerDiagnostics.Event.PIP_EXIT)
         if (pip) hideFullscreen()
         syncPlayerPresentation()
         if (pip) { browser.pauseMedia(); shorts?.pauseMedia() }
@@ -278,7 +285,7 @@ class MainActivity : ComponentActivity() {
         if (::nativePip.isInitialized) nativePip.modeChanged(pip)
     }
     override fun onPause() {
-        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_PAUSE)
+        traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_PAUSE)
         fullscreenOrientation.disable()
         hostResumed = false
         syncOriginalHomeVisibility()
@@ -288,7 +295,7 @@ class MainActivity : ComponentActivity() {
         browser.pauseMedia(); shorts?.pauseMedia()
     }
     override fun onStop() {
-        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_STOP)
+        traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_STOP)
         foreground = false
         player.pauseView()
         browser.pauseMedia(); shorts?.pauseMedia()
@@ -298,7 +305,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onStart() {
         super.onStart()
-        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_START)
+        traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_START)
         // Reconcile with Android rather than retaining a stale PiP callback flag after backgrounding.
         pip = isInPictureInPictureMode
         foreground = true
@@ -309,7 +316,7 @@ class MainActivity : ComponentActivity() {
         !getSystemService(android.os.PowerManager::class.java).isInteractive
     override fun onResume() {
         super.onResume()
-        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_RESUME)
+        traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_RESUME)
         hostResumed = true
         screenOff = screenIsUnavailable()
         if (customView != null && fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()
@@ -328,7 +335,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        PlayerDiagnostics.record(PlayerDiagnostics.Event.CONFIGURATION)
+        traceLifecycle(PlayerDiagnostics.Event.CONFIGURATION)
         syncPlayerPresentation()
         syncPipState()
     }
@@ -359,6 +366,8 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(PlayerDiagnostics.PROCESS_MARKER_STATE_KEY, PlayerDiagnostics.processMarker)
+        traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_SAVE_STATE)
         orientationBeforePlayer?.let { outState.putInt("orientation_before_player", it) }
         outState.putString("browse", browser.currentUrl)
         outState.putInt("tab", tab)
@@ -466,7 +475,11 @@ class MainActivity : ComponentActivity() {
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
     override fun onDestroy() {
-        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_DESTROY)
+        traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_DESTROY, when {
+            isChangingConfigurations -> "CONFIGURATION_CHANGE"
+            isFinishing -> "FINISHING"
+            else -> "HOST"
+        })
         hostResumed = false
         if (::nativePip.isInitialized) nativePip.close()
         originalHome.close()

@@ -28,7 +28,7 @@ assert.match(activity, /override fun onUserLeaveHint\(\)/);
 assert.match(native, /Build\.VERSION\.SDK_INT < 31\) enter\(manual = false\) else sync\(\)/);
 assert.doesNotMatch(native, /WebView\(|PlayerController\(|loadUrl\(|loadData|SYSTEM_ALERT_WINDOW/,
   'Android PiP controller must never own a second playback document or overlay');
-assert.match(player, /val allowed = playbackAllowed && activity\.playerMayRun/);
+assert.match(player, /val allowed = documentCommitted && playbackAllowed && activity\.playerMayRun/);
 assert.match(player, /!isYoutube \|\| adHooks\[view\]\?\.canPlay == true/,
   'existing protected-playback gate stays enforced');
 assert.match(ui, /key\(p\.view\)/);

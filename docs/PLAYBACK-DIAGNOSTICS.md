@@ -1,13 +1,123 @@
-# Wiedergabepause bei Miniplayer und PiP: Diagnose und Grenzen
+# Player-Diagnose: Dokumentwechsel, Hintergrundrückkehr und PiP
 
-Dieser Bericht beschreibt einen reproduzierten öffentlichen Browsertest und
-die begrenzte Diagnose im vorhandenen Weiktube-Player. **Die browserseitige
-Mini-/PiP-Pause ist damit noch nicht behoben.** Es wurde kein Android-Handy-,
-Emulator- oder angemeldeter Kontotest durchgeführt. Der Prüfstand ist
-unabhängig davon, ob dieselben Diagnose-APKs als Vorabversion oder über den
-regulären Updatekanal verteilt werden.
+Dieser Bericht trennt die Dokument-/Lifecycle-Befunde für 1.3.12 vom bereits
+reproduzierten öffentlichen Browser-Pausepfad aus 1.3.11. **Die Ursache des
+schwarzen Players nach längerem Hintergrundaufenthalt auf dem Handy ist nicht
+bestätigt; die browserseitige Mini-/PiP-Pause ist nicht behoben.** Es wurde kein
+aktueller Android-Handy-, Emulator- oder angemeldeter Kontotest durchgeführt.
 
-## Belegter Browserbefund
+## 1.3.12: Belegte Dokument-Races und begrenzte Wiederherstellung
+
+Die Gegenprobe mit dem bisherigen 1.3.11-Controller umfasst 13 ausgeführte
+Robolectric-Tests: acht reproduzierte Fehler und fünf erfolgreiche Kontrollen.
+Verspätete Start-/History-/Abschluss-/Fehlermeldungen eines früheren Videos
+konnten in derselben weiterhin lebenden WebView die neuere Auswahl oder ihren
+Ladezustand verändern. Ein Poll vor Bestätigung des neu ausgewählten Dokuments
+konnte noch Daten des vorherigen Videos liefern. Belege liegen lokal in
+`validation/document-race-before-1.3.12/BASELINE.txt` und der zugehörigen JUnit-XML.
+
+Der Controller ordnet solche Meldungen jetzt zusätzlich dem ausgewählten
+Dokument zu. Polling und Wiedergabefreigabe warten auf dessen Commit; ältere
+Antworten bleiben wirkungslos. Das Fehlen eines Videoelements während eines
+SPA-Übergangs setzt die letzte gültige Medienposition nicht mehr auf null.
+Diese Lücken sind im Code reproduziert, **nicht als Ursache des konkreten
+Handyfehlers bewiesen**.
+
+Der neue automatische Wiederherstellungspfad verlangt einen positiven Beleg:
+Ein bereits bestätigtes Videodokument liefert über JavaScript nun eine
+vollständig geladene, leere `about:blank`-Seite ohne Video. Dann ist einmal je
+ausdrücklicher Videoauswahl ein Wiederherstellungsversuch in derselben gesunden
+WebView möglich. Quelle, Position und Benutzerpause werden berücksichtigt;
+eine neue Auswahl oder Schließen entwertet den alten Auftrag. Ein zweiter
+Verlust zeigt einen Fehler. Fehlende JS-Antworten, Ladeverzögerungen, fehlender
+Fokus und Zeitablauf erlauben keinen Reload. Die bestehende Behandlung eines
+wirklich beendeten Renderers bleibt ein anderer Pfad mit View-Ersatz.
+
+Ein zusätzlicher Test reproduzierte zunächst eine weitere Lücke: Dieselbe
+Videoauswahl während einer anstehenden Leer-Dokument-Recovery verwendete das
+noch unbestätigte Dokument wieder. Die Auswahlprüfung berücksichtigt jetzt
+auch die Dokumentgültigkeit; die negative Gegenprobe besteht nach dem Fix.
+
+Der abschließende Gradle-Lauf mit App-/Home-/Filtertests, Debug-/Release-Build
+und Debug-Lint war erfolgreich. 307 JVM-Tests bestanden: 210 App, 77 Home,
+20 Filter, ohne Fehler oder Fehlschläge; unveränderte Home-/Filter-Ergebnisse
+wurden als aktuell übernommen. Darunter sind 61 gezielte Fälle: 27 Dokument-,
+drei Compose-Host-, sieben Diagnose- und 24 bestehende Lifecycle-Tests.
+App-Lint meldet keine Fehler und 37 Warnungen. 17 Player-, fünf Observer-, acht
+Diagnose-Fixtures, Home-/Filter-/Watch-Scriptprüfungen, der Scope-Abgleich mit
+46 ursprünglichen Quelldateien und zehn lokale Chromium-Pixelzyklen bestanden.
+Die Release-APKs wurden auf Paket/Version 1.3.12/Code 26, ursprüngliches
+Signierzertifikat, ABI, Größe und SHA-256 geprüft; beide sind nicht debuggbar
+und unter 128 MiB. Die Prüfsummen stehen in [Release 1.3.12](../RELEASE-1.3.12.md).
+
+Die Compose-Fixture startet eine isolierte `ComponentActivity` mit echtem `AndroidView`/
+`key`, aber weder die komplette `MainActivity` noch Chromium. Bundle-/Parcel-
+Roundtrip, neue Controller und native Hostmaße beweisen weder echten Prozessverlust
+noch Videopixel. [Prüfprotokoll](../TESTING.md), [Release 1.3.12](../RELEASE-1.3.12.md).
+
+## Native Kennungen: Prozess, Activity, Controller, View und Dokument
+
+Native Player-Ereignisse enthalten ab 1.3.12 zusätzlich diese Felder:
+
+```text
+ACTIVITY_RESTORE generation=0 state=ACTIVITY_RECREATION process=00000000-0000-4000-8000-000000000000 activity=2 controller=0 view=0
+VIEW_HOST_UPDATE generation=4 state=PAUSED process=00000000-0000-4000-8000-000000000000 activity=2 controller=3 view=5 attached=true shown=true hasParent=true parentMatches=UNKNOWN visibility=VISIBLE windowVisibility=VISIBLE windowFocus=false width=320 height=180
+```
+
+Die Werte sind Beispiele. `process` ist eine zufällige lokale Kennung je
+App-Prozess, keine PID, Konto-/Gerätekennung oder Zugriffsbefugnis. Sie wird nur
+zur Wiederherstellung im Activity-Bundle gespeichert, nicht als dauerhafte
+Nutzerkennung in Einstellungen. Der gespeicherte alte Wert wird nicht ausgegeben.
+`activity`, `controller` und `view` zählen native Instanzen innerhalb dieses
+Prozesses; `0` bedeutet nicht angegeben. `generation` bezeichnet den lokalen
+Controller-/Dokumentzustand und darf nicht über verschiedene Controller hinweg
+als dieselbe Sitzung interpretiert werden.
+
+| Schritt/Signal | Was daraus folgt | Was daraus nicht folgt |
+| --- | --- | --- |
+| `ACTIVITY_CREATE state=COLD_START` | Die Activity erhielt kein Saved-State-Bundle | Kein Beweis für einen erstmals gestarteten App-Prozess |
+| `ACTIVITY_RESTORE state=ACTIVITY_RECREATION` | Gespeicherter und aktueller Prozessmarker stimmen überein; neue Activity im selben Prozess | Kein Prozessverlust; kein Nachweis sichtbarer Videoframes |
+| `ACTIVITY_RESTORE state=PROCESS_RESTORE` | Das Bundle stammt von einer anderen Prozessinstanz | Keine Aussage, weshalb der vorige Prozess endete oder wie lange er im Hintergrund war |
+| `ACTIVITY_RESTORE state=RESTORE_UNKNOWN` | Bundle vorhanden, aber gültiger Marker fehlt, etwa aus einer älteren Version | Prozessverlust darf nicht daraus geraten werden |
+| `ACTIVITY_SAVE_STATE` / `ACTIVITY_DESTROY` | Speichern bzw. beobachtetes Zerstören dieser Activity; `CONFIGURATION_CHANGE` oder `FINISHING` soweit gemeldet | Fehlendes `ACTIVITY_DESTROY` beweist keinen weiterhin lebenden Prozess |
+| `RENDERER_CRASHED` / `RENDERER_KILLED` | Native Meldung über Ende des Renderers der benannten View | Nicht automatisch Ende der App oder aller WebViews |
+| `RENDERER_UNRESPONSIVE` | Native Meldung über fehlende Reaktion | Kein Beweis für Prozessende; kein automatischer Kill-/Reload-Grund |
+| `STALE_DOCUMENT_IGNORED` | Meldung gehört nicht zum aktuell angenommenen Dokument | Kein Nachweis eines Rendererabsturzes |
+| `DOCUMENT_LOST` | Der eng begrenzte positive Leer-Dokument-Befund wurde angenommen | Keine pauschale Diagnose für jeden schwarzen Bildschirm |
+| `DOCUMENT_COMMITTED` / `RECOVERY_DOCUMENT_READY` | Das gewählte bzw. wiederhergestellte Dokument wurde gemeldet | Keine bestätigte Videowiedergabe, kein dekodierter Frame oder Ton |
+| `VIEW_ATTACHED`, `VIEW_DETACHED`, `VIEW_HOST_UPDATE` | Native Anbindung oder geänderter Snapshot der konkreten View | `attached=true` bzw. positive Maße allein garantieren kein sichtbares Video |
+
+`shown`, `visibility`, `windowVisibility`, `windowFocus`, `hasParent` und
+`attached` beschreiben ausschließlich die native View. Maße werden beim
+Formatieren auf 0–65535 begrenzt. `parentMatches` ist nur dann wahr/falsch,
+wenn der erwartete Parent übergeben wurde; ansonsten `UNKNOWN`. Fehlender
+Window-Fokus ist beispielsweise in PiP erwartbar und kein eigenständiger
+Pause- oder Recovery-Grund. Snapshots enthalten keine View-Objekte,
+Klassennamen, Titel, URLs oder freien Fehlertexte. Unbekannte Statusstrings
+werden als `UNKNOWN` ausgegeben.
+
+Für den schwarzen Player zuerst Prozess-/Activity-Marker vergleichen, danach
+Renderer- und View-Identität, Dokument-Commit/-Verlust und native Anbindung.
+Erst anschließend Pause-/Gate-Ereignisse zuordnen. Eine neue View-ID bei
+demselben Controller ist etwas anderes als eine neue Activity oder ein neuer
+Prozess. Fehlende oder abgeschnittene Logs bleiben eine Evidenzlücke.
+
+Android garantiert beim Beenden eines Hintergrundprozesses kein `onDestroy()`.
+`ActivityScenario.recreate()` führt Speichern/Zerstören/Neuerstellen der Activity
+aus, beendet aber keinen Linux-Prozess. `AndroidView`-Factory, Update und
+Release haben ebenfalls getrennte Lebenszyklen. Ein erfolgreicher
+`postVisualStateCallback` schließt den Zustand von `<video>` ausdrücklich aus.
+[Prozess-Lifecycle](https://developer.android.com/guide/components/activities/process-lifecycle),
+[ActivityScenario](https://developer.android.com/reference/androidx/test/core/app/ActivityScenario#recreate()),
+[AndroidView](https://developer.android.com/reference/kotlin/androidx/compose/ui/viewinterop/AndroidView.composable),
+[WebView](https://developer.android.com/reference/android/webkit/WebView#postVisualStateCallback(long,%20android.webkit.WebView.VisualStateCallback)).
+
+Die praktischen Rückkehrtests nach 30 Sekunden, fünf und 15 Minuten,
+vollständige MainActivity-Neuerstellung, echter System-/Rendererverlust sowie
+Mini-/PiP-Wiedergabe sind **nicht durchgeführt**. Die folgenden älteren
+Browserbefunde ersetzen diese Tests nicht.
+
+## Belegter Browserbefund aus 1.3.11
 
 Ein isolierter Desktop-Chrome-Kontext lud die öffentliche mobile YouTube-
 Watch-Seite ohne Übernahme einer Benutzeranmeldung. Im wiederholten Ablauf
@@ -101,7 +211,7 @@ Stacknamen, Seitenantworten oder freien Exceptiontexte auf.
 Ein eigener Pausebefehl hat dieses Schema:
 
 ```text
-APP_PAUSE reason=HOST_STOP generation=4
+APP_PAUSE reason=HOST_STOP generation=4 process=00000000-0000-4000-8000-000000000000 activity=2 controller=3 view=5
 ```
 
 `generation` ist ein lokaler Controller-Zähler, keine Video-ID. Die festen
@@ -214,7 +324,7 @@ Es werden keine Sichtbarkeits-, Hintergrundberechtigungs-, DRM- oder
 Zugangssignale verändert. Der Diagnosebericht ist kein Vorschlag, die
 beobachtete Bedingung zu umgehen.
 
-## Teststand und noch offene Geräteabnahme
+## Abgeschlossener Teststand 1.3.11 und weiterhin offene Geräteabnahme
 
 Der öffentliche Browservergleich und die beschriebenen A/B-Befunde sind
 durchgeführt. Der abschließende Build des Diagnose-Updates 1.3.11 / Code 25

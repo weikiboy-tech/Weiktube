@@ -1,6 +1,59 @@
 # Weiktube – Prüfprotokoll
 
-## Aktueller Stand 1.3.11: Diagnose-Update, Mini-/PiP-Pause weiterhin offen
+## Aktueller Stand 1.3.12: Dokumentzuordnung und Hintergrundrückkehr
+
+Die Ursache des gemeldeten schwarzen Players nach 5/15 Minuten auf dem Handy
+ist **nicht bestätigt**. Reproduziert wurden dagegen veraltete Dokument-
+Callbacks in derselben WebView, die eine neuere Videoauswahl überschrieben
+oder deren Ladezustand vorzeitig beendeten. Eine zusätzliche Korrektur erhält
+die letzte Medienposition bei einem vorübergehend fehlenden Videoelement.
+
+| Prüfung | Abschließender Stand für 1.3.12 |
+| --- | --- |
+| Gegenprobe mit bisherigem 1.3.11-Player | 13 Tests ausgeführt: acht erwartete Fehlfälle reproduziert, fünf Kontrollfälle bestanden; Protokoll `validation/document-race-before-1.3.12/BASELINE.txt` und JUnit-XML |
+| Zusätzliche negative Gegenprobe | Erneute Auswahl desselben Videos während anstehender Leer-Dokument-Recovery schlug zunächst fehl; fehlende Dokumentgültigkeitsprüfung ergänzt, danach bestanden |
+| Gezielte Regressionen | 61 bestanden: 27 Dokument-, drei Compose-Host-, sieben native Diagnose- und 24 bestehende Lifecycle-Tests |
+| Vollständige JVM-Regression | 307 bestanden: 210 App, 77 Home, 20 Filter; keine Fehler oder Fehlschläge; unveränderte Home-/Filter-Ergebnisse von Gradle als aktuell übernommen |
+| Debug-/Release-Build | `assembleDebug` und `:app:assembleRelease -PweiktubeStableApks=true` erfolgreich; vollständiger Gradle-Lauf `BUILD SUCCESSFUL` |
+| App-Lint | `lintDebug`: keine Fehler, 37 Warnungen |
+| Release-APK-Prüfung | ARM64/x86-64: Paket `com.weiktube.app`, Version 1.3.12/Code 26, ursprüngliches Signierzertifikat, nicht debuggbar, jeweils richtige ABI und unter 128 MiB; Größen und SHA-256 in den Release-Notizen |
+| Scriptprüfungen | 17 Player-, fünf Observer-, acht Diagnose-Fixtures sowie Home-/Filter-/Watch-Prüfungen bestanden; Scope-Abgleich mit 46 ursprünglichen Quelldateien bestanden |
+| Offline-Chromium-Pixeltests | Zehn Mini-/PiP-/Rückkehrzyklen bestanden; lokale Fixture, kein aktueller YouTube-/Android-Praxistest |
+| Android-Handy/-Emulator, Live-YouTube und Langzeitwiedergabe | Nicht durchgeführt |
+
+Die Dokumenttests verwenden den tatsächlichen `PlayerController` und seine
+Callbacks mit Robolectric-WebViews. Die Compose-Fixture erstellt eine echte
+isolierte `ComponentActivity` mit `AndroidView`/`key`, dem vorhandenen
+`PlayerGestureLayout` und Controller. Sie prüft zehn Renderer-Ersatzzyklen,
+zehn Hintergrundrückkehrzyklen sowie einen Bundle-/Parcel-Übergang zu einem
+neuen Controller. Sie startet **nicht** `MainActivity.onCreate`, die vollständige
+Weiktube-Oberfläche, Gecko oder Chromium. Native Hostmaße und Kindzuordnung
+sind kein Nachweis für sichtbare Videopixel. Der neue Controller nach einem
+serialisierten Bundle ist eine Wiederherstellungsfixture, kein getöteter
+Android-Prozess. Filter werden nur in diesen JVM-Fixtures ausgeschaltet,
+weil kein Document-Start-JavaScript ausgeführt wird; der vorhandene Test für
+gesperrtes Laden ohne Filterbereitschaft bleibt erhalten.
+
+Die folgenden praktischen Abläufe sind **alle nicht durchgeführt**:
+
+| Geräteablauf | Stand |
+| --- | --- |
+| App mit laufendem bzw. pausiertem Video 30 Sekunden verbergen und zurückkehren | Nicht durchgeführt |
+| Derselbe Ablauf nach fünf Minuten | Nicht durchgeführt |
+| Derselbe Ablauf nach 15 Minuten | Nicht durchgeführt |
+| Tatsächliche MainActivity-Neuerstellung samt kompletter Oberfläche und Saved State | Nicht durchgeführt |
+| System beendet Hintergrundprozess; Task danach aus der Übersicht wiederherstellen | Nicht durchgeführt |
+| Echter Chromium-Rendererabbruch, Ersatz und sichtbare Wiedergabe | Nicht durchgeführt |
+| Zehn Videos, Schließen/Neuöffnen, Home-Rückkehr und Scrollposition | Nicht durchgeführt |
+| Mini-/System-PiP, Play/Pause, Rotation, Sperren/Entsperren und Werbeschutz | Nicht durchgeführt |
+
+Die aus 1.3.11 bekannte YouTube-seitige Mini-/PiP-Pause bleibt unabhängig davon
+offen. Es gibt weder eine allgemeine Reload-Schleife noch einen Timer, der
+langsame Renderer verwirft. `DOCUMENT_COMMITTED` und `RECOVERY_DOCUMENT_READY`
+bestätigen eine Dokumentmeldung, keine laufende Wiedergabe.
+[Release 1.3.12](RELEASE-1.3.12.md), [Diagnoseschema](docs/PLAYBACK-DIAGNOSTICS.md).
+
+## Vorheriger Stand 1.3.11: Diagnose-Update, Mini-/PiP-Pause weiterhin offen
 
 Release-Build und 270 JVM-Tests bestanden (173 App, 77 Home, 20 Filter;
 Home-/Filter-Ergebnisse aktuell übernommen). Sieben neue Tests prüfen

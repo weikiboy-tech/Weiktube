@@ -4,10 +4,28 @@ import hashlib
 import json
 
 root = Path(__file__).resolve().parents[1]
+document_review = json.loads((root / "scripts/document-reviewed-changes.json").read_text(encoding="utf-8"))
+document_originals = {}
+for name, review in document_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " document lifecycle change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed document lifecycle")
+    document_originals[name] = content
+for name, expected in document_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed document lifecycle helper")
+
+def before_document(name):
+    return document_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
 playback_review = json.loads((root / "scripts/playback-reviewed-changes.json").read_text(encoding="utf-8"))
 playback_originals = {}
 for name, review in playback_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_document(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " playback diagnosis change missing or duplicated")
@@ -16,10 +34,10 @@ for name, review in playback_review["files"].items():
         raise SystemExit(name + " differs outside reviewed playback diagnosis")
     playback_originals[name] = content
 for name, expected in playback_review["addedFiles"].items():
-    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+    if hashlib.sha256(before_document(name).encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed playback diagnosis helper")
 def before_playback(name):
-    return playback_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    return playback_originals.get(name, before_document(name))
 
 background_review = json.loads((root / "scripts/background-reviewed-changes.json").read_text(encoding="utf-8"))
 background_originals = {}

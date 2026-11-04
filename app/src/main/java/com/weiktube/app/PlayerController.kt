@@ -32,6 +32,12 @@ class PlayerController(
     private val adHooks = java.util.IdentityHashMap<WebView, WebViewAdBlock>()
     private val playbackHooks = java.util.IdentityHashMap<WebView, PlayerPlaybackObserver.Hooks>()
     private val diagnosticHooks = java.util.IdentityHashMap<WebView, PlayerPlaybackDiagnostics.Hooks>()
+    private val diagnosticControllerId = PlayerDiagnostics.nextControllerId()
+    private var currentViewId = 0L
+    private val viewIds = java.util.IdentityHashMap<WebView, Long>()
+    private val attachListeners = java.util.IdentityHashMap<WebView, android.view.View.OnAttachStateChangeListener>()
+    private val layoutListeners = java.util.IdentityHashMap<WebView, android.view.View.OnLayoutChangeListener>()
+    private val viewSnapshots = java.util.IdentityHashMap<WebView, PlayerDiagnostics.ViewSnapshot>()
     private var lastPlaybackGate: Boolean? = null
     private var playbackObservationRevision = 0L
     private var adRecoveryVideo: String? = null
@@ -43,10 +49,14 @@ class PlayerController(
     private var viewPaused = false
     private var rendererUnresponsive = false
     private var generation = 0L
+    // A WebView can outlive several documents. Instance identity alone cannot reject callbacks
+    // or JS results belonging to the document replaced by a newer explicit video selection.
+    private var documentCommitted = false
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private data class Recovery(val url: String, val seconds: Double, val play: Boolean, val expanded: Boolean)
     private var pendingRecovery: Recovery? = null
     private var automaticRecoveries = 0
+    private var recoveryDocumentPending = false
     var view: WebView by mutableStateOf(createView()); private set
     private var mini = false
     private var dark = true
@@ -54,16 +64,38 @@ class PlayerController(
     private var systemPip = false
     private var lastRecordedTitle = ""
     val pipReady: Boolean
-        get() = !destroyed && rendererAlive && !rendererUnresponsive && source != null && !loading && error == null &&
+        get() = !destroyed && rendererAlive && !rendererUnresponsive && documentCommitted && source != null && !loading && error == null &&
             (!isYoutube || adHooks[view]?.canPlay == true)
 
     private fun alive(web: WebView) = !destroyed && rendererAlive && web === view
-    private fun trace(event: PlayerDiagnostics.Event) = PlayerDiagnostics.record(event, generation,
+    private fun selectedDocument(url: String?): Boolean {
+        val selected = source ?: return false
+        if (url == null) return false
+        return if (isYoutube) Links.https(url) && Links.youtube(url) && Links.videoId(url) == Links.videoId(selected)
+        else url == "https://com.weiktube.app/"
+    }
+    private fun acceptsDocument(web: WebView, url: String?): Boolean {
+        if (!alive(web) || source == null) return false
+        if (selectedDocument(url)) return true
+        trace(PlayerDiagnostics.Event.STALE_DOCUMENT_IGNORED)
+        return false
+    }
+    private fun trace(event: PlayerDiagnostics.Event, web: WebView? = null) = PlayerDiagnostics.record(event, generation,
         when { destroyed -> "DESTROYED"; !rendererAlive -> "RENDERER_GONE"; rendererUnresponsive -> "UNRESPONSIVE";
-            viewPaused -> "PAUSED"; loading -> "LOADING"; source == null -> "IDLE"; else -> "READY" })
+            viewPaused -> "PAUSED"; loading -> "LOADING"; source == null -> "IDLE"; else -> "READY" },
+        activity.diagnosticActivityId, diagnosticControllerId, web?.let { viewIds[it] } ?: currentViewId,
+        web?.let { PlayerDiagnostics.captureView(it) })
+
+    private fun traceViewIfChanged(web: WebView) {
+        if (web !in viewIds) return
+        val snapshot = PlayerDiagnostics.captureView(web)
+        if (viewSnapshots.put(web, snapshot) != snapshot) trace(PlayerDiagnostics.Event.VIEW_HOST_UPDATE, web)
+    }
 
     private fun createView(): WebView {
         val candidate = webViewFactory(activity)
+        viewIds[candidate] = PlayerDiagnostics.nextViewId()
+        if (currentViewId == 0L) currentViewId = viewIds.getValue(candidate)
         try {
         return candidate.apply {
         setBackgroundColor(android.graphics.Color.BLACK)
@@ -80,9 +112,16 @@ class PlayerController(
             false
         }
         val playerWeb = this
+        attachListeners[this] = object : android.view.View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: android.view.View) { trace(PlayerDiagnostics.Event.VIEW_ATTACHED, playerWeb) }
+            override fun onViewDetachedFromWindow(v: android.view.View) { trace(PlayerDiagnostics.Event.VIEW_DETACHED, playerWeb) }
+        }.also { addOnAttachStateChangeListener(it) }
+        layoutListeners[this] = android.view.View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            traceViewIfChanged(playerWeb)
+        }.also { addOnLayoutChangeListener(it) }
         diagnosticHooks[this] = PlayerPlaybackDiagnostics.install(this)
         playbackHooks[this] = PlayerPlaybackObserver.install(this) { state ->
-            if (alive(playerWeb) && source != null) {
+            if (alive(playerWeb) && source != null && documentCommitted) {
                 playbackObservationRevision++
                 playing = state.playing && playbackAllowed && activity.playerMayRun &&
                     (!isYoutube || adHooks[playerWeb]?.canPlay == true)
@@ -94,7 +133,7 @@ class PlayerController(
             onReady = {
                 if (alive(playerWeb) && source != null && isYoutube) {
                     applyPlayback(explicitStartRequested)
-                    if (!loading) explicitStartRequested = false
+                    if (!loading && documentCommitted) explicitStartRequested = false
                     activity.syncPipState()
                 }
             },
@@ -122,36 +161,66 @@ class PlayerController(
                 if (!Links.https(url)) { activity.external(url); return true }
                 if (Links.youtube(url) && Links.videoId(url) == null) { expanded = false; activity.openAccountUrl(url); return true }
                 if (!Links.youtube(url)) { activity.external(url); return true }
+                // Explicit page navigation uses the same selection path as the native UI. It
+                // invalidates outstanding polls before the old document can answer them.
+                if (!selectedDocument(url)) { open(url); return true }
                 return false
             }
             override fun onPageStarted(web: WebView, url: String, favicon: Bitmap?) {
-                if (!alive(web) || source == null) return
+                if (!acceptsDocument(web, url)) return
+                generation++; playbackObservationRevision++
+                documentCommitted = false
                 ads.pageStarted(url)
-                loading = source != null; error = null; updateVideoIdentity(url)
+                loading = true; error = null
                 trace(PlayerDiagnostics.Event.NAVIGATION_STARTED)
+            }
+            override fun onPageCommitVisible(web: WebView, url: String) {
+                if (!acceptsDocument(web, url)) return
+                documentCommitted = true
+                trace(PlayerDiagnostics.Event.DOCUMENT_COMMITTED)
+                applyPlayback(explicitStartRequested)
+                if (!loading && lastPlaybackGate == true) explicitStartRequested = false
+                if (recoveryDocumentPending) {
+                    recoveryDocumentPending = false
+                    // This confirms a new document, not decoded frames or successful playback.
+                    trace(PlayerDiagnostics.Event.RECOVERY_DOCUMENT_READY)
+                }
             }
             override fun doUpdateVisitedHistory(web: WebView, url: String?, isReload: Boolean) {
                 if (!alive(web) || source == null) return
-                if (url != null) updateVideoIdentity(url)
+                // SPA history has no onPageStarted/commit callback. Accept a different video
+                // only in an already committed page, corroborated by WebView's current URL.
+                if (!selectedDocument(url)) {
+                    if (!documentCommitted || loading || !isYoutube || url == null ||
+                        !Links.https(url) || !Links.youtube(url) || Links.videoId(url) == null ||
+                        Links.videoId(web.url.orEmpty()) != Links.videoId(url)) {
+                        trace(PlayerDiagnostics.Event.STALE_DOCUMENT_IGNORED)
+                        return
+                    }
+                    updateVideoIdentity(url)
+                }
                 applyPresentation()
             }
             override fun onPageFinished(web: WebView, url: String) {
-                if (!alive(web) || source == null) return
+                if (!acceptsDocument(web, url)) return
+                // loadDataWithBaseURL may commit a data: URL but finish with our controlled base
+                // URL. Keep this existing direct-media path separate from YouTube page commits.
+                if (!isYoutube) documentCommitted = true
                 loading = false; navigationHooks[web]?.apply(); applyPresentation(); ads.pageFinished()
                 playbackHooks[web]?.apply()
                 diagnosticHooks[web]?.apply()
                 applyPlayback(explicitStartRequested)
-                if (!isYoutube || ads.canPlay) explicitStartRequested = false
+                if (documentCommitted && (!isYoutube || ads.canPlay)) explicitStartRequested = false
                 trace(PlayerDiagnostics.Event.NAVIGATION_FINISHED)
             }
             override fun onReceivedError(web: WebView, request: WebResourceRequest, failure: WebResourceError) {
-                if (alive(web) && source != null && request.isForMainFrame) {
+                if (request.isForMainFrame && acceptsDocument(web, request.url.toString())) {
                     loading = false; playing = false; error = "Video nicht erreichbar. Prüfe die Verbindung und versuche es erneut."
                     trace(PlayerDiagnostics.Event.NAVIGATION_FAILED)
                 }
             }
             override fun onReceivedHttpError(web: WebView, request: WebResourceRequest, response: WebResourceResponse) {
-                if (alive(web) && source != null && request.isForMainFrame && response.statusCode >= 400) {
+                if (request.isForMainFrame && response.statusCode >= 400 && acceptsDocument(web, request.url.toString())) {
                     loading = false; error = "YouTube ist momentan nicht erreichbar (${response.statusCode})."
                     trace(PlayerDiagnostics.Event.NAVIGATION_FAILED)
                 }
@@ -185,7 +254,7 @@ class PlayerController(
                 }
             })
         }
-        trace(PlayerDiagnostics.Event.VIEW_CREATED)
+        trace(PlayerDiagnostics.Event.VIEW_CREATED, this)
         }
         } catch (failure: Exception) {
             disposeView(candidate, force = true)
@@ -202,9 +271,12 @@ class PlayerController(
         // Cleanup against a dead renderer may throw. One failed bridge must not prevent destruction.
         listOf<() -> Unit>(
             { (web.parent as? android.view.ViewGroup)?.removeView(web) },
+            { attachListeners.remove(web)?.let { web.removeOnAttachStateChangeListener(it) } },
+            { layoutListeners.remove(web)?.let { web.removeOnLayoutChangeListener(it) } },
             { nav?.close() }, { ads?.close() }, { playback?.close() }, { diagnostics?.close() }, { web.destroy() },
         ).forEach { cleanup -> if (runCatching(cleanup).isFailure) trace(PlayerDiagnostics.Event.CLEANUP_FAILED) }
-        trace(PlayerDiagnostics.Event.VIEW_DESTROYED)
+        trace(PlayerDiagnostics.Event.VIEW_DESTROYED, web)
+        viewIds.remove(web); viewSnapshots.remove(web)
     }
 
     private fun rendererGone(web: WebView, crashed: Boolean) {
@@ -212,6 +284,7 @@ class PlayerController(
         val saved = source?.let { Recovery(it, position, (playing || explicitStartRequested) && playbackAllowed && activity.playerMayRun, expanded) }
         generation++; playbackObservationRevision++
         rendererAlive = false; rendererUnresponsive = false; viewPaused = false
+        documentCommitted = false
         loading = false; playing = false; explicitStartRequested = false
         trace(if (crashed) PlayerDiagnostics.Event.RENDERER_CRASHED else PlayerDiagnostics.Event.RENDERER_KILLED)
         activity.releasePlayerFullscreen(web)
@@ -241,6 +314,7 @@ class PlayerController(
             // Publish only a fully configured, lifecycle-ready replacement.
             if (activity.playerMayRun) candidate.onResume() else candidate.onPause()
             view = candidate
+            currentViewId = viewIds.getValue(candidate)
             rendererAlive = true; rendererUnresponsive = false; viewPaused = false
             viewPaused = !activity.playerMayRun
             trace(if (viewPaused) PlayerDiagnostics.Event.VIEW_PAUSED else PlayerDiagnostics.Event.VIEW_RESUMED)
@@ -265,6 +339,25 @@ class PlayerController(
         expanded = saved.expanded
         mini = wasMini
         applyPresentation()
+    }
+    private fun recoverLostDocument() {
+        if (!documentCommitted || loading || !activity.playerMayRun) return
+        val selected = source ?: return
+        trace(PlayerDiagnostics.Event.DOCUMENT_LOST)
+        val saved = Recovery(selected, position, playing && playbackAllowed, expanded)
+        documentCommitted = false
+        generation++; playbackObservationRevision++
+        playing = false
+        if (automaticRecoveries >= 1) {
+            error = "Das Videodokument wurde erneut verloren. Bitte erneut laden oder ein anderes Video wählen."
+            trace(PlayerDiagnostics.Event.RECOVERY_LIMIT)
+            return
+        }
+        automaticRecoveries++
+        pendingRecovery = saved
+        trace(PlayerDiagnostics.Event.RECOVERY_PENDING)
+        val attempt = generation
+        mainHandler.post { if (!destroyed && generation == attempt && activity.playerMayRun) restoreRenderer() }
     }
     private fun updateVideoIdentity(url: String) {
         if (!isYoutube || source == null) return
@@ -292,7 +385,8 @@ class PlayerController(
             if (pendingRecovery != null) trace(PlayerDiagnostics.Event.RECOVERY_CANCELLED)
             pendingRecovery = null; automaticRecoveries = 0
         }
-        val requiresLoad = !rendererAlive || error != null || startAt != null
+        val requiresLoad = !rendererAlive || error != null || startAt != null ||
+            (source != null && !documentCommitted && !loading)
         if (!ensureRenderer()) return
         resumeLiveView()
         if (id != adRecoveryVideo) { adRecoveryVideo = id; adRecoveryAttempts = 0 }
@@ -309,6 +403,8 @@ class PlayerController(
         playbackAllowed = activity.playerMayRun
         explicitStartRequested = userInitiated
         generation++; source = if (id != null) "https://www.youtube.com/watch?v=$id" else url
+        documentCommitted = false
+        recoveryDocumentPending = recovery
         isYoutube = id != null; expanded = true; mini = false; error = null
         position = (startAt ?: Links.startSeconds(url).toDouble()).takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
         duration = 0.0; playing = false; loading = true; title = "Video"; lastRecordedTitle = ""
@@ -349,13 +445,14 @@ class PlayerController(
         view.evaluateJavascript(WATCH_CHROME + ";window.weiktubeWatchPresentation($mini,$dark,$videoOnly,$systemPip);", null)
     }
     fun poll() {
-        if (destroyed || !rendererAlive || source == null) return
+        if (destroyed || !rendererAlive || source == null || !documentCommitted) return
         val polledView = view
         val requestGeneration = generation
         val observationRevision = playbackObservationRevision
         view.evaluateJavascript("""
             (function(){var v=document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');
-              return JSON.stringify({playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,
+              return JSON.stringify({hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
+              playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,
               duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,
               title:h?h.textContent:(document.title||''),url:location.href});})()
         """.trimIndent()) { raw ->
@@ -363,7 +460,19 @@ class PlayerController(
             runCatching {
                 val decoded = JSONTokener(raw).nextValue() as? String ?: return@runCatching
                 val value = JSONObject(decoded)
-                if (isYoutube) updateVideoIdentity(value.optString("url"))
+                val documentUrl = value.optString("url")
+                if (!selectedDocument(documentUrl)) {
+                    // A responsive JS reply proving that the committed watch document has
+                    // disappeared is different from a slow/dead renderer. One bounded reload
+                    // of this healthy WebView is allowed; silence/timeouts never trigger it.
+                    if (documentUrl == "about:blank" && value.optString("readyState") == "complete" &&
+                        value.optBoolean("bodyEmpty") && !value.optBoolean("hasVideo")) recoverLostDocument()
+                    else trace(PlayerDiagnostics.Event.STALE_DOCUMENT_IGNORED)
+                    return@runCatching
+                }
+                // A temporary empty DOM during SPA updates is not an invalid renderer and must
+                // not replace the last valid content timestamp with the script's default zero.
+                if (!value.optBoolean("hasVideo")) return@runCatching
                 // A snapshot requested before a newer play/pause event must not overwrite it.
                 if (observationRevision == playbackObservationRevision) {
                     playing = value.optBoolean("playing") && playbackAllowed && activity.playerMayRun &&
@@ -406,7 +515,7 @@ class PlayerController(
     }
     private fun applyPlayback(start: Boolean) {
         if (!rendererAlive || source == null) return
-        val allowed = playbackAllowed && activity.playerMayRun &&
+        val allowed = documentCommitted && playbackAllowed && activity.playerMayRun &&
             (!isYoutube || adHooks[view]?.canPlay == true)
         if (lastPlaybackGate != allowed) {
             lastPlaybackGate = allowed
@@ -420,7 +529,7 @@ class PlayerController(
     }
     fun pause() = pauseFor(PlayerDiagnostics.PauseReason.USER)
     internal fun pauseFor(reason: PlayerDiagnostics.PauseReason) {
-        PlayerDiagnostics.pause(reason, generation)
+        PlayerDiagnostics.pause(reason, generation, activity.diagnosticActivityId, diagnosticControllerId, currentViewId)
         pendingRecovery = pendingRecovery?.copy(play = false)
         explicitStartRequested = false
         playbackAllowed = false
@@ -440,9 +549,10 @@ class PlayerController(
     }
     private fun resumeLiveView() {
         if (destroyed || !rendererAlive || !activity.playerMayRun) return
+        traceViewIfChanged(view)
         if (viewPaused) {
             view.onResume(); viewPaused = false
-            trace(PlayerDiagnostics.Event.VIEW_RESUMED)
+            trace(PlayerDiagnostics.Event.VIEW_RESUMED, view)
             // Refresh the retained native surface after visibility changes, without navigation.
             view.requestLayout(); view.invalidate()
         }
@@ -452,7 +562,7 @@ class PlayerController(
         pauseFor(reason)
         if (rendererAlive && !viewPaused) {
             view.onPause(); viewPaused = true
-            trace(PlayerDiagnostics.Event.VIEW_PAUSED)
+            trace(PlayerDiagnostics.Event.VIEW_PAUSED, view)
         }
     }
     private fun recoverFromAd(wasPlaying: Boolean) {
@@ -490,6 +600,8 @@ class PlayerController(
         pauseFor(PlayerDiagnostics.PauseReason.CLOSE); generation++; source = null; error = null; loading = false; position = 0.0; duration = 0.0
         videoWidth = 0; videoHeight = 0
         adRecoveryVideo = null; adRecoveryAttempts = 0
+        documentCommitted = false
+        recoveryDocumentPending = false
         if (rendererAlive) view.loadUrl("about:blank")
     }
     fun destroy() {

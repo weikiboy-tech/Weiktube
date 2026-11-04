@@ -1,4 +1,21 @@
-# Weiktube 1.3.11 – Diagnose-Update
+# Weiktube 1.3.12 – Dokumentwechsel und Hintergrunddiagnose
+
+**Gezielter Fix, noch kein bestätigter Handy-Langzeittest:** Verspätete Meldungen
+eines früheren Videos in derselben WebView dürfen die neue Auswahl nicht mehr
+überschreiben. Ein vorübergehend fehlendes Video setzt die gemerkte Position
+nicht auf null. Nur ein ausdrücklich bestätigtes, leeres `about:blank` nach
+einem geladenen Videodokument erlaubt einen begrenzten Wiederherstellungsversuch;
+langsames Laden oder fehlende Antworten lösen keinen automatischen Reload aus.
+Neue native Kennungen unterscheiden Prozess, Activity, Controller und View.
+Die konkrete Ursache des schwarzen Players auf dem Handy ist nicht bestätigt,
+und die bekannte YouTube-Pause bei Mini/PiP bleibt offen.
+Debug-/Release-Build, 307 JVM-Tests, Scriptprüfungen und lokale Chromium-
+Pixeltests bestanden. Darunter sind 61 gezielte Dokument-, Lifecycle-,
+Compose-Host- und Diagnosefälle; kein Android-Geräte-/Emulatortest.
+Details und Grenzen: [Release 1.3.12](RELEASE-1.3.12.md),
+[Prüfprotokoll](TESTING.md), [Player-Diagnose](docs/PLAYBACK-DIAGNOSTICS.md).
+
+**Neu in 1.3.11 – Diagnose-Update:**
 
 **Noch kein fertiger PiP-Wiedergabefix:** Der Miniplayer sendet jetzt eindeutige
 Play-/Pause-Befehle, und eine begrenzte Diagnose zeichnet deren Herkunft auf.
@@ -86,7 +103,7 @@ die Startseite erhalten. Der Konto-Einstieg öffnet sich einmal automatisch und 
   für passende Intel-/Emulator-Geräte. Keine Unterstützung für reine 32-Bit-Geräte.
 - Updates über **Einstellungen & Updates → Jetzt nach Updates suchen**. Android
   bestätigt die Installation; die App installiert Updates nicht still im Hintergrund.
-- [Release 1.3.11](RELEASE-1.3.11.md), [Release 1.3.10](RELEASE-1.3.10.md), [Release 1.3.9](RELEASE-1.3.9.md), [Release 1.3.8](RELEASE-1.3.8.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
+- [Release 1.3.12](RELEASE-1.3.12.md), [Release 1.3.11](RELEASE-1.3.11.md), [Release 1.3.10](RELEASE-1.3.10.md), [Release 1.3.9](RELEASE-1.3.9.md), [Release 1.3.8](RELEASE-1.3.8.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
 
 Die Website verwendet das dort angemeldete Konto. Die optionale Google-API-Freigabe
 für Abos/Playlists ist separat; die öffentliche APK-Veröffentlichung erweitert
