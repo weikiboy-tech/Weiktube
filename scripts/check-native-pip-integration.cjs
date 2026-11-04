@@ -49,6 +49,12 @@ assert.doesNotMatch(block(activity, 'fun minimizeWebVideo()', 'fun goHome()'), /
   'the shared minimization path changes presentation only');
 assert.match(ui, /p\.setPresentation\(mini, dark, landscapeVideo \|\| a\.pip, systemPip = a\.pip\)/);
 assert.match(ui, /p\.setPlaybackAllowed\(!actions && a\.playerMayRun/);
+const miniControls = block(ui, 'if (mini && playerVisible)', 'if (p.error != null)');
+assert.match(miniControls, /val miniPlaying = p\.playing/);
+assert.match(miniControls, /onClick = if \(miniPlaying\) p::pause else p::play/,
+  'the rendered Mini action sends explicit Play/Pause even if DOM state changes before the click');
+assert.match(miniControls, /Icon\(if \(miniPlaying\) Icons\.Rounded\.Pause else Icons\.Rounded\.PlayArrow/);
+assert.doesNotMatch(miniControls, /p::toggle|p\.toggle\(/, 'Mini Play must never toggle a newer DOM state to Pause');
 assert.doesNotMatch(ui, /if \(!p\.isYoutube\) IconButton\(onClick = a::enterPip\)/);
 assert.doesNotMatch(player + native, /Object\.defineProperty\([^\n]*(hidden|visibilityState)|pauseTimers\(\)/,
   'do not spoof page visibility or freeze every WebView');

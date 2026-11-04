@@ -342,6 +342,43 @@ class PlayerControllerLifecycleTest {
         assertTrue(lastScriptRequestsStart())
     }
 
+    @Test fun repeatedNativePlayCommandsNeverToggleAnAlreadyPlayingVideoToPause() {
+        player.open(VIDEO_A, userInitiated = false)
+        finishPage()
+        val retained = player.view
+        repeat(10) {
+            // Match a delayed native icon: the WebView can already report playing before the
+            // rendered Play action is recomposed. Its command must remain explicitly Play.
+            reportPosition(12.0 + it, playing = true)
+            player.play()
+            assertTrue(lastScriptRequestsStart())
+            assertFalse(shadowOf(retained).lastEvaluatedJavascript.orEmpty().contains("if(v.paused)"))
+            assertSame(retained, player.view)
+            assertFalse(player.loading)
+        }
+    }
+
+    @Test fun explicitNativePauseSurvivesMiniAndPipPresentationChanges() {
+        player.open(VIDEO_A)
+        finishPage()
+        reportPosition(12.0, playing = true)
+        val retained = player.view
+        repeat(10) { cycle ->
+            player.pause()
+            player.setPresentation(minimized = cycle % 2 == 0, darkTheme = true,
+                videoOnly = cycle % 2 != 0, systemPip = cycle % 2 != 0)
+            player.resumeView()
+            player.setPlaybackAllowed(true)
+
+            assertFalse(player.playing)
+            assertFalse("Presentation and permission changes must respect a user Pause", lastScriptRequestsStart())
+            assertSame(retained, player.view)
+            assertFalse(player.loading)
+        }
+        player.play()
+        assertTrue("Only a later explicit Play may request playback again", lastScriptRequestsStart())
+    }
+
     @Test fun processRestoreLoadsTheSavedYoutubePositionMinimizedAndPaused() {
         player.restore(VIDEO_A, 65.75)
 

@@ -1,21 +1,23 @@
 param(
-    [int]$VersionCode = 24,
-    [string]$VersionName = '1.3.10',
+    [int]$VersionCode = 25,
+    [string]$VersionName = '1.3.11',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
-    [switch]$Publish
+    [switch]$Publish,
+    [switch]$Preview
 )
 $ErrorActionPreference = 'Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Run this publisher in PowerShell 7 or newer.' }
 $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
-$tag = "v$VersionName"
-$expectedMain = 'e22b3732f01ea7b49d7e1c858d672926d9c29dad'
+$tag = if ($Preview) { "v$VersionName-preview" } else { "v$VersionName" }
+$expectedMain = 'a0a60a6b1205ee299ded19166c8315c1de43e622'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
-$output = Join-Path $project "dist/stable-$VersionName"
+$channel = if ($Preview) { 'preview' } else { 'stable' }
+$output = Join-Path $project "dist/$channel-$VersionName"
 $source = Join-Path $project 'Weiktube-Quellcode.zip'
-$stage = Join-Path $project "validation/stable-$VersionName-release-source"
+$stage = Join-Path $project "validation/$channel-$VersionName-release-source"
 $verificationPath = Join-Path $output 'release-verification.json'
 if (-not $ReleaseNotesFile) { $ReleaseNotesFile = Join-Path $project "RELEASE-$VersionName.md" }
 foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
@@ -23,7 +25,8 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Gezielte Wiederherstellung nach Hintergrund-/Renderer-Verlust: tote Player-WebViews und deren Vollbildflächen werden entfernt, neue Videowahlen bleiben erhalten. Ein begrenzter Wiederherstellungsversuch erhält Position und Pausezustand; gesunde Ansichten werden nicht neu geladen. Gecko behandelt jetzt von Android beendete Inhaltsprozesse. Datenschutzfreundliche Diagnose ergänzt. Automatisiert geprüft; echte Android-Hintergrund-/PiP-Tests noch offen. Über die vorhandene App installieren.'
+$updateNotes = 'Diagnose-Vorabversion: Miniplayer-Schaltfläche sendet eindeutige Play/Pause-Befehle; begrenzte Diagnose unterscheidet App-Befehle und unzugeordnete Medienereignisse. Die YouTube-seitige PiP-Pause ist weiterhin offen und wird nicht umgangen. Darstellung unverändert. Kein Nachweis zuverlässiger YouTube-Mini-/PiP-Wiedergabe, keine Gerätetests. Kein automatisches Update des stabilen Kanals.'
+if (-not $Preview -and $VersionName -eq '1.3.11') { throw '1.3.11 is a diagnostic preview only; use -Preview. The stable updater must remain unchanged.' }
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or
     $build -notmatch ('(?m)^\s*versionName\s*=\s*"' + [regex]::Escape($VersionName) + '"\s*$')) {
@@ -94,7 +97,7 @@ $checksumLines = foreach ($asset in $assets) {
 $checksumLines | Set-Content -LiteralPath $checksums -Encoding ascii
 $assets += @{path=$checksums;name='SHA256SUMS.txt';type='text/plain';hash=(Get-FileHash -LiteralPath $checksums -Algorithm SHA256).Hash.ToLowerInvariant();size=(Get-Item -LiteralPath $checksums).Length}
 if (-not $Publish) {
-    Write-Output "Prepared stable $($tag): both APKs fit the legacy 128 MiB limit; metadata, source and manifests verified."
+    Write-Output "Prepared $channel $($tag): both APKs fit the legacy 128 MiB limit; metadata, source and manifests verified."
     Write-Output "Prepared files: $output. No remote changes."
     return
 }
@@ -168,7 +171,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create source tree.' }
     # A new isolated repository: preserve the reviewed history without replacing
     # any existing working tree or rewriting any local/remote branch.
-    $commit = git commit-tree $tree -p $main -m "Recover dead player renderers and Gecko content sessions in Weiktube $VersionName"
+    $commit = git commit-tree $tree -p $main -m "Use explicit mini playback commands and trace pause origins in Weiktube $VersionName preview"
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create release commit.' }
     git update-ref refs/heads/main $commit ('0' * 40)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated main ref.' }
@@ -178,7 +181,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Normal fast-forward push failed; review remote state before retrying.' }
 } finally { Pop-Location }
 
-$body = @{tag_name=$tag;target_commitish=$commit;name="Weiktube $VersionName";body=$notes;draft=$true;prerelease=$false;make_latest='false'} | ConvertTo-Json
+$releaseName = if ($Preview) { "Weiktube $VersionName – Diagnose-Vorabversion" } else { "Weiktube $VersionName" }
+$body = @{tag_name=$tag;target_commitish=$commit;name=$releaseName;body=$notes;draft=$true;prerelease=[bool]$Preview;make_latest='false'} | ConvertTo-Json
 $release = Invoke-RestMethod "https://api.github.com/repos/$Repository/releases" -Headers $headers -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body))
 $upload = $release.upload_url -replace '\{.*$', ''
 if (-not $upload.StartsWith('https://uploads.github.com/')) { throw 'Unexpected upload origin.' }
@@ -194,8 +198,10 @@ foreach ($asset in $assets) {
     }
     Write-Output "Verified upload: $($asset.name)"
 }
-$published = Invoke-RestMethod "https://api.github.com/repos/$Repository/releases/$($release.id)" -Headers $headers -Method Patch -ContentType 'application/json' -Body '{"draft":false,"prerelease":false,"make_latest":"true"}'
+$publishBody = @{draft=$false;prerelease=[bool]$Preview;make_latest=$(if ($Preview) { 'false' } else { 'true' })} | ConvertTo-Json
+$published = Invoke-RestMethod "https://api.github.com/repos/$Repository/releases/$($release.id)" -Headers $headers -Method Patch -ContentType 'application/json' -Body $publishBody
 Write-Output "Published: $($published.html_url)"
 Write-Output "Source commit: $commit"
-Write-Output "APK: https://github.com/$Repository/releases/latest/download/Weiktube.apk"
-Write-Output "Update feed: https://github.com/$Repository/releases/latest/download/update.json"
+Write-Output "APK: https://github.com/$Repository/releases/download/$tag/Weiktube.apk"
+if ($Preview) { Write-Output 'The stable latest release and automatic updater are unchanged.' }
+else { Write-Output "Update feed: https://github.com/$Repository/releases/latest/download/update.json" }

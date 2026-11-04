@@ -4,10 +4,27 @@ import hashlib
 import json
 
 root = Path(__file__).resolve().parents[1]
+playback_review = json.loads((root / "scripts/playback-reviewed-changes.json").read_text(encoding="utf-8"))
+playback_originals = {}
+for name, review in playback_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " playback diagnosis change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed playback diagnosis")
+    playback_originals[name] = content
+for name, expected in playback_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed playback diagnosis helper")
+def before_playback(name):
+    return playback_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
 background_review = json.loads((root / "scripts/background-reviewed-changes.json").read_text(encoding="utf-8"))
 background_originals = {}
 for name, review in background_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_playback(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " background recovery change missing or duplicated")
@@ -16,12 +33,12 @@ for name, review in background_review["files"].items():
         raise SystemExit(name + " differs outside reviewed background recovery")
     background_originals[name] = content
 for name, expected in background_review["addedFiles"].items():
-    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+    if hashlib.sha256(before_playback(name).encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed background recovery helper")
 repair_review = json.loads((root / "scripts/mini-repair-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
 repair_originals = {}
 for name, review in repair_review.items():
-    content = background_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    content = background_originals.get(name, before_playback(name))
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " mini-player repair missing or duplicated")
@@ -32,7 +49,7 @@ for name, review in repair_review.items():
 pip_review = json.loads((root / "scripts/pip-reviewed-changes.json").read_text(encoding="utf-8"))
 pip_originals = {}
 for name, review in pip_review["files"].items():
-    content = repair_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    content = repair_originals.get(name, before_playback(name))
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " PiP change missing or duplicated")
@@ -203,7 +220,7 @@ for name, expected in baseline.items():
     if not file.is_file():
         failures.append(name + " missing")
         continue
-    content = portrait_originals.get(name, pip_originals.get(name, background_originals.get(name, file.read_text(encoding="utf-8").replace("\r\n", "\n"))))
+    content = portrait_originals.get(name, pip_originals.get(name, background_originals.get(name, before_playback(name))))
     if name in adblock_review:
         review = adblock_review[name]
         for change in review["changes"]:

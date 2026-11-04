@@ -1,5 +1,10 @@
 # Weiktube-Updates
 
+**1.3.11 ist nur eine Diagnose-Vorabversion.** Die Miniplayer-Schaltfläche
+sendet eindeutige Play-/Pause-Befehle; die YouTube-seitige PiP-Pause ist noch
+nicht gelöst. Der stabile automatische Updatekanal bleibt auf 1.3.10.
+[Befunde und Testgrenzen](RELEASE-1.3.11.md).
+
 Die App prüft beim Öffnen maximal einmal pro 24 Stunden auf eine neue Version. Das lässt sich unter App-Updates ausschalten. Es gibt keinen permanenten Hintergrunddienst und keine stille Installation: Nach einer verfügbaren Version startet der Nutzer den Download; Android bestätigt die Installation. Fehlgeschlagene automatische Prüfungen werden ebenfalls frühestens am nächsten Tag wiederholt. „Jetzt nach Updates suchen“ ist jederzeit möglich.
 
 Standardquelle: `https://github.com/weikiboy-tech/Weiktube/releases/latest/download/update.json`. Die Quelle kann geändert werden. Die tatsächlich angebotene Version steht im veröffentlichten Feed. Ein lokal vorbereiteter Versionsstand ist noch kein verfügbares Update. Fehlt eine Release-Datei oder ist sie nicht erreichbar, meldet die App einen Serverfehler; sie behauptet dann nicht, aktuell zu sein.

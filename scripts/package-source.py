@@ -18,6 +18,8 @@ OPTIONAL_FILES.add("RELEASE-1.3.7.md")
 OPTIONAL_FILES.add("RELEASE-1.3.8.md")
 OPTIONAL_FILES.add("RELEASE-1.3.9.md")
 OPTIONAL_FILES.add("RELEASE-1.3.10.md")
+OPTIONAL_FILES.add("RELEASE-1.3.11.md")
+OPTIONAL_FILES.add("docs/PLAYBACK-DIAGNOSTICS.md")
 OPTIONAL_FILES.add("ADBLOCK-1.3.5.md")
 PRIVATE_PARTS = {
     "build", ".gradle", ".kotlin", ".git", "__pycache__", "validation", "screenshots",

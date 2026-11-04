@@ -244,7 +244,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                 IconButton(onClick = a::minimizeWebVideo) { Icon(Icons.Rounded.ExpandMore, "Video minimieren") }
                                 Text(p.title, Modifier.weight(1f).clickable(onClick = a::minimizeWebVideo), maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
-                                if (p.isYoutube) IconButton(onClick = { p.pause(); actions = true }) { Icon(Icons.Rounded.AccountCircle, "Gefällt mir, Abos und Kommentare mit deinem Konto") }
+                                if (p.isYoutube) IconButton(onClick = { p.pauseFor(PlayerDiagnostics.PauseReason.ACCOUNT_ACTION); actions = true }) { Icon(Icons.Rounded.AccountCircle, "Gefällt mir, Abos und Kommentare mit deinem Konto") }
                                 IconButton(onClick = a::share) { Icon(Icons.Rounded.Share, "Video teilen") }
                                 IconButton(onClick = a::enterPip) { Icon(Icons.Rounded.PictureInPicture, "Bild-in-Bild") }
                                 IconButton(onClick = a::closeVideo) { Icon(Icons.Rounded.Close, "Video schließen") }
@@ -253,14 +253,15 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                     }
                 }
                 if (mini && playerVisible) {
+                    val miniPlaying = p.playing
                     // Native controls cover only the small video. The surrounding feed stays touchable.
                     Box(Modifier.fillMaxSize().semantics { contentDescription = p.title }
                         .clickable(onClickLabel = "Video vergrößern", role = Role.Button) { p.expanded = true })
                     Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        IconButton(onClick = p::toggle, modifier = Modifier.size(48.dp)) {
+                        IconButton(onClick = if (miniPlaying) p::pause else p::play, modifier = Modifier.size(48.dp)) {
                             Box(Modifier.size(32.dp).background(Color.Black.copy(alpha = .6f), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
-                                Icon(if (p.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                    if (p.playing) "Pause" else "Abspielen", tint = Color.White, modifier = Modifier.size(24.dp))
+                                Icon(if (miniPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    if (miniPlaying) "Pause" else "Abspielen", tint = Color.White, modifier = Modifier.size(24.dp))
                             }
                         }
                         IconButton(onClick = a::closeVideo, modifier = Modifier.size(48.dp)) {

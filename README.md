@@ -1,4 +1,12 @@
-# Weiktube 1.3.10
+# Weiktube 1.3.11 – Diagnose-Vorabversion
+
+**Noch kein fertiger PiP-Wiedergabefix:** Der Miniplayer sendet jetzt eindeutige
+Play-/Pause-Befehle, und eine begrenzte Diagnose zeichnet deren Herkunft auf.
+Die mobile YouTube-Seite pausiert im öffentlichen Größenwechseltest selbst,
+wenn ihr interner PiP-Zustand aktiv und das Video nicht hintergrundfähig ist.
+Diese Prüfung wird nicht umgangen. Darstellung und Adblock bleiben unverändert.
+Der stabile Updatekanal bleibt auf 1.3.10. Befunde und Testgrenzen:
+[Wiedergabediagnose](docs/PLAYBACK-DIAGNOSTICS.md), [Vorabversion 1.3.11](RELEASE-1.3.11.md).
 
 **Neu in 1.3.10:** Gezielte Wiederherstellung nach beendetem Player- oder
 Gecko-Inhaltsprozess. Tote Ansichten werden nicht wiederverwendet, veraltete

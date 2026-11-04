@@ -31,6 +31,8 @@ class PlayerController(
     private val navigationHooks = java.util.IdentityHashMap<WebView, WatchNavigationScript.Hooks>()
     private val adHooks = java.util.IdentityHashMap<WebView, WebViewAdBlock>()
     private val playbackHooks = java.util.IdentityHashMap<WebView, PlayerPlaybackObserver.Hooks>()
+    private val diagnosticHooks = java.util.IdentityHashMap<WebView, PlayerPlaybackDiagnostics.Hooks>()
+    private var lastPlaybackGate: Boolean? = null
     private var playbackObservationRevision = 0L
     private var adRecoveryVideo: String? = null
     private var adRecoveryAttempts = 0
@@ -78,6 +80,7 @@ class PlayerController(
             false
         }
         val playerWeb = this
+        diagnosticHooks[this] = PlayerPlaybackDiagnostics.install(this)
         playbackHooks[this] = PlayerPlaybackObserver.install(this) { state ->
             if (alive(playerWeb) && source != null) {
                 playbackObservationRevision++
@@ -97,7 +100,7 @@ class PlayerController(
             },
             onBreakthrough = { wasPlaying -> if (alive(playerWeb) && source != null && isYoutube) recoverFromAd(wasPlaying) },
             onFailure = { message -> if (alive(playerWeb) && source != null && isYoutube) {
-                pause(); loading = false; error = message
+                pauseFor(PlayerDiagnostics.PauseReason.FILTER_FAILURE); loading = false; error = message
             } })
         adHooks[this] = ads
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
@@ -105,7 +108,7 @@ class PlayerController(
         }
         navigationHooks[this] = WatchNavigationScript.install(this) { url ->
             if (!alive(playerWeb)) return@install
-            if (Links.host(url) == "accounts.google.com") { pause(); expanded = false; activity.openAccountScreen() }
+            if (Links.host(url) == "accounts.google.com") { pauseFor(PlayerDiagnostics.PauseReason.ACCOUNT_ACTION); expanded = false; activity.openAccountScreen() }
             else activity.openAccountUrl(url)
         }
         webViewClient = object : WebViewClient() {
@@ -136,6 +139,7 @@ class PlayerController(
                 if (!alive(web) || source == null) return
                 loading = false; navigationHooks[web]?.apply(); applyPresentation(); ads.pageFinished()
                 playbackHooks[web]?.apply()
+                diagnosticHooks[web]?.apply()
                 applyPlayback(explicitStartRequested)
                 if (!isYoutube || ads.canPlay) explicitStartRequested = false
                 trace(PlayerDiagnostics.Event.NAVIGATION_FINISHED)
@@ -193,11 +197,12 @@ class PlayerController(
         val nav = navigationHooks.remove(web)
         val ads = adHooks.remove(web)
         val playback = playbackHooks.remove(web)
-        if (!force && nav == null && ads == null && playback == null) return
+        val diagnostics = diagnosticHooks.remove(web)
+        if (!force && nav == null && ads == null && playback == null && diagnostics == null) return
         // Cleanup against a dead renderer may throw. One failed bridge must not prevent destruction.
         listOf<() -> Unit>(
             { (web.parent as? android.view.ViewGroup)?.removeView(web) },
-            { nav?.close() }, { ads?.close() }, { playback?.close() }, { web.destroy() },
+            { nav?.close() }, { ads?.close() }, { playback?.close() }, { diagnostics?.close() }, { web.destroy() },
         ).forEach { cleanup -> if (runCatching(cleanup).isFailure) trace(PlayerDiagnostics.Event.CLEANUP_FAILED) }
         trace(PlayerDiagnostics.Event.VIEW_DESTROYED)
     }
@@ -309,6 +314,8 @@ class PlayerController(
         duration = 0.0; playing = false; loading = true; title = "Video"; lastRecordedTitle = ""
         videoWidth = 0; videoHeight = 0
         playbackHooks[view]?.prepare()
+        diagnosticHooks[view]?.prepare()
+        lastPlaybackGate = null
         if (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) android.util.Log.d("WeiktubePlayback", "document-load session=$generation")
         if (id != null) {
             val watchUrl = "https://m.youtube.com/watch?v=$id&t=${position.toInt()}"
@@ -330,6 +337,7 @@ class PlayerController(
         if (destroyed) return
         if (mini == minimized && dark == darkTheme && this.videoOnly == videoOnly && this.systemPip == systemPip) return
         mini = minimized; dark = darkTheme; this.videoOnly = videoOnly; this.systemPip = systemPip; applyPresentation()
+        trace(if (systemPip) PlayerDiagnostics.Event.PRESENTATION_PIP else if (mini) PlayerDiagnostics.Event.PRESENTATION_MINI else PlayerDiagnostics.Event.PRESENTATION_NORMAL)
         if (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) android.util.Log.d("WeiktubePlayback", "presentation session=$generation mini=$mini")
     }
     private fun applyPresentation() {
@@ -382,6 +390,7 @@ class PlayerController(
     /** Native PiP Play is a request to play, never a toggle or a new document load. */
     fun play() {
         if (!pipReady) return
+        trace(PlayerDiagnostics.Event.USER_PLAY)
         playbackAllowed = activity.playerMayRun
         applyPlayback(true)
     }
@@ -399,15 +408,28 @@ class PlayerController(
         if (!rendererAlive || source == null) return
         val allowed = playbackAllowed && activity.playerMayRun &&
             (!isYoutube || adHooks[view]?.canPlay == true)
+        if (lastPlaybackGate != allowed) {
+            lastPlaybackGate = allowed
+            trace(if (allowed) PlayerDiagnostics.Event.GATE_ALLOWED else when {
+                !activity.playerMayRun -> PlayerDiagnostics.Event.GATE_HOST_BLOCKED
+                !playbackAllowed -> PlayerDiagnostics.Event.GATE_POLICY_BLOCKED
+                else -> PlayerDiagnostics.Event.GATE_FILTER_BLOCKED
+            })
+        }
         view.evaluateJavascript(MEDIA_GUARD + ";window.weiktubeSetPlayback($allowed,${start && allowed});", null)
     }
-    fun pause() {
+    fun pause() = pauseFor(PlayerDiagnostics.PauseReason.USER)
+    internal fun pauseFor(reason: PlayerDiagnostics.PauseReason) {
+        PlayerDiagnostics.pause(reason, generation)
         pendingRecovery = pendingRecovery?.copy(play = false)
         explicitStartRequested = false
         playbackAllowed = false
         playbackObservationRevision++
-        if (rendererAlive && source != null) view.evaluateJavascript("if(window.weiktubeSetPlayback)window.weiktubeSetPlayback(false,false)", null)
-        if (rendererAlive && source != null) view.evaluateJavascript("document.querySelectorAll('video,audio').forEach(function(v){v.pause()})", null)
+        if (rendererAlive && source != null) view.evaluateJavascript("""
+            (function(){function pause(){try{if(window.weiktubeSetPlayback)window.weiktubeSetPlayback(false,false);}
+              finally{document.querySelectorAll('video,audio').forEach(function(v){if(!v.paused)v.pause();});}}
+              if(window.weiktubePlaybackScope)window.weiktubePlaybackScope('APP_COMMAND',pause);else pause();})();
+        """.trimIndent(), null)
         playing = false
         activity.syncPipState()
     }
@@ -425,9 +447,9 @@ class PlayerController(
             view.requestLayout(); view.invalidate()
         }
     }
-    fun pauseView() {
+    internal fun pauseView(reason: PlayerDiagnostics.PauseReason = PlayerDiagnostics.PauseReason.HOST_STOP) {
         if (destroyed) return
-        playbackAllowed = false; pause()
+        pauseFor(reason)
         if (rendererAlive && !viewPaused) {
             view.onPause(); viewPaused = true
             trace(PlayerDiagnostics.Event.VIEW_PAUSED)
@@ -438,7 +460,7 @@ class PlayerController(
         val resume = playing || explicitStartRequested || wasPlaying
         val wasExpanded = expanded
         val seconds = position.toInt().coerceAtLeast(0)
-        pause()
+        pauseFor(PlayerDiagnostics.PauseReason.FILTER_RECOVERY)
         if (adRecoveryAttempts >= 1) {
             loading = false
             error = "YouTube-Werbung erkannt. Der geschützte Neustart hat nicht geholfen. Bitte Filter aktualisieren und erneut laden."
@@ -465,7 +487,7 @@ class PlayerController(
     fun close() {
         if (destroyed) return
         pendingRecovery = null
-        pause(); generation++; source = null; error = null; loading = false; position = 0.0; duration = 0.0
+        pauseFor(PlayerDiagnostics.PauseReason.CLOSE); generation++; source = null; error = null; loading = false; position = 0.0; duration = 0.0
         videoWidth = 0; videoHeight = 0
         adRecoveryVideo = null; adRecoveryAttempts = 0
         if (rendererAlive) view.loadUrl("about:blank")
@@ -481,13 +503,14 @@ class PlayerController(
             (function(){
               if(window.weiktubeSetPlayback)return;
               var allowed=false,pending=false;
+              function pause(m){if(window.weiktubePlaybackScope)window.weiktubePlaybackScope('APP_GUARD',function(){m.pause();});else m.pause();}
               function start(v){if(allowed&&pending&&v){pending=false;v.play().catch(function(){});}}
-              document.addEventListener('play',function(e){if(!allowed&&e.target&&e.target.pause)e.target.pause();},true);
+              document.addEventListener('play',function(e){if(!allowed&&e.target&&e.target.pause)pause(e.target);},true);
               document.addEventListener('loadedmetadata',function(e){if(e.target&&e.target.tagName==='VIDEO')start(e.target);},true);
               window.weiktubeSetPlayback=function(next,requestStart){
                 allowed=next;if(!allowed)pending=false;else if(requestStart)pending=true;
                 var v=document.querySelector('video');
-                if(!allowed)document.querySelectorAll('video,audio').forEach(function(m){m.pause();});
+                if(!allowed)document.querySelectorAll('video,audio').forEach(pause);
                 else if(v&&v.readyState>0)start(v);
               };
             })();

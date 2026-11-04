@@ -317,3 +317,22 @@ JVM-Tests, Scriptlet-/Gecko-Fixtures und den APK-Build. Keine Gerätetests für
 diese Version. Historische Aussagen weiter oben, wonach YouTube vom Filter
 ausgenommen ist, beschreiben den damaligen Stand vor 1.3.5.
 
+# Diagnose-Vorabversion 1.3.11: Mini-/PiP-Pause weiterhin offen
+
+Release-Build und 270 JVM-Tests bestanden (173 App, 77 Home, 20 Filter;
+Home-/Filter-Ergebnisse aktuell übernommen). Sieben neue Tests prüfen
+eindeutige Play-/Pause-Befehle und das begrenzte Diagnoseprotokoll.
+17 Player-, acht Diagnose- und fünf Observer-Fixtures sowie die vorhandenen
+PiP-/Home-/Adblock-/Scope-Prüfungen bestanden. Offline-Chromium-Pixeltests
+bestätigen zehn Mini-/PiP-/Rückkehrzyklen bei unverändertem Präsentationsscript.
+
+Im öffentlichen Chromium-A/B-Test pausiert YouTube weiterhin nach kleinen
+Viewportwechseln, auch ohne Weiktube-Scripts. Der seiteninterne PiP-/
+Hintergrundfähigkeitszweig wurde am tatsächlichen Pause-Aufruf untersucht.
+Diese Browserbeobachtung ist keine bestätigte Ursache aller Android-Fälle.
+
+**Kein Gerätetest. Keine zuverlässige fünfminütige YouTube-Wiedergabe in
+beiden Modi nachgewiesen.** Die zehn Gerätefälle bleiben offen.
+[Vollständiger Befund und Logschema](docs/PLAYBACK-DIAGNOSTICS.md),
+[Vorabversion](RELEASE-1.3.11.md).
+

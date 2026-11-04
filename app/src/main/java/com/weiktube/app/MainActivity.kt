@@ -143,7 +143,7 @@ class MainActivity : ComponentActivity() {
             onNavigationState = { homeCanGoBack = it })
         nativePip = NativePipController(this, ::pipSnapshot, player::play, player::pause, {
             screenOff = true
-            player.pauseView(); browser.pauseMedia(); shorts?.pauseMedia()
+            player.pauseView(PlayerDiagnostics.PauseReason.SCREEN_LOCK); browser.pauseMedia(); shorts?.pauseMedia()
             keepAwake(false)
         }, ::message, screenUnlocked = { screenOff = screenIsUnavailable() })
         setContent { WeiktubeApp(this, model) }
@@ -195,7 +195,7 @@ class MainActivity : ComponentActivity() {
         browser.closeSearch()
         tab = value
         if (player.source != null) player.expanded = false
-        if (value == 1) player.pause()
+        if (value == 1) player.pauseFor(PlayerDiagnostics.PauseReason.SHORTS_SELECTED)
         when (value) {
             0 -> {
                 auxiliaryBrowser = false

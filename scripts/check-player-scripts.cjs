@@ -13,6 +13,9 @@ function template(name) {
 }
 const guard = template('MEDIA_GUARD');
 const chrome = template('WATCH_CHROME');
+const nativePause = source.match(/view\.evaluateJavascript\("""\s*(\(function\(\)\{function pause\(\)[\s\S]*?)"""\.trimIndent\(\), null\)/)?.[1];
+assert(nativePause, 'Native pause command must remain explicitly testable');
+new vm.Script(nativePause);
 let passed = 0;
 function test(name, body) {
   body(); passed++;
@@ -54,6 +57,23 @@ test('Denied/background media is paused, including late play events', () => {
   f.video.play();
   assert.equal(f.video.paused, true);
   assert.equal(f.video.pauseCalls, pauseCount + 1);
+});
+
+test('Native Pause retains a fail-closed fallback without duplicate pause calls for an intact guard', () => {
+  const f = mediaFixture({ready: 2});
+  f.context.weiktubeSetPlayback(true, true);
+  const before = f.video.pauseCalls;
+  vm.runInContext(nativePause, f.context);
+  assert.equal(f.video.paused, true);
+  assert.equal(f.video.pauseCalls, before + 1);
+  f.context.weiktubeSetPlayback(true, true);
+  f.context.weiktubeSetPlayback = () => { throw Error('fixture guard failure'); };
+  assert.throws(() => vm.runInContext(nativePause, f.context), /fixture guard failure/);
+  assert.equal(f.video.paused, true, 'a failed guard cannot leave host/user-pause playback running');
+  f.video.paused = false;
+  delete f.context.weiktubeSetPlayback;
+  vm.runInContext(nativePause, f.context);
+  assert.equal(f.video.paused, true, 'missing document guard still pauses');
 });
 
 test('Explicit start waits for late video metadata and starts exactly once', () => {
