@@ -143,7 +143,16 @@ YouTubes Live-Webstruktur, Consent-Dialoge, regionale Inhalte, Kontobeschränkun
 - Keine Behauptung vollständiger 1:1-Parität: Web- und native Kontositzung bleiben getrennt, eigene/native Übergänge und Mini-Player weichen vom Original ab; YouTube-PiP/Hintergrundwiedergabe bleiben deaktiviert. Mehr Details siehe AUDIT.md.
 # YouTube-Werbeschutz 1.3.5
 
-Aktuell: [Vollbild-Rückkehr-Fix 1.3.6](RELEASE-1.3.6.md) mit fünf zusätzlichen
+Aktuell: [Gecko-Kaltstart-Fix 1.3.7](RELEASE-1.3.7.md). Die zyklische
+Abhängigkeit zwischen erstem Fenster und Adblock-Hintergrundprozess wurde im
+gebündelten Gecko-Quellcode nachvollzogen. Neuer Quellcode-/Modelltest mit
+120 Startzyklen und negativem Vergleich des alten Ablaufs bestanden.
+Release-Build und App-/Home-Lint ohne Fehler; 207 JVM-Tests grün (unveränderte
+Home-/Filtertests von Gradle als aktuell übernommen). Vorhandene Rückkehr-,
+Adblock-, Diagnose- und Player-Scriptprüfungen bestanden. Keine Handytests
+und kein echter Gecko-Integrationstest für diese Version.
+
+Weiter enthalten: [Vollbild-Rückkehr-Fix 1.3.6](RELEASE-1.3.6.md) mit fünf zusätzlichen
 Android-Inset-Regressiontests. Insgesamt 207 JVM-Tests grün; kein Handytest.
 
 Der aktuelle [Prüfbericht](ADBLOCK-1.3.5.md) dokumentiert 202 erfolgreiche

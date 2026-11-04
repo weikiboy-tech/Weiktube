@@ -66,6 +66,9 @@ class HomeConnectionActivity : ComponentActivity() {
     private val ports = mutableMapOf<GeckoSession, WebExtension.Port>()
     private val media = mutableMapOf<GeckoSession, MediaSession>()
     private var active = false
+    private var preparing = false
+    private var protectionReady = false
+    private var initialNavigationPending = false
     private var generation = 0
     private var pendingId: String? = null
     private var pendingNext = false
@@ -125,7 +128,7 @@ class HomeConnectionActivity : ComponentActivity() {
         panel.addView(actions)
         panel.addView(button("YouTube im Browser prüfen") { openExternalBrowser() })
         panel.addView(button("YouTube-Profil wechseln") {
-            if (!active) return@button
+            if (!active || !protectionReady) return@button
             clearResults(); closeChild(false)
             main?.loadUri("https://www.youtube.com/channel_switcher?next=%2F")
         })
@@ -180,19 +183,25 @@ class HomeConnectionActivity : ComponentActivity() {
         active = true
         if (::root.isInitialized && main == null && !stoppedForClear) prepare()
         main?.setActive(true); child?.setActive(true)
+        loadInitialPage()
         updateButtons()
     }
 
     private fun prepare() {
+        if (!active || preparing || main != null) return
+        preparing = true
+        protectionReady = false
         val expectedGeneration = ++generation
         HomeEngine.prepare(this, { engine ->
             handler.post runtimeReady@ {
-                if (!active || isDestroyed || generation != expectedGeneration) return@runtimeReady
+                if (isDestroyed || generation != expectedGeneration) return@runtimeReady
+                if (!active) { preparing = false; return@runtimeReady }
                 runtime = engine
                 engine.webExtensionController.ensureBuiltIn("resource://android/assets/home-bridge/", EXTENSION_ID).accept({ ext ->
                     handler.post extensionReady@ {
-                        if (!active || isDestroyed || generation != expectedGeneration) return@extensionReady
-                        if (ext == null) { fail("Die interne Datenverbindung ist nicht verfügbar."); return@extensionReady }
+                        if (isDestroyed || generation != expectedGeneration) return@extensionReady
+                        if (!active) { preparing = false; return@extensionReady }
+                        if (ext == null) { preparing = false; fail("Die interne Datenverbindung ist nicht verfügbar."); return@extensionReady }
                         extension = ext
                         val session = createSession()
                         main = session
@@ -200,11 +209,39 @@ class HomeConnectionActivity : ComponentActivity() {
                         session.open(engine)
                         mainView = GeckoView(this).also { it.setSession(session); container.addView(it, FrameLayout.LayoutParams(-1, -1)) }
                         session.setActive(true)
-                        session.loadUri(HOME)
+                        // Opening this same blank session releases Gecko's persisted background
+                        // startup barrier. No website may load until its filters are acknowledged.
+                        status.text = "Werbeschutz wird vorbereitet …"
+                        domain.text = "Gecko · Werbeschutz wird vorbereitet …"
+                        report.visibility = View.VISIBLE
+                        container.visibility = View.GONE
+                        GeckoAdBlock.prepare(this, engine, {
+                            handler.post protectionReady@ {
+                                if (isDestroyed || generation != expectedGeneration || main !== session) return@protectionReady
+                                preparing = false
+                                protectionReady = true
+                                initialNavigationPending = true
+                                loadInitialPage()
+                                updateButtons()
+                            }
+                        }, {
+                            handler.post {
+                                if (isDestroyed || generation != expectedGeneration || main !== session) return@post
+                                stopSessions()
+                                fail("Der Werbeschutz konnte nicht gestartet werden. Bitte YouTube neu laden. Deine Website-Anmeldung bleibt erhalten.")
+                            }
+                        })
                     }
-                }, { handler.post { if (active && generation == expectedGeneration) fail("Die interne Datenverbindung konnte nicht gestartet werden.") } })
+                }, { handler.post { if (generation == expectedGeneration) { preparing = false; if (active) fail("Die interne Datenverbindung konnte nicht gestartet werden.") } } })
             }
-        }, { handler.post { if (active && generation == expectedGeneration) fail("Die Websitzung konnte nicht sicher vorbereitet werden. Bitte erneut versuchen.") } })
+        }, { handler.post { if (generation == expectedGeneration) { preparing = false; if (active) fail("Die Websitzung konnte nicht sicher vorbereitet werden. Bitte erneut versuchen.") } } })
+    }
+
+    private fun loadInitialPage() {
+        if (!active || !protectionReady || !initialNavigationPending) return
+        val session = main ?: return
+        initialNavigationPending = false
+        session.loadUri(HOME)
     }
 
     private fun openLogin() {
@@ -213,7 +250,7 @@ class HomeConnectionActivity : ComponentActivity() {
         clearResults()
         closeChild(false)
         val session = main
-        if (session == null) prepare() else session.loadUri(HOME)
+        if (session == null) prepare() else if (protectionReady) session.loadUri(HOME)
     }
 
     private fun openExternalBrowser() {
@@ -240,6 +277,7 @@ class HomeConnectionActivity : ComponentActivity() {
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
                 if (!active || !owns(session)) return GeckoResult.fromValue(AllowOrDeny.DENY)
                 if (request.uri == "about:blank") return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+                if (!protectionReady) return GeckoResult.fromValue(AllowOrDeny.DENY)
                 if (HomeConnectionDiagnostics.isExternalSignIn(request.uri)) {
                     diagnostics.location(request.uri, "blocked"); diagnostics.failure("SIGNIN_EXTERNAL_REQUIRED")
                     handler.post { if (active && owns(session)) fail(failureText("SIGNIN_EXTERNAL_REQUIRED")) }
@@ -251,9 +289,10 @@ class HomeConnectionActivity : ComponentActivity() {
                 return GeckoResult.fromValue(AllowOrDeny.ALLOW)
             }
             override fun onSubframeLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> =
-                GeckoResult.fromValue(if (active && owns(session) && (request.uri == "about:blank" || HomeConnectionDiagnostics.allowedEmbedded(request.uri))) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+                GeckoResult.fromValue(if (active && owns(session) && (request.uri == "about:blank" || (protectionReady && HomeConnectionDiagnostics.allowedEmbedded(request.uri)))) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
                 if (!active || !owns(session) || url == null) return
+                if (!protectionReady && url == "about:blank") return
                 urls[session] = url
                 if (session === main) { diagnostics.location(url, "location"); updateDiagnostics() }
                 if (HomeConnectionDiagnostics.isExternalSignIn(url)) {
@@ -266,7 +305,7 @@ class HomeConnectionActivity : ComponentActivity() {
             }
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) { back[session] = canGoBack }
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
-                if (!active || !owns(session)) return null
+                if (!active || !protectionReady || !owns(session)) return null
                 if (HomeConnectionDiagnostics.isExternalSignIn(uri)) {
                     diagnostics.location(uri, "blocked"); diagnostics.failure("SIGNIN_EXTERNAL_REQUIRED")
                     handler.post { if (active && owns(session)) fail(failureText("SIGNIN_EXTERNAL_REQUIRED")) }
@@ -297,6 +336,7 @@ class HomeConnectionActivity : ComponentActivity() {
         progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 if (!active || !owns(session)) return
+                if (!protectionReady && url == "about:blank") return
                 urls[session] = url
                 if (session === main) {
                     ports.remove(session)?.let { old -> runCatching { old.postMessage(JSONObject().put("type", "pause")); old.disconnect() } }
@@ -310,6 +350,7 @@ class HomeConnectionActivity : ComponentActivity() {
                 progress.visibility = if (value >= 100) View.GONE else View.VISIBLE
             }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
+                if (!protectionReady) return
                 if (session === main && active) {
                     val serial = navigationSerial
                     handler.postDelayed({
@@ -405,6 +446,7 @@ class HomeConnectionActivity : ComponentActivity() {
     }
 
     private fun requestPage(more: Boolean) {
+        if (!active || !protectionReady) return
         val session = main ?: run { fail("Die Gecko-Seite wurde noch nicht vorbereitet. Bitte YouTube neu laden."); return }
         val port = ports[session] ?: run { val code = diagnostics.missingBridgeCode(); diagnostics.failure(code); fail(failureText(code)); return }
         if (!active || child != null || pendingId != null || (more && continuation == null)) return
@@ -446,7 +488,7 @@ class HomeConnectionActivity : ComponentActivity() {
         childView?.let { it.releaseSession(); container.removeView(it) }; childView = null
         ports.remove(session)?.disconnect(); media.remove(session)?.pause(); urls.remove(session); back.remove(session)
         runCatching { session.close() }
-        if (reload && active) main?.loadUri(HOME)
+        if (reload && active && protectionReady) main?.loadUri(HOME)
         displayOrigin(); updateButtons()
     }
 
@@ -466,8 +508,8 @@ class HomeConnectionActivity : ComponentActivity() {
     }
     private fun updateButtons() {
         if (!::verify.isInitialized) return
-        val available = active && child == null && ports[main] != null && pendingId == null
-        verify.isEnabled = active && child == null && main != null && pendingId == null
+        val available = active && protectionReady && child == null && ports[main] != null && pendingId == null
+        verify.isEnabled = active && protectionReady && child == null && main != null && pendingId == null
         next.isEnabled = available && continuation != null && firstCount > 0
         if (::openFirst.isInitialized) openFirst.isEnabled = available && firstVideoId != null
     }
@@ -484,6 +526,7 @@ class HomeConnectionActivity : ComponentActivity() {
         updateDiagnostics()
     }
     private fun stopSessions() {
+        preparing = false; protectionReady = false; initialNavigationPending = false
         generation++; navigationSerial++; diagnosticRequestId = null; clearResults()
         ports.values.toList().forEach { runCatching { it.postMessage(JSONObject().put("type", "pause")); it.disconnect() } }; ports.clear()
         media.values.toList().forEach { runCatching { it.pause() } }; media.clear()

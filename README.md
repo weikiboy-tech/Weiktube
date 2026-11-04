@@ -1,4 +1,9 @@
-# Weiktube 1.3.6
+# Weiktube 1.3.7
+
+**Neu in 1.3.7:** Korrektur des blockierten Gecko-Kaltstarts. Die bestehende Sitzung
+wird zuerst leer geöffnet; YouTube lädt erst nach bestätigtem Werbeschutz.
+Ein sichtbarer Ladestatus ersetzt die schwarze Wartefläche. Die gespeicherte
+Website-Anmeldung bleibt erhalten. Details und Prüfgrenzen: [Release 1.3.7](RELEASE-1.3.7.md).
 
 **Neu in 1.3.6:** Gezielte Korrektur für seitlich verschobene Player-Inhalte nach
 der Rückkehr aus dem automatischen Querformat-Vollbild. Die vorhandene WebView
@@ -25,7 +30,7 @@ die Startseite erhalten. Der Konto-Einstieg öffnet sich einmal automatisch und 
   für passende Intel-/Emulator-Geräte. Keine Unterstützung für reine 32-Bit-Geräte.
 - Updates über **Einstellungen & Updates → Jetzt nach Updates suchen**. Android
   bestätigt die Installation; die App installiert Updates nicht still im Hintergrund.
-- [Release-Informationen](RELEASE-1.3.6.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
+- [Release-Informationen](RELEASE-1.3.7.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
 
 Die Website verwendet das dort angemeldete Konto. Die optionale Google-API-Freigabe
 für Abos/Playlists ist separat; die öffentliche APK-Veröffentlichung erweitert

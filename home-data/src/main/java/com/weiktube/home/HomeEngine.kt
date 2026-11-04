@@ -6,7 +6,7 @@ import android.os.Handler
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.StorageController
 
-/** Only initialized by the explicit connection screen. Never shares Android WebView cookies. */
+/** Shared website runtime/profile. Never shares Android WebView cookies. */
 object HomeEngine {
     private var runtime: GeckoRuntime? = null
     private var clearing = false
@@ -64,9 +64,9 @@ object HomeEngine {
     }
 
     private fun recovered(context: Context, engine: GeckoRuntime, ready: (GeckoRuntime) -> Unit, failure: () -> Unit) {
-        HomeExperimentLease.recover(context, engine, {
-            GeckoAdBlock.prepare(context, engine, { ready(engine) }, failure)
-        }, failure)
+        // Persisted extension backgrounds wait for the first Gecko window during APP_STARTUP.
+        // Callers must open their blank session, then await GeckoAdBlock before loading a website.
+        HomeExperimentLease.recover(context, engine, { ready(engine) }, failure)
     }
 
     internal fun recordProof(context: Context, channelId: String, firstCount: Int, nextCount: Int) {

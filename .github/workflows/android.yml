@@ -31,6 +31,7 @@ jobs:
           node scripts/check-browser-scripts.cjs
           node scripts/check-home-bridge.cjs
           node scripts/check-original-home-navigation.cjs
+          node scripts/check-home-cold-start.mjs
           node scripts/check-watch-navigation.cjs
           python scripts/check-home-scope.py
       - run: chmod +x gradlew

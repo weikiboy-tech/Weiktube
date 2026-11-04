@@ -255,6 +255,9 @@ class OriginalHomeController(
         // Wait for its cleanup instead of asking HomeEngine to acquire a competing owner.
         if (extensionOperation) { prepareAfterExtensionOperation = true; return }
         preparing = true
+        progress.isIndeterminate = true
+        progress.visibility = View.VISIBLE
+        setStatus("Die YouTube-Startseite wird vorbereitet …", false)
         val attempt = ++generation
         HomeEngine.prepare(activity, { engine ->
             handler.post {
@@ -266,7 +269,7 @@ class OriginalHomeController(
                     prepareRouting(engine, attempt)
                 }, { if (current(attempt)) { preparing = false; setStatus("Die YouTube-Startseite konnte nicht vorbereitet werden. Bitte erneut versuchen.") } })
             }
-        }, { handler.post { if (current(attempt)) { preparing = false; setStatus("Das gespeicherte Webprofil ist gerade nicht verfügbar. Bitte erneut versuchen.") } } })
+        }, { handler.post { if (current(attempt)) { preparing = false; setStatus("Die Websitzung konnte nicht gestartet werden. Deine Anmeldung wurde nicht gelöscht. Bitte erneut versuchen.") } } })
     }
 
     private fun createSession(): GeckoSession = configureSession(GeckoSession().apply { settings.suspendMediaWhenInactive = true })
@@ -275,6 +278,9 @@ class OriginalHomeController(
         navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
                 if (!owns(session)) return decision(false)
+                // The first blank session starts Gecko's persisted extension backgrounds.
+                // No external page may navigate before the filter registration is acknowledged.
+                if (preparing && request.uri != "about:blank") return decision(false)
                 if (!active) {
                     val allowed = session in backgroundAuthentication && OriginalHomeBackground.navigation(request.uri) ||
                         OriginalHomeTabBackground.navigation(locations[session].orEmpty(), request.uri, requestedNavigation[session])
@@ -303,6 +309,7 @@ class OriginalHomeController(
             }
             override fun onSubframeLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny> {
                 if (!owns(session)) return decision(false)
+                if (preparing && request.uri != "about:blank") return decision(false)
                 if (!active) return decision(
                     session in backgroundAuthentication && OriginalHomeBackground.subframe(locations[session].orEmpty(), request.uri) ||
                         OriginalHomeTabBackground.navigation(locations[session].orEmpty(), request.uri))
@@ -312,6 +319,7 @@ class OriginalHomeController(
             }
             override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
                 if (!owns(session) || url == null) return
+                if (preparing && url == "about:blank") return
                 invalidateAutofill()
                 locations[session] = url
                 if (url != "about:blank") requestedNavigation.remove(session)
@@ -337,7 +345,7 @@ class OriginalHomeController(
             }
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) { if (owns(session)) { history[session] = canGoBack; notifyNavigationState() } }
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
-                if (!active || !owns(session)) return null
+                if (!active || preparing || !owns(session)) return null
                 if (OriginalHomePolicy.isVideoNavigation(uri)) {
                     val video = OriginalHomePolicy.videoUrl(uri)
                     if (video != null && canRoute(session)) openOriginal(video)
@@ -368,6 +376,7 @@ class OriginalHomeController(
         progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 if (!owns(session)) return
+                if (preparing && url == "about:blank") return
                 invalidateAutofill()
                 autofillLoading += session
                 disconnect(session)
@@ -376,6 +385,7 @@ class OriginalHomeController(
                 if (url != "about:blank") requestedNavigation.remove(session)
                 if (session === (popup ?: main)) accountSetup.pageStarted(url)
                 progress.visibility = View.VISIBLE
+                progress.isIndeterminate = false
                 if (!active) return
                 if (OriginalHomePolicy.isNormalWebAuthUrl(url)) resetProof()
                 showOrigin()
@@ -383,6 +393,7 @@ class OriginalHomeController(
             override fun onProgressChange(session: GeckoSession, value: Int) { if (active && owns(session)) progress.progress = value }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 if (!owns(session)) return
+                if (preparing) return
                 if (success) autofillLoading.remove(session)
                 progress.visibility = View.GONE
                 if (active && owns(session)) {
@@ -445,11 +456,23 @@ class OriginalHomeController(
                         session.open(engine)
                         mainView = createGeckoView(session, R.id.original_home_gecko_main).also { viewport.addView(it, FrameLayout.LayoutParams(-1, -1)) }
                         session.setActive(active)
-                        preparing = false
-                        initialNavigationPending = true
-                        setStatus("Videotipps öffnen automatisch den Weiktube-Player.", false)
-                        updateControls()
-                        loadPendingNavigation()
+                        setStatus("Werbeschutz für die Startseite wird vorbereitet …", false)
+                        // APP_STARTUP backgrounds wait for Gecko's first window. Open the same
+                        // retained session first; only about:blank exists until this gate succeeds.
+                        GeckoAdBlock.prepare(activity, engine, {
+                            if (!current(attempt) || main !== session) return@prepare
+                            preparing = false
+                            progress.isIndeterminate = false
+                            initialNavigationPending = true
+                            setStatus("Videotipps öffnen automatisch den Weiktube-Player.", false)
+                            updateControls()
+                            loadPendingNavigation()
+                        }, {
+                            if (current(attempt) && main === session) {
+                                stopSessions()
+                                setStatus("Der Werbeschutz für die Startseite konnte nicht gestartet werden. Deine Anmeldung bleibt gespeichert. Bitte erneut versuchen.")
+                            }
+                        })
                     }
                 }, { handler.post { operationFinished(); if (current(attempt)) setupFailed() } })
             }
@@ -664,7 +687,7 @@ class OriginalHomeController(
     }
 
     private fun loadPendingNavigation() {
-        if (!active || openingPlayer || disposed) return
+        if (!active || openingPlayer || disposed || preparing) return
         val session = main ?: return
         val destination = pendingNavigation ?: if (initialNavigationPending)
             if (accountSetup.active) WebsiteAccountSetup.ACCOUNT_URL else HOME else return
@@ -678,7 +701,7 @@ class OriginalHomeController(
     fun goHome() = navigate(HOME)
 
     fun reload() {
-        if (disposed) return
+        if (disposed || preparing) return
         if (main == null) { if (active) resumeOrPrepare(); return }
         if (active) (popup ?: main)?.reload()
     }
@@ -733,7 +756,7 @@ class OriginalHomeController(
         origin.text = if (parsed?.scheme == "https" && parsed.host != null) "Gecko · HTTPS · ${parsed.host}" else "Gecko · Seite wird geladen …"
         // Website content is always visible, including Google's own rejection/error pages.
         mainView?.visibility = if (popup == null) View.VISIBLE else View.INVISIBLE
-        progress.visibility = if ((popup ?: main) in autofillLoading) View.VISIBLE else View.GONE
+        progress.visibility = if (preparing || (popup ?: main) in autofillLoading) View.VISIBLE else View.GONE
         media.keys.toList().forEach(::applyMediaPolicy)
         updateControls()
         notifyNavigationState()
@@ -749,7 +772,8 @@ class OriginalHomeController(
     private fun setStatus(message: String, issue: Boolean = true, accountError: Boolean = false) {
         accountLoadError = accountError
         status.text = message
-        status.visibility = if (!embedded || issue) View.VISIBLE else View.GONE
+        status.visibility = if (!embedded || issue || preparing) View.VISIBLE else View.GONE
+        if (issue) { progress.isIndeterminate = false; progress.visibility = View.GONE }
         if (::retryButton.isInitialized) retryButton.visibility = if (embedded && issue) View.VISIBLE else View.GONE
     }
 
