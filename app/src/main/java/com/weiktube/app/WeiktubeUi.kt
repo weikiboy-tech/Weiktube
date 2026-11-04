@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -73,8 +75,8 @@ fun WeiktubeApp(activity: MainActivity, model: WeiktubeModel) {
         YoutubeAdBlock.exceptions = shieldConfig.exceptions
         GeckoAdBlock.refreshPolicy()
     }
-    LaunchedEffect(activity.foreground, activity.pip) {
-        while (activity.foreground || activity.pip) {
+    LaunchedEffect(activity.playerMayRun) {
+        while (activity.playerMayRun) {
             activity.player.poll()
             activity.browser.poll()
             activity.shorts?.poll()
@@ -107,16 +109,21 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
     var showLinkDialog by remember { mutableStateOf(false) }
     var directUrl by remember { mutableStateOf("") }
     var linkError by remember { mutableStateOf<String?>(null) }
+    var playerBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     val tabStates = rememberSaveableStateHolder()
     LaunchedEffect(p.source) { actions = false }
+    LaunchedEffect(p.source, p.playing, p.error, p.loading, p.expanded, a.tab, a.fullscreen,
+        a.pip, p.videoWidth, p.videoHeight, playerBounds, actions, menu, showLinkDialog) {
+        a.syncPipState(blockedByUi = actions || menu || showLinkDialog)
+    }
     LaunchedEffect(dark) { a.browser.setTheme(dark); a.shorts?.setTheme(dark) }
-    LaunchedEffect(full, a.tab, hasPlayer, a.pip, a.fullscreen, a.foreground, actions, personalHome) {
+    LaunchedEffect(full, a.tab, hasPlayer, a.pip, a.fullscreen, a.playerMayRun, actions, personalHome) {
         a.browser.playbackElsewhere = hasPlayer
         a.shorts?.playbackElsewhere = full
-        if (full || a.pip || a.tab != 0 || personalHome) a.browser.pauseMedia() else a.browser.resume()
-        if (full || a.pip || a.tab != 1) a.shorts?.pauseMedia() else a.shorts?.resume()
-        if (a.foreground || a.pip) p.resumeView()
-        p.setPlaybackAllowed(!actions && (a.foreground || a.pip) && (a.tab != 1 || full))
+        if (!a.playerMayRun || full || a.pip || a.tab != 0 || personalHome) a.browser.pauseMedia() else a.browser.resume()
+        if (!a.playerMayRun || full || a.pip || a.tab != 1) a.shorts?.pauseMedia() else a.shorts?.resume()
+        if (a.playerMayRun) p.resumeView()
+        p.setPlaybackAllowed(!actions && a.playerMayRun && (a.tab != 1 || full || a.pip))
         a.syncOriginalHomeVisibility()
     }
     Column(Modifier.fillMaxSize().then(if (a.pip || landscapeVideo) Modifier else Modifier.safeDrawingPadding())) {
@@ -194,11 +201,14 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
             val density = LocalDensity.current
             var dragPixels by remember { mutableFloatStateOf(0f) }
             val dragVisual by animateFloatAsState(dragPixels, tween(if (dragPixels > 0f) 0 else 120), label = "playerDrag")
-            LaunchedEffect(full, p.source) { dragPixels = 0f }
-            val shape = RoundedCornerShape(corner)
-            Box(Modifier.align(Alignment.BottomEnd).padding(end = playerInset, bottom = playerInset)
-                .width(playerWidth).height(playerHeight)
-                .graphicsLayer { translationY = if (full) dragVisual.coerceAtMost(size.height * .3f) * .6f else 0f }
+            LaunchedEffect(full, p.source, a.pip) { dragPixels = 0f }
+            val shape = RoundedCornerShape(if (a.pip) 0.dp else corner)
+            // PiP uses the retained view immediately, without a compact-card animation frame.
+            val inset = if (a.pip) 0.dp else playerInset
+            Box(Modifier.align(Alignment.BottomEnd).padding(end = inset, bottom = inset)
+                .width(if (a.pip) maxWidth else playerWidth).height(if (a.pip) availableHeight else playerHeight)
+                .onGloballyPositioned { playerBounds = it.boundsInWindow() }
+                .graphicsLayer { translationY = if (full && !a.pip) dragVisual.coerceAtMost(size.height * .3f) * .6f else 0f }
                 .shadow(if (mini) 8.dp else 0.dp, shape).clip(shape).background(Color.Black)) {
                 Column(Modifier.fillMaxSize()) {
                     key(p.view) {
@@ -209,7 +219,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                 it.configure(enabled = full && portrait && !a.fullscreen && !a.pip,
                                     youtube = p.isYoutube, onDrag = { distance -> dragPixels = distance },
                                     onMinimize = a::minimizeWebVideo)
-                                p.setPresentation(mini, dark, landscapeVideo)
+                                p.setPresentation(mini, dark, landscapeVideo || a.pip, systemPip = a.pip)
                             })
                     }
                     if (hasPlayer && full && !a.pip && !landscapeVideo) {
@@ -235,7 +245,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
                                 if (p.isYoutube) IconButton(onClick = { p.pause(); actions = true }) { Icon(Icons.Rounded.AccountCircle, "Gefällt mir, Abos und Kommentare mit deinem Konto") }
                                 IconButton(onClick = a::share) { Icon(Icons.Rounded.Share, "Video teilen") }
-                                if (!p.isYoutube) IconButton(onClick = a::enterPip) { Icon(Icons.Rounded.PictureInPicture, "Bild-in-Bild") }
+                                IconButton(onClick = a::enterPip) { Icon(Icons.Rounded.PictureInPicture, "Bild-in-Bild") }
                                 IconButton(onClick = a::closeVideo) { Icon(Icons.Rounded.Close, "Video schließen") }
                             }
                         }
@@ -281,8 +291,8 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
         }
     }
     val id = p.source?.let(Links::videoId)
-    if (actions && id != null) VideoActionsSheet(a.videoActions, a.youtubeAccount, id) { actions = false }
-    if (showLinkDialog) AlertDialog(onDismissRequest = { showLinkDialog = false }, title = { Text("Video öffnen") }, text = {
+    if (!a.pip && actions && id != null) VideoActionsSheet(a.videoActions, a.youtubeAccount, id) { actions = false }
+    if (!a.pip && showLinkDialog) AlertDialog(onDismissRequest = { showLinkDialog = false }, title = { Text("Video öffnen") }, text = {
         Column {
             OutlinedTextField(directUrl, { directUrl = it; linkError = null }, label = { Text("YouTube-Link oder HTTPS-Video") }, modifier = Modifier.fillMaxWidth())
             linkError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -373,7 +383,7 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
             Text("Konten & Wiedergabe", style = MaterialTheme.typography.titleLarge)
             Text("Empfehlungen, Suchvorschläge, Shorts, Kanäle und Playlists kommen von YouTubes mobiler Website. Dort stehen auch Qualitätswahl, Kommentare und Likes bereit, soweit YouTube sie anbietet. Die Suchlupe öffnet die Suche. Ergebnisse kommen direkt von YouTube.")
             Text("Unter Du verbindest du dein Google-Konto für Abos und Playlists. Das Kontosymbol am Video öffnet Likes, Abos und Kommentare. Für Änderungen fragt Google nach deiner Freigabe. Die Website und ihre Empfehlungen behalten eine getrennte Sitzung.")
-            Text("Ziehe das Video im Hochformat nach unten, um es klein unten rechts weiterzusehen. Ein Tipp auf den Miniplayer vergrößert es wieder. Keine Hintergrundwiedergabe oder YouTube-PiP. Direkte HTTPS-Videos unterstützen Android-PiP. Kein Download und keine Premium-Umgehung.")
+            Text("Ziehe das Video im Hochformat nach unten, um es klein unten rechts weiterzusehen. Ein Tipp auf den Miniplayer vergrößert es wieder. Über Bild-in-Bild läuft dasselbe Video im Android-PiP-Fenster weiter, auch außerhalb von Weiktube. Das gilt für YouTube und direkte HTTPS-Videos auf unterstützten Geräten. Ohne sichtbares Video gibt es keine Hintergrundwiedergabe. Kein Download.")
             Text("Weiktube selbst enthält keine Analyse- oder Werbe-SDKs. Geladene Webseiten und der YouTube-Player erhalten technisch notwendige Netzwerk- und Gerätedaten. Verlauf und Einstellungen bleiben lokal; Cookies sind davon getrennt.")
             TextButton(onClick = { a.external("https://www.youtube.com/t/terms") }) { Text("YouTube-Nutzungsbedingungen") }
             TextButton(onClick = { a.external("https://policies.google.com/privacy") }) { Text("Google-Datenschutzerklärung") }

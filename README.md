@@ -1,4 +1,16 @@
-# Weiktube 1.3.7
+# Weiktube 1.3.8
+
+**Neu für 1.3.8:** Android-Bild-in-Bild für den bestehenden Weiktube-Player,
+einschließlich YouTube-Watch-Seiten. Dabei bleibt dieselbe WebView erhalten.
+Android 12+ übernimmt den automatischen Übergang bei geeigneter laufender
+Wiedergabe; Android 8–11 verwendet den bisherigen Plattformaufruf beim Verlassen
+der App. Play/Pause im Systemfenster steuert denselben Player.
+
+**Automatisiert geprüft:** Release-Build, 234 JVM-Tests und die ergänzten
+PiP-/Player-Scriptprüfungen bestanden; echte PiP-Gerätetests wurden nicht durchgeführt. YouTube kann die
+Wiedergabe browserseitig stoppen. Die Umsetzung täuscht keine Sichtbarkeit vor
+und umgeht keine Sicherheits-, DRM- oder Zugangsbeschränkungen. Details:
+[Release 1.3.8](RELEASE-1.3.8.md).
 
 **Neu in 1.3.7:** Korrektur des blockierten Gecko-Kaltstarts. Die bestehende Sitzung
 wird zuerst leer geöffnet; YouTube lädt erst nach bestätigtem Werbeschutz.
@@ -30,7 +42,7 @@ die Startseite erhalten. Der Konto-Einstieg öffnet sich einmal automatisch und 
   für passende Intel-/Emulator-Geräte. Keine Unterstützung für reine 32-Bit-Geräte.
 - Updates über **Einstellungen & Updates → Jetzt nach Updates suchen**. Android
   bestätigt die Installation; die App installiert Updates nicht still im Hintergrund.
-- [Release-Informationen](RELEASE-1.3.7.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
+- [Release 1.3.8](RELEASE-1.3.8.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
 
 Die Website verwendet das dort angemeldete Konto. Die optionale Google-API-Freigabe
 für Abos/Playlists ist separat; die öffentliche APK-Veröffentlichung erweitert
@@ -176,7 +188,7 @@ Ein Tippen auf eine native Abo- oder Verlaufskarte öffnet deren echtes Video im
 | Kommentare, Likes und Abonnieren | Die Original-Videoseite behält ihre Kommentare, Aktionen und Empfehlungen. Zusätzlich bietet ein natives Aktionsfenster echte API-Aufrufe für Gefällt mir, Abo ändern, Playlist speichern, Kommentare und Antworten. Es zeigt den tatsächlich geladenen Status; Schreiben benötigt eine zusätzliche Google-Freigabe. Diese neuen Schreibabläufe sind noch nicht auf dem Gerät abgenommen. |
 | Lokaler Verlauf | Bis zu 100 im Weiktube-Player geöffnete Videos, abschaltbar und löschbar. Kein synchronisierter Google-/YouTube-Verlauf. |
 | Vollbild und Rotation | WebView-Custom-View-Anbindung ohne Neuanlage des Players bei Rotation. |
-| Android-PiP | Für erlaubte direkte HTTPS-Videodateien über eine explizite Taste. YouTube-PiP bleibt deaktiviert. |
+| Android-PiP | Seit 1.3.8 auch für den bestehenden YouTube-Watch-Player implementiert: dieselbe WebView im Android-Systemfenster, mit Play/Pause-Systemaktionen. Automatischer Übergang nur bei geeigneter laufender Wiedergabe; manuelle PiP-Taste weiterhin vorhanden. Abnahme auf dem Gerät ausstehend; browserseitige Wiedergabebeschränkungen bleiben wirksam. |
 | Qualität | Nur Auswahlmöglichkeiten des offiziellen Players bzw. der Webseite; keine erzwungene Qualität. |
 | Teilen und Links | Teilen des aktiven Videos und Empfang über „Teilen → Weiktube“. Direktes Öffnen unterstützter YouTube-Links muss unter Android 12+ ggf. in den App-Einstellungen erlaubt werden. |
 | Darstellung | Eigene kompakte Kopfzeile und Navigation, Play-Logo sowie System-/Hell-/Dunkelmodus für die native Oberfläche. Die Website steuert ihren eigenen Modus. |

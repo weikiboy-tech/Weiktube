@@ -1,4 +1,51 @@
-# Weiktube 1.2.3 – Prüfprotokoll
+# Weiktube – Prüfprotokoll
+
+## Aktueller Stand 1.3.8: Android-Bild-in-Bild
+
+**Release-Build und Artefaktprüfung bestanden. Kein echter Gerätetest wurde durchgeführt.**
+234 JVM-Tests grün: 142 App, 72 Home, 20 Filter. Unveränderte Home-/Filtertests
+wurden durch Gradle als aktuell übernommen. App-/Home-Lint ohne Fehler,
+33 beziehungsweise 41 Warnungen. Beide APKs behalten das ursprüngliche Zertifikat,
+sind nicht debuggbar und liegen unter 128 MiB.
+
+24 native PiP-Testausführungen mit Robolectric (API-Zweige 26/31/33/35) bestanden:
+Parameter, echte Broadcast-Aktionen, doppelte Einstiege, veraltete Aktionen nach
+Videowechsel, zehn Expand-Runden, Sperren/Entsperren ohne Autoplay und Cleanup.
+Drei Decoder-Tests und fünf Script-Fixtures prüfen den begrenzten Playback-Observer.
+Alle 16 Player-Script-Fixtures bestanden, einschließlich zehn PiP-Übergängen mit
+erhaltener Videoidentität, Zeit, Benutzerpause und Scrollposition. PiP-Integration,
+Home-Kaltstart/-Rückkehr und vorhandene Adblock-Scriptprüfungen ebenfalls grün.
+Das sind keine echten YouTube-/Android-WindowManager-Tests.
+
+Noch offene Geräteabläufe, jeweils für Android 12+ und soweit verfügbar Android
+8–11:
+
+1. Laufendes YouTube-Video über Home-Geste/Taste verlassen: genau ein Android-
+   PiP-Fenster, gleiche Video-ID und Position, keine konkurrierende Wiedergabe.
+2. Pausiertes Video, ladendes/fehlerhaftes Video, Gecko-Startseite ohne Video sowie
+   Konto-/Einstellungsdialog verlassen: kein unerwarteter automatischer PiP-Start.
+3. Manuelle PiP-Taste mit laufendem und pausiertem geeignetem Video prüfen;
+   deaktivierte Systemfreigabe oder fehlende Geräteunterstützung verständlich melden.
+4. Android-Play/Pause wiederholt verwenden, anschließend Video wechseln. Eine alte
+   Systemaktion darf das vorherige Video nicht starten oder das neue beeinflussen.
+5. PiP vergrößern und erneut verkleinern, einschließlich Hoch-/Querformat und
+   internem Miniplayer: Videodokument, Position und Benutzerpause erhalten.
+6. PiP schließen und App vollständig verlassen: Wiedergabe spätestens bei
+   `onStop` pausiert; kein unsichtbares Audio und kein erneutes spontanes Öffnen.
+7. Bildschirm ausschalten/sperren: Wiedergabe pausiert. Entsperren und Rückkehr
+   ohne unerwarteten Wiedergabestart prüfen.
+8. YouTube-Player und direkte HTTPS-Videodatei getrennt prüfen, einschließlich
+   Adblock-Fehler, Netzverlust und Rendererabbruch. Browserseitiges Stoppen durch
+   YouTube ausdrücklich als solches dokumentieren, ohne Sichtbarkeit oder
+   Sicherheits-/DRM-Signale zu manipulieren.
+9. Während PiP WhatsApp/Chrome öffnen; eingehenden Anruf und Audiofokusverlust
+   durch andere Medien testen. Chromium verwaltet den Audiofokus; kein zweiter
+   nativer Focus-Owner oder Hintergrunddienst wurde hinzugefügt.
+
+Diese Liste ist **nicht abgearbeitet**. Weitere Grenzen und Änderungsumfang:
+[RELEASE-1.3.8.md](RELEASE-1.3.8.md).
+
+## Historisches Prüfprotokoll 1.2.3
 
 ## Aktueller Stand 1.2.3: Browser-Popup zurückgenommen
 
@@ -102,7 +149,7 @@ Die oben belegten Abläufe decken nicht sämtliche Fehler- und Randfälle ab. Di
 - Original-Videoseite: Wiedergabe, Titel, Kanal, Kommentare und Empfehlungen prüfen. Groß → Mini → Groß soll dasselbe Watch-Dokument und dieselbe Wiedergabe fortsetzen, ohne absichtliche IFrame-Übergabe oder Neuladung. Zeitposition, Play/Pause, Schließen und Navigation zur nächsten Empfehlung messen.
 - Shorts: eigene Browserinstanz und vertikales Wischen prüfen. Wechsel zwischen Shorts, normalem Video und anderen Tabs darf keine doppelte Audiowiedergabe erzeugen. Mini-Player-Bedienung während Shorts gesondert prüfen.
 - Vollbild, Rotation, System-Zurück und Appwechsel prüfen; auch direkt nach Videowahl vor Abschluss des Ladens. Nach Rückkehr/Prozessverlust darf kein unerwarteter Hintergrundstart entstehen. Rendererabbruch soll einen verständlichen Wiederholungsweg bieten.
-- Direkte erlaubte HTTPS-Videodatei gesondert in Android-PiP testen, einschließlich Beenden von PiP. YouTube-PiP bleibt deaktiviert.
+- Direkte erlaubte HTTPS-Videodatei gesondert in Android-PiP testen, einschließlich Beenden von PiP. Im damaligen Stand blieb YouTube-PiP deaktiviert; die neue Vorbereitung 1.3.8 ist oben getrennt dokumentiert.
 - Alle fünf Tabs und Menüeinträge für Verlauf, Links, Einstellungen und Neuladen prüfen. Kanal-/Suchlinks aus dem Player sollen den Browser öffnen; native Videoaktionen müssen stets zum aktuell sichtbaren Video gehören.
 
 ### Konto- und Aktionsabnahme
@@ -143,7 +190,7 @@ YouTubes Live-Webstruktur, Consent-Dialoge, regionale Inhalte, Kontobeschränkun
 - Keine Behauptung vollständiger 1:1-Parität: Web- und native Kontositzung bleiben getrennt, eigene/native Übergänge und Mini-Player weichen vom Original ab; YouTube-PiP/Hintergrundwiedergabe bleiben deaktiviert. Mehr Details siehe AUDIT.md.
 # YouTube-Werbeschutz 1.3.5
 
-Aktuell: [Gecko-Kaltstart-Fix 1.3.7](RELEASE-1.3.7.md). Die zyklische
+Vorheriger Stand: [Gecko-Kaltstart-Fix 1.3.7](RELEASE-1.3.7.md). Die zyklische
 Abhängigkeit zwischen erstem Fenster und Adblock-Hintergrundprozess wurde im
 gebündelten Gecko-Quellcode nachvollzogen. Neuer Quellcode-/Modelltest mit
 120 Startzyklen und negativem Vergleich des alten Ablaufs bestanden.

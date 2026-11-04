@@ -4,10 +4,24 @@ import hashlib
 import json
 
 root = Path(__file__).resolve().parents[1]
+pip_review = json.loads((root / "scripts/pip-reviewed-changes.json").read_text(encoding="utf-8"))
+pip_originals = {}
+for name, review in pip_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " PiP change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed PiP changes")
+    pip_originals[name] = content
+for name, expected in pip_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed PiP helper")
 portrait_review = json.loads((root / "scripts/portrait-insets-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
 portrait_originals = {}
 for name, review in portrait_review.items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = pip_originals.get(name, (root / name).read_text(encoding="utf-8"))
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " portrait-inset change missing or duplicated")
@@ -164,7 +178,7 @@ for name, expected in baseline.items():
     if not file.is_file():
         failures.append(name + " missing")
         continue
-    content = portrait_originals.get(name, file.read_text(encoding="utf-8").replace("\r\n", "\n"))
+    content = portrait_originals.get(name, pip_originals.get(name, file.read_text(encoding="utf-8").replace("\r\n", "\n")))
     if name in adblock_review:
         review = adblock_review[name]
         for change in review["changes"]:
@@ -217,4 +231,4 @@ for name, expected in baseline.items():
         failures.append(name + " differs outside reviewed hooks and copy")
 if failures:
     raise SystemExit("FAIL original app scope:\n" + "\n".join(failures))
-print(f"PASS {len(baseline)} original source files preserved; only reviewed Home, resume, miniplayer, rotation, portrait insets and adblock integration changes allowed.")
+print(f"PASS {len(baseline)} original source files preserved; only reviewed Home, resume, miniplayer, rotation, portrait insets, adblock and native PiP changes allowed.")

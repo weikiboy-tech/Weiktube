@@ -1,10 +1,8 @@
 package com.weiktube.app
 
-import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
-import android.util.Rational
 import android.view.View
 import android.view.WindowManager
 import android.webkit.CookieManager
@@ -67,6 +65,11 @@ class MainActivity : ComponentActivity() {
     }
     var foreground by mutableStateOf(true)
         private set
+    private var screenOff by mutableStateOf(false)
+    // STARTED remains true for visible PiP. A stale PiP flag after onStop must not grant playback.
+    val playerMayRun get() = foreground && !screenOff && !isFinishing && !isDestroyed
+    private var pipUiBlocked = false
+    private lateinit var nativePip: NativePipController
     private var pendingOriginalHomeVideo: String? = null
     private var originalHomePlayer = false
     // The embedded view uses the same one-time return ticket and existing player entry point.
@@ -136,6 +139,11 @@ class MainActivity : ComponentActivity() {
             onVideo = ::acceptOriginalHomeVideo,
             onExit = { selectTab(0) },
             onNavigationState = { homeCanGoBack = it })
+        nativePip = NativePipController(this, ::pipSnapshot, player::play, player::pause, {
+            screenOff = true
+            player.pauseView(); browser.pauseMedia(); shorts?.pauseMedia()
+            keepAwake(false)
+        }, ::message, screenUnlocked = { screenOff = screenIsUnavailable() })
         setContent { WeiktubeApp(this, model) }
         if (savedInstanceState != null) {
             if (savedInstanceState.containsKey("orientation_before_player"))
@@ -225,48 +233,73 @@ class MainActivity : ComponentActivity() {
         selectTab(0)
         originalHome.navigate("https://m.youtube.com/results?search_query=")
     }
-    fun enterPip() {
-        if (player.source == null || player.isYoutube) return
-        if (!packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
-            message("Dieses Gerät unterstützt kein Picture-in-Picture."); return
+    fun enterPip() { nativePip.enter() }
+    fun syncPipState(blockedByUi: Boolean? = null) {
+        if (blockedByUi != null) pipUiBlocked = blockedByUi
+        if (::nativePip.isInitialized && ::player.isInitialized) nativePip.sync()
+    }
+    private fun pipSnapshot(): NativePipController.Snapshot {
+        val rect = android.graphics.Rect()
+        val target = customView ?: player.view
+        val visible = target.isShown && target.getGlobalVisibleRect(rect)
+        if (visible) {
+            // getGlobalVisibleRect is in root coordinates; PiP expects window coordinates.
+            val origin = IntArray(2)
+            target.rootView.getLocationInWindow(origin)
+            rect.offset(origin[0], origin[1])
+            if (customView == null && player.isYoutube && player.expanded && !pip &&
+                resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE) {
+                // The portrait watch document also contains recommendations. Only its top video
+                // slot (same 16:9 slot as WATCH_CHROME) is a useful transition hint.
+                rect.bottom = minOf(rect.bottom, rect.top + rect.width() * 9 / 16)
+            }
         }
-        hideFullscreen()
-        try {
-            val rect = android.graphics.Rect()
-            player.view.getGlobalVisibleRect(rect)
-            val params = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
-            if (!rect.isEmpty) params.setSourceRectHint(rect)
-            // Explicit button only: never auto-enter PiP for YouTube or while browsing.
-            if (android.os.Build.VERSION.SDK_INT >= 31) params.setAutoEnterEnabled(false)
-            if (!enterPictureInPictureMode(params.build()))
-                message("Picture-in-Picture ist in den Android-Einstellungen deaktiviert.")
-        } catch (_: IllegalStateException) { message("Picture-in-Picture ist momentan nicht verfügbar.") }
+        return NativePipController.Snapshot(player.source, player.pipReady, player.playing,
+            playerMayRun && visible, hostResumed, pipUiBlocked || (tab == 1 && !player.expanded),
+            player.videoWidth, player.videoHeight, rect.takeIf { visible && !it.isEmpty })
+    }
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (::nativePip.isInitialized) nativePip.onUserLeaveHint()
     }
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pip = isInPictureInPictureMode
+        if (pip) hideFullscreen()
         syncPlayerPresentation()
         if (pip) { browser.pauseMedia(); shorts?.pauseMedia() }
-        else if (foreground && isWebTab && !isPersonalHome) activeBrowser.resume()
+        else if (playerMayRun && player.source == null && isWebTab && !isPersonalHome) activeBrowser.resume()
         syncOriginalHomeVisibility()
+        if (::nativePip.isInitialized) nativePip.modeChanged(pip)
     }
     override fun onPause() {
         fullscreenOrientation.disable()
         hostResumed = false
         syncOriginalHomeVisibility()
         super.onPause()
-        if (!isInPictureInPictureMode) { player.pauseView(); browser.pauseMedia(); shorts?.pauseMedia() }
+        // PiP is a PAUSED, visible Activity. The system callback may arrive after onPause.
+        // Pause the player in onStop instead; never interrupt the existing document here.
+        browser.pauseMedia(); shorts?.pauseMedia()
     }
     override fun onStop() {
         foreground = false
         player.pauseView()
         browser.pauseMedia(); shorts?.pauseMedia()
+        keepAwake(false)
+        if (::nativePip.isInitialized) nativePip.stopped()
         super.onStop()
     }
-    override fun onStart() { super.onStart(); foreground = true }
+    override fun onStart() {
+        super.onStart()
+        foreground = true
+        screenOff = screenIsUnavailable()
+    }
+    private fun screenIsUnavailable() = getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked ||
+        !getSystemService(android.os.PowerManager::class.java).isInteractive
     override fun onResume() {
         super.onResume()
         hostResumed = true
+        screenOff = screenIsUnavailable()
         if (customView != null && fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()
         syncPlayerPresentation()
         if (::updater.isInitialized) updater.onForeground()
@@ -274,6 +307,7 @@ class MainActivity : ComponentActivity() {
         if (::player.isInitialized) { player.resumeView(); if (isWebTab && !isPersonalHome) activeBrowser.resume() }
         openPendingOriginalHomeVideo()
         syncOriginalHomeVisibility()
+        if (::nativePip.isInitialized) nativePip.resumed()
     }
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -283,6 +317,7 @@ class MainActivity : ComponentActivity() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         syncPlayerPresentation()
+        syncPipState()
     }
 
     /** Rotation changes only the presentation of the retained player, never its document. */
@@ -411,6 +446,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onDestroy() {
         hostResumed = false
+        if (::nativePip.isInitialized) nativePip.close()
         originalHome.close()
         if (isFinishing) OriginalHomeReturn.discard()
         subscriptionFeed.close()

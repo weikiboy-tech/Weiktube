@@ -28,6 +28,8 @@ jobs:
           node scripts/check-adblock-scripts.cjs
           node scripts/test-gecko-adblock.mjs
           node scripts/check-player-scripts.cjs
+          node scripts/check-native-pip-integration.cjs
+          node scripts/check-playback-observer.cjs
           node scripts/check-browser-scripts.cjs
           node scripts/check-home-bridge.cjs
           node scripts/check-original-home-navigation.cjs

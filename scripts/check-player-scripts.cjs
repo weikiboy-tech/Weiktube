@@ -74,6 +74,22 @@ test('Already loaded video starts on explicit request, not on ordinary allowance
   assert.equal(f.video.playCalls, 1);
 });
 
+test('Repeated native Play requests never toggle or replace the retained video', () => {
+  const f = mediaFixture({ ready: 2 });
+  const node = f.video;
+  node.currentTime = 87;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    f.context.weiktubeSetPlayback(true, true);
+    assert.equal(node.paused, false);
+    assert.equal(node.currentTime, 87);
+    assert.equal(f.context.document.querySelector('video'), node);
+  }
+  f.context.weiktubeSetPlayback(false, false);
+  assert.equal(node.paused, true, 'native Pause still revokes permission');
+  node.play();
+  assert.equal(node.paused, true, 'late media events cannot bypass a closed/background player');
+});
+
 test('Ten explicit reselections resume the retained video without replacing or rewinding it', () => {
   const f = mediaFixture({ ready: 2 });
   const node = f.context.document.querySelector('video');
@@ -266,5 +282,66 @@ test('Mini to landscape to portrait restores the original detail scroll without 
   assert.equal(f.context.scrollY, 345, 'Switches between compact and landscape modes must not overwrite the saved portrait position');
   assert.equal(f.video.currentTime, 73); assert.equal(f.video.paused, false);
   assert.equal(f.context.document.querySelector('video'), f.video);
+});
+
+test('Ten Android PiP round trips retain video/time/play state and restore portrait scroll', () => {
+  const f = watchFixture(); f.install();
+  const presentation = f.context.weiktubeWatchPresentation;
+  const node = f.video;
+  for (let cycle = 0; cycle < 10; cycle++) {
+    const scroll = 250 + cycle * 21;
+    const seconds = 140 + cycle;
+    const paused = cycle % 2 === 0;
+    f.context.scrollY = scroll; node.currentTime = seconds; node.paused = paused;
+    f.context.innerWidth = 300; f.context.innerHeight = 200;
+    presentation(false, true, true, true);
+    assert.equal(f.attrs['data-weiktube-system-pip'], '1');
+    assert.equal(f.attrs['data-weiktube-video-only'], '1');
+    assert.equal(f.attrs['data-weiktube-mini'], '0');
+    assert.equal(f.cssProperties['--weiktube-watch-height'], '200px');
+    assert.equal(f.context.scrollY, 0);
+    f.context.scrollY = 6; presentation(false, false, true, true); f.install();
+    f.context.innerHeight = 220; f.events.resize();
+    assert.equal(f.cssProperties['--weiktube-watch-height'], '220px');
+    f.context.innerWidth = 363; f.context.innerHeight = 669;
+    presentation(false, true, false, false);
+    assert.equal(f.attrs['data-weiktube-system-pip'], '0');
+    assert.equal(f.attrs['data-weiktube-video-only'], '0');
+    assert.equal(f.context.scrollY, scroll);
+    assert.equal(f.cssProperties['--weiktube-watch-height'], '204.1875px');
+    assert.equal(f.context.weiktubeWatchPresentation, presentation);
+    assert.equal(f.context.document.querySelector('video'), node);
+    assert.equal(node.currentTime, seconds); assert.equal(node.paused, paused);
+  }
+  assert.equal(f.styles.length, 1);
+  const css = f.styles[0].textContent;
+  const pipRules = css.split('}').filter(rule => rule.includes('data-weiktube-system-pip'));
+  assert.equal(pipRules.length, 1);
+  assert.match(pipRules[0], /ytm-player-controls/);
+  assert.match(pipRules[0], /display:none!important/);
+  assert.doesNotMatch(pipRules[0], /caption-window|\bvideo\b/, 'PiP must not hide captions or the media element');
+  for (const rule of css.split('}').filter(rule => rule.includes('data-weiktube-video-only')))
+    assert.doesNotMatch(rule, /display\s*:\s*none|visibility\s*:\s*hidden/, 'landscape controls remain unaffected');
+});
+
+test('PiP from mini or landscape preserves isolated-scroll ownership and restores either mode', () => {
+  for (const miniBefore of [true, false]) {
+    const f = watchFixture(); f.install();
+    const presentation = f.context.weiktubeWatchPresentation;
+    presentation(miniBefore, true, !miniBefore, false);
+    f.context.scrollY = 8;
+    presentation(miniBefore, true, false, true); // PiP itself must override stale compact flags.
+    assert.equal(f.attrs['data-weiktube-mini'], '0');
+    assert.equal(f.attrs['data-weiktube-video-only'], '1');
+    assert.equal(f.attrs['data-weiktube-system-pip'], '1');
+    presentation(miniBefore, true, !miniBefore, false);
+    assert.equal(f.attrs['data-weiktube-mini'], miniBefore ? '1' : '0');
+    assert.equal(f.attrs['data-weiktube-video-only'], miniBefore ? '0' : '1');
+    assert.equal(f.attrs['data-weiktube-system-pip'], '0');
+    presentation(false, true, false); // Existing three-argument calls still restore portrait.
+    assert.equal(f.context.scrollY, 345);
+    assert.equal(f.context.document.querySelector('video'), f.video);
+    assert.equal(f.video.currentTime, 73); assert.equal(f.video.paused, false);
+  }
 });
 console.log(`PASS ${passed} player script fixtures. Real Android/WebView playback remains a separate device test.`);

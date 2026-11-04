@@ -2,7 +2,20 @@
 
 Die App prüft beim Öffnen maximal einmal pro 24 Stunden auf eine neue Version. Das lässt sich unter App-Updates ausschalten. Es gibt keinen permanenten Hintergrunddienst und keine stille Installation: Nach einer verfügbaren Version startet der Nutzer den Download; Android bestätigt die Installation. Fehlgeschlagene automatische Prüfungen werden ebenfalls frühestens am nächsten Tag wiederholt. „Jetzt nach Updates suchen“ ist jederzeit möglich.
 
-Standardquelle: `https://github.com/weikiboy-tech/Weiktube/releases/latest/download/update.json`. Die Quelle kann geändert werden. Reguläre Version ist 1.3.2 (Versioncode 16). Fehlt eine Release-Datei oder ist sie nicht erreichbar, meldet die App einen Serverfehler; sie behauptet dann nicht, aktuell zu sein.
+Standardquelle: `https://github.com/weikiboy-tech/Weiktube/releases/latest/download/update.json`. Die Quelle kann geändert werden. Die tatsächlich angebotene Version steht im veröffentlichten Feed. Ein lokal vorbereiteter Versionsstand ist noch kein verfügbares Update. Fehlt eine Release-Datei oder ist sie nicht erreichbar, meldet die App einen Serverfehler; sie behauptet dann nicht, aktuell zu sein.
+
+## Version 1.3.8 – Android-Bild-in-Bild
+
+Version 1.3.8 / Code 22 enthält das PiP-Update; Release-Build, 234 JVM-Tests,
+Scriptprüfungen und APK-Prüfung bestanden. Die neue Integration
+verwendet dieselbe Player-WebView im Android-Systemfenster. Sie ändert weder
+Paketname noch den vorgesehenen Signierschlüssel, die API-Kontoanbindung oder
+den getrennten signierten Filterupdate-Mechanismus.
+
+Beide APKs, Quellcode, Feed, Versionsnummern und Prüfsummen werden gemeinsam
+veröffentlicht. Die bestehende `latest`-Quelle liefert das neue Release. Für den PiP-
+Gerätetest gibt es noch keinen Erfolgsnachweis; YouTube kann Wiedergabe
+browserseitig blockieren. Details: [RELEASE-1.3.8.md](RELEASE-1.3.8.md).
 
 ## Release-Dateien
 
@@ -59,7 +72,8 @@ Erforderlich ist die Android-Berechtigung `REQUEST_INSTALL_PACKAGES`. Die Androi
 
 ## Freigabestand
 
-Prüfstand und Artefaktprüfung der regulären Version stehen in `RELEASE-1.3.2.md`.
+Der historische Prüfstand der Veröffentlichung 1.3.2 steht in `RELEASE-1.3.2.md`;
+der aktuelle Prüfstand und die offenen Gerätetests für 1.3.8 stehen in `RELEASE-1.3.8.md`.
 Der vollständige Ablauf innerhalb der App – höhere Version erkennen, herunterladen,
 prüfen, Android-Freigabe, Installation und Rückkehr – wurde hier nicht auf einem
 Gerät durchgespielt. Abbruch, Prozessverlust und erneuter Versuch bleiben Teil der

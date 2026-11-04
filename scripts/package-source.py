@@ -15,6 +15,7 @@ OPTIONAL_FILES.add("RELEASE-1.3.2.md")
 OPTIONAL_FILES.add("RELEASE-1.3.5.md")
 OPTIONAL_FILES.add("RELEASE-1.3.6.md")
 OPTIONAL_FILES.add("RELEASE-1.3.7.md")
+OPTIONAL_FILES.add("RELEASE-1.3.8.md")
 OPTIONAL_FILES.add("ADBLOCK-1.3.5.md")
 PRIVATE_PARTS = {
     "build", ".gradle", ".kotlin", ".git", "__pycache__", "validation", "screenshots",
