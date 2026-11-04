@@ -196,7 +196,7 @@ test('Mini/expanded transitions preserve video node, position, playback and expa
   const css = f.styles[0].textContent;
   assert.ok(!/(?:^|})\s*video\s*\{|iframe\s*\{|filter\s*:|ad-showing|advert/i.test(css), 'No global media/ad replacement, inversion or hiding rules');
   assert.match(css, /html\[data-weiktube-video-only="1"\] #player-container-id video\{[^}]*object-fit:contain!important/,
-    'Video sizing is confined to the existing player in landscape-only presentation');
+    'Video sizing is confined to the existing player');
 });
 
 test('Chrome leaves embedded frames, non-YouTube pages and embed endpoints untouched', () => {
@@ -276,7 +276,7 @@ test('Mini to landscape to portrait restores the original detail scroll without 
   f.context.scrollY = 9;
   presentation(true, true, false);
   assert.equal(f.attrs['data-weiktube-mini'], '1');
-  assert.equal(f.attrs['data-weiktube-video-only'], '0');
+  assert.equal(f.attrs['data-weiktube-video-only'], '1', 'Mini must isolate the existing video just like PiP');
   presentation(false, true, true);
   presentation(false, true, false);
   assert.equal(f.context.scrollY, 345, 'Switches between compact and landscape modes must not overwrite the saved portrait position');
@@ -316,10 +316,11 @@ test('Ten Android PiP round trips retain video/time/play state and restore portr
   assert.equal(f.styles.length, 1);
   const css = f.styles[0].textContent;
   const pipRules = css.split('}').filter(rule => rule.includes('data-weiktube-system-pip'));
-  assert.equal(pipRules.length, 1);
-  assert.match(pipRules[0], /ytm-player-controls/);
-  assert.match(pipRules[0], /display:none!important/);
-  assert.doesNotMatch(pipRules[0], /caption-window|\bvideo\b/, 'PiP must not hide captions or the media element');
+  assert.equal(pipRules.length, 2);
+  assert.match(pipRules.find(rule => rule.includes('ytm-player-controls')), /display:none!important/);
+  assert.match(pipRules.find(rule => rule.includes('ytmDrawerLayoutContainerDrawerLayout')), /data-weiktube-mini="1"/);
+  for (const rule of pipRules)
+    assert.doesNotMatch(rule, /caption-window|\bvideo\b/, 'PiP must not hide captions or the media element');
   for (const rule of css.split('}').filter(rule => rule.includes('data-weiktube-video-only')))
     assert.doesNotMatch(rule, /display\s*:\s*none|visibility\s*:\s*hidden/, 'landscape controls remain unaffected');
 });
@@ -336,7 +337,7 @@ test('PiP from mini or landscape preserves isolated-scroll ownership and restore
     assert.equal(f.attrs['data-weiktube-system-pip'], '1');
     presentation(miniBefore, true, !miniBefore, false);
     assert.equal(f.attrs['data-weiktube-mini'], miniBefore ? '1' : '0');
-    assert.equal(f.attrs['data-weiktube-video-only'], miniBefore ? '0' : '1');
+    assert.equal(f.attrs['data-weiktube-video-only'], '1');
     assert.equal(f.attrs['data-weiktube-system-pip'], '0');
     presentation(false, true, false); // Existing three-argument calls still restore portrait.
     assert.equal(f.context.scrollY, 345);

@@ -4,10 +4,21 @@ import hashlib
 import json
 
 root = Path(__file__).resolve().parents[1]
+repair_review = json.loads((root / "scripts/mini-repair-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
+repair_originals = {}
+for name, review in repair_review.items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " mini-player repair missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed mini-player repair")
+    repair_originals[name] = content
 pip_review = json.loads((root / "scripts/pip-reviewed-changes.json").read_text(encoding="utf-8"))
 pip_originals = {}
 for name, review in pip_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = repair_originals.get(name, (root / name).read_text(encoding="utf-8"))
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " PiP change missing or duplicated")

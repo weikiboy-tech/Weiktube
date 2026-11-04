@@ -1,6 +1,6 @@
 param(
-    [int]$VersionCode = 22,
-    [string]$VersionName = '1.3.8',
+    [int]$VersionCode = 23,
+    [string]$VersionName = '1.3.9',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
     [switch]$Publish
@@ -11,7 +11,7 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = "v$VersionName"
-$expectedMain = 'd57948f87aaf1f27904eff4c966c334302cf6546'
+$expectedMain = '7b3e8f62d2027c5eb5129f991edfc4e6a5891323'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
 $output = Join-Path $project "dist/stable-$VersionName"
 $source = Join-Path $project 'Weiktube-Quellcode.zip'
@@ -23,7 +23,7 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Android-Bild-in-Bild für den vorhandenen Weiktube-Player: laufende Videos können beim Verlassen der App ins native Systemfenster wechseln, einschließlich YouTube. Dieselbe WebView bleibt erhalten; Play/Pause im Systemfenster, Stoppen bei unsichtbarer Activity und Bildschirmsperre. Automatisiert geprüft, aber noch kein echter YouTube-PiP-Gerätetest; mögliche browserseitige Einschränkungen bleiben bestehen. Über die vorhandene App installieren.'
+$updateNotes = 'Der schmale Videostreifen kam von einer überstehenden YouTube-Seitenleiste. Sie wird ausschließlich im Miniplayer und Android-PiP ausgeblendet. Der vorhandene Player behält Video und Position; veraltete Videoabstände und PiP-Bildschirmabstände werden korrigiert. Zurück minimiert ohne ausdrückliche Pause. Bildkorrektur im Browser geprüft; ein YouTube-seitiger Pausenfall bei wiederholtem Verkleinern bleibt offen. Handytest übernimmt der Nutzer. Über die vorhandene App installieren.'
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or
     $build -notmatch ('(?m)^\s*versionName\s*=\s*"' + [regex]::Escape($VersionName) + '"\s*$')) {
@@ -168,7 +168,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create source tree.' }
     # A new isolated repository: preserve the reviewed history without replacing
     # any existing working tree or rewriting any local/remote branch.
-    $commit = git commit-tree $tree -p $main -m "Release Weiktube $VersionName with native Android picture-in-picture"
+    $commit = git commit-tree $tree -p $main -m "Fix retained player viewport and minimization in Weiktube $VersionName"
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create release commit.' }
     git update-ref refs/heads/main $commit ('0' * 40)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated main ref.' }

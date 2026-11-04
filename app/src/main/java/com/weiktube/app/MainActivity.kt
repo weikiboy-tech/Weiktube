@@ -379,9 +379,10 @@ class MainActivity : ComponentActivity() {
     fun back(): Boolean = when {
         fullscreen -> { hideFullscreen(); true }
         player.source != null && player.expanded -> {
-            player.expanded = false
+            // Back, the down arrow and the drag gesture minimize the same retained player.
+            // Returning to its Home document is not a playback-pause command.
+            minimizeWebVideo()
             if (originalHomePlayer && OriginalHomeReturn.resumeToken() != null) {
-                player.pause()
                 openOriginalHome()
             }
             true

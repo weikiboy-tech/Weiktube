@@ -1,6 +1,60 @@
 # Weiktube – Prüfprotokoll
 
-## Aktueller Stand 1.3.8: Android-Bild-in-Bild
+## Aktueller Stand 1.3.9: Miniplayer-/PiP-Geometrie
+
+**Finaler Prüfstand mit Schubladenkorrektur:** Release-Build und Artefaktprüfung
+bestanden, 236 JVM-Tests grün:
+144 App, 72 Home, 20 Filter, keine Fehler/Skips. Unveränderte Home-/Filtertests
+wurden von Gradle als aktuell übernommen. App/Home-Lint: 0 Fehler, 33/41 Warnungen.
+Beide APKs haben die ursprüngliche Signatur, sind nicht debuggbar und unter 128 MiB.
+
+16 Player- und 5 Observer-Fixtures, native PiP-Quellverträge sowie die neue lokale
+Chromium-Layoutfixture mit negativen Kontrollen und zehn Zustandszyklen bestanden.
+Home-Kaltstart mit 120 modellierten Zyklen, Navigation mit zehn modellierten Zyklen
+und vorhandene Adblock-Scriptprüfungen ebenfalls grün. Die Scope-Prüfung erhält
+die 46 ursprünglichen Quelldateien außerhalb exakt dokumentierter Änderungen.
+Dies sind keine Android-Instrumentations-/Compositor-Tests.
+Die aktualisierte lokale Chromium-Fixture prüft echte rote/blaue PNG-Pixel,
+negative 164-/40-Pixel-Überdeckungen sowie zehn Zyklen, Benutzerpause und
+Scrollposition; alle Prüfungen bestanden, ohne neue Abhängigkeit.
+
+Belegt ist der isolierte Browservergleich mit der echten öffentlichen mobilen
+YouTube-Seite: vor der Korrektur Video-Y=53 bei 196×110 im Mini-Modus und Video-Y=292
+bei 384×216 nach Rückkehr. Mit der kombinierten Mini-/PiP-Videobox und begrenzter
+Watch-Zentrierung lagen 31 Messpunkte aus zehn Mini-/PiP-/Rückkehrzyklen bei X=0/Y=0;
+derselbe Videoknoten und `currentSrc` blieben erhalten. Dieser Chromium-Lauf ist
+kein Android-WebView-, Compose- oder System-PiP-Test.
+**Korrekte Bounds bedeuteten nicht korrektes Bild:** Anschließende Screenshots
+und Hit-Tests fanden `.ytmDrawerLayoutContainerDrawerLayout` über dem Video.
+Die geschlossene Schublade war 360 Pixel breit, fest bei `left: -100vw` positioniert,
+mit `z-index: 2` und Deckkraft 1. Im 196er Mini-Viewport überdeckte sie 164 Pixel,
+im 320er PiP-Viewport 40 Pixel. 164×3,5=574 Bildpunkte passen zur historischen
+grauen Android-Fläche. Der CSS-Fix blendet ausschließlich diese Schublade bei
+Mini-/System-PiP-Rootattributen aus; Normalansicht/gewöhnliches Querformat bleiben
+unberührt. Der finale öffentliche Browserlauf enthält 32 Messpunkte aus
+Normalansicht, negativer Baseline und zehn Mini-/PiP-/Rückkehrzyklen. Es blieb
+stets genau ein Video mit demselben Knoten und `currentSrc`. Die Mini- und
+PiP-Endscreenshots des zehnten Zyklus wurden visuell vollständig und ohne grauen Balken bestätigt.
+
+Im finalen Browserlauf mit Schubladenfix pausierte YouTube beim zweiten Mini-
+Übergang bei `currentTime=16.010453` Sekunden; es wurde keine automatische
+Wiederaufnahme erzwungen. Ursache und durchgängige Wiedergabe bleiben als
+separates Problem offen. Der historische
+OnePlus-Test vom 03.11. zeigte bereits korrekte DOM-Maße bei gleichzeitig defektem
+sichtbarem Videobild; eine gemeinsame Ursache aller Renderingfehler ist nicht
+abschließend nachgewiesen.
+
+**Keine aktuellen Handytests.** Der isolierte Android-Emulator erreichte keine
+nutzbare Sitzung und wurde beendet. Auf Nutzerwunsch erfolgen keine weiteren
+Geräteversuche; der Nutzer übernimmt die Prüfung der APK. Es wird kein Erfolg
+von Android-Instrumentation oder echtem Compose-/WebView-Rendering behauptet.
+
+Offene praktische Abnahme: mehrere Mini-/PiP-/Vergrößerungswechsel, Android-Zurück
+ohne zusätzliche Pause, System-Play/Pause, X-Schließen, Rotation und Rückkehr zur
+anklickbaren Gecko-Startseite. Änderung und Prüfgrenzen:
+[RELEASE-1.3.9.md](RELEASE-1.3.9.md).
+
+## Vorheriger Stand 1.3.8: Android-Bild-in-Bild
 
 **Release-Build und Artefaktprüfung bestanden. Kein echter Gerätetest wurde durchgeführt.**
 234 JVM-Tests grün: 142 App, 72 Home, 20 Filter. Unveränderte Home-/Filtertests

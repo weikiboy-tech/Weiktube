@@ -4,6 +4,28 @@ Die App prüft beim Öffnen maximal einmal pro 24 Stunden auf eine neue Version.
 
 Standardquelle: `https://github.com/weikiboy-tech/Weiktube/releases/latest/download/update.json`. Die Quelle kann geändert werden. Die tatsächlich angebotene Version steht im veröffentlichten Feed. Ein lokal vorbereiteter Versionsstand ist noch kein verfügbares Update. Fehlt eine Release-Datei oder ist sie nicht erreichbar, meldet die App einen Serverfehler; sie behauptet dann nicht, aktuell zu sein.
 
+## Version 1.3.9 – Miniplayer-/PiP-Korrektur
+
+Version 1.3.9 / Code 23 korrigiert die bestehende Videobox für Miniplayer und
+System-PiP, die an die PiP-WebView gelieferten Systemleisten-/Displayausschnitt-
+Insets und die Pause beim Verkleinern über Android-Zurück. Das Compose-Padding
+war bereits null. Es wird keine zweite Wiedergabeimplementierung eingeführt.
+Zusätzlich wird eine geschlossene YouTube-Schublade ausgeblendet, die das Video
+in Mini/PiP überdeckte. Die Regel gilt nur für genau diese Schublade in diesen
+beiden Darstellungen, nicht für die normale Watch-Ansicht oder Querformat.
+
+Finaler Release-Build mit Schubladenkorrektur, 236 JVM-Tests, Scriptprüfungen
+und lokale Chromium-Pixel-/Überdeckungstests bestanden. Die Mini- und
+PiP-Endscreenshots des zehnten Zyklus im öffentlichen Browserlauf zeigen das Bild ohne grauen Balken.
+Die Überdeckung ist im Browser nachgewiesen; die frühere reine Bounds-Prüfung
+war kein sichtbarer Bildnachweis. Weiterhin nicht bestätigt ist eine
+durchgängige Wiedergabe. Kein aktueller Handy-/Android-Emulatortest; der Nutzer
+prüft die APK selbst. Details: [RELEASE-1.3.9.md](RELEASE-1.3.9.md).
+
+Die `latest`-Quelle bleibt bis zum tatsächlichen Upload bei der zuletzt
+veröffentlichten Version. Erst übereinstimmende APKs, Quellcode, Feed,
+Versionsnummern und Prüfsummen werden gemeinsam als neue Release veröffentlicht.
+
 ## Version 1.3.8 – Android-Bild-in-Bild
 
 Version 1.3.8 / Code 22 enthält das PiP-Update; Release-Build, 234 JVM-Tests,

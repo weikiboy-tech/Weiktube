@@ -215,7 +215,8 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                         AndroidView(factory = { context -> PlayerGestureLayout(context).also { it.attach(p.view) } },
                             modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds(), update = {
                                 it.visibility = if (playerVisible) android.view.View.VISIBLE else android.view.View.INVISIBLE
-                                it.setSystemInsetsHandledByHost(!landscapeVideo && !a.pip)
+                                // PiP has no in-window system bars. Clear old phone/cutout insets there too.
+                                it.setSystemInsetsHandledByHost(!landscapeVideo)
                                 it.configure(enabled = full && portrait && !a.fullscreen && !a.pip,
                                     youtube = p.isYoutube, onDrag = { distance -> dragPixels = distance },
                                     onMinimize = a::minimizeWebVideo)

@@ -1,4 +1,24 @@
-# Weiktube 1.3.8
+# Weiktube 1.3.9
+
+**Neu in 1.3.9:** Gezielte Korrekturen für Miniplayer und Android-Bild-in-Bild.
+Beide Darstellungen verwenden dieselbe Videofläche; zurückgebliebene
+YouTube-Zentrierungsabstände werden innerhalb dieser Fläche korrigiert.
+Eine geschlossene YouTube-Schublade ragte trotz korrekter Videomaße als graue
+Fläche über Mini- und PiP-Bild. Genau diese Schublade wird nur in diesen beiden
+Darstellungen ausgeblendet; Normalansicht und gewöhnliches Querformat bleiben erhalten.
+Android-Zurück verkleinert das Video ohne zusätzliches Pausieren. Im PiP-Fenster
+werden keine Systemleisten-/Displayausschnitt-Insetwerte an die WebView weitergegeben;
+das Compose-Padding war dort bereits null.
+
+Der Browservergleich belegt die Überdeckung per Screenshot und Hit-Test.
+Die vorherigen 31 korrekten Geometriemesspunkte waren allein **kein Bildnachweis**.
+Nach dem Fix zeigen die Mini- und PiP-Endscreenshots das vollständige Bild
+ohne grauen Balken. Release-Build, 236 JVM-Tests, Scriptprüfungen und lokale
+Chromium-Pixeltests bestanden. Eine zusätzliche YouTube-Pause beim zweiten
+Mini-Übergang bleibt offen. Kein Handy- oder erfolgreicher
+Android-Emulatortest; die APK-Abnahme übernimmt der Nutzer.
+Details: [Release 1.3.9](RELEASE-1.3.9.md). Die Downloadlinks zeigen bis zur
+Veröffentlichung weiterhin die zuletzt veröffentlichte Version.
 
 **Neu für 1.3.8:** Android-Bild-in-Bild für den bestehenden Weiktube-Player,
 einschließlich YouTube-Watch-Seiten. Dabei bleibt dieselbe WebView erhalten.
@@ -42,7 +62,7 @@ die Startseite erhalten. Der Konto-Einstieg öffnet sich einmal automatisch und 
   für passende Intel-/Emulator-Geräte. Keine Unterstützung für reine 32-Bit-Geräte.
 - Updates über **Einstellungen & Updates → Jetzt nach Updates suchen**. Android
   bestätigt die Installation; die App installiert Updates nicht still im Hintergrund.
-- [Release 1.3.8](RELEASE-1.3.8.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
+- [Release 1.3.9](RELEASE-1.3.9.md), [Release 1.3.8](RELEASE-1.3.8.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
 
 Die Website verwendet das dort angemeldete Konto. Die optionale Google-API-Freigabe
 für Abos/Playlists ist separat; die öffentliche APK-Veröffentlichung erweitert

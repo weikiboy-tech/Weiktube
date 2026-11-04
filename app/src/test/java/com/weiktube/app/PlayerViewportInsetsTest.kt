@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Insets
 import android.graphics.Rect
 import android.view.DisplayCutout
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.webkit.WebView
 import android.widget.FrameLayout
@@ -78,6 +79,55 @@ class PlayerViewportInsetsTest {
         assertEquals(20, web.received.size)
     }
 
+    @Test fun tenMiniPipAndRestoreCyclesKeepPhoneInsetsOutOfTheRetainedSmallViewport() {
+        // Android can still expose the phone's old safe area during PiP's window transition.
+        // Mini and PiP both need explicit zeros; UI wiring is checked by the source-contract script.
+        repeat(10) { cycle ->
+            val phone = landscapeInsets(leftCutout = if (cycle % 2 == 0) 41 else 0,
+                rightCutout = if (cycle % 2 == 0) 0 else 41)
+            for ((stage, size) in listOf("mini" to (196 to 110), "pip" to (320 to 180), "restored mini" to (196 to 110))) {
+                player.setSystemInsetsHandledByHost(true)
+                resizeAndDispatch(size.first, size.second, phone)
+                assertEquals("$stage cycle $cycle", Insets.NONE, web.latest.getInsets(bars or cutout))
+                assertEquals("stable $stage cycle $cycle", Insets.NONE, web.latest.getInsetsIgnoringVisibility(bars or cutout))
+                assertNull(web.latest.displayCutout)
+                assertSame("No player replacement on $stage cycle $cycle", web, player.getChildAt(0))
+                assertEquals(1, player.childCount)
+                // JVM WebView has no Chromium layout engine. Check the Android host/child
+                // layout contract; actual rendered video geometry belongs to the browser fixture.
+                assertEquals(size.first, player.width)
+                assertEquals(size.second, player.height)
+                assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, web.layoutParams.width)
+                assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, web.layoutParams.height)
+                assertFalse(web.latest.isConsumed)
+            }
+        }
+        assertEquals(30, web.received.size)
+    }
+
+    @Test fun landscapeToPipClearsCutoutAndReturningToLandscapeRestoresRealInsets() {
+        val phone = landscapeInsets(leftCutout = 41)
+        player.setSystemInsetsHandledByHost(false)
+        resizeAndDispatch(1000, 560, phone)
+        assertEquals(41, web.latest.getInsets(cutout).left)
+        assertEquals(24, web.latest.getInsets(bars).right)
+
+        player.setSystemInsetsHandledByHost(true)
+        resizeAndDispatch(320, 180, phone)
+        assertEquals(Insets.NONE, web.latest.getInsets(bars or cutout))
+        assertEquals(Insets.NONE, web.latest.getInsetsIgnoringVisibility(bars or cutout))
+        assertNull(web.latest.displayCutout)
+
+        player.setSystemInsetsHandledByHost(false)
+        resizeAndDispatch(1000, 560, phone)
+        assertEquals(phone.getInsets(bars or cutout), web.latest.getInsets(bars or cutout))
+        assertEquals(phone.getInsetsIgnoringVisibility(bars or cutout), web.latest.getInsetsIgnoringVisibility(bars or cutout))
+        assertEquals(phone.displayCutout, web.latest.displayCutout)
+        assertEquals("The incoming phone insets were never mutated", 41, phone.getInsets(cutout).left)
+        assertSame(web, player.getChildAt(0))
+        assertEquals(3, web.received.size)
+    }
+
     @Test fun consumedAncestorReproducesStaleInsetsButDirectReplayReachesRetainedWebView() {
         val original = landscapeInsets(leftCutout = 41)
         player.setSystemInsetsHandledByHost(false)
@@ -137,6 +187,15 @@ class PlayerViewportInsetsTest {
             .setVisible(bars, true)
             .setDisplayCutout(displayCutout)
             .build()
+    }
+
+    private fun resizeAndDispatch(width: Int, height: Int, insets: WindowInsets) {
+        player.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(height, android.view.View.MeasureSpec.EXACTLY),
+        )
+        player.layout(0, 0, width, height)
+        player.dispatchPlayerInsets(WindowInsetsCompat.toWindowInsetsCompat(insets))
     }
 
     private class RecordingWebView(context: Context) : WebView(context) {

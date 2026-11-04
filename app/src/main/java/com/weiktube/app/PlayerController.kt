@@ -332,7 +332,8 @@ class PlayerController(private val activity: MainActivity) {
                 var root=document.documentElement;if(!root)return;
                 systemPip=!!systemPip;
                 if(systemPip){mini=false;videoOnly=true;}
-                videoOnly=!!videoOnly&&!mini;
+                // Mini and system PiP both show only this document's existing video.
+                videoOnly=!!videoOnly||mini;
                 var isolated=mini||videoOnly;
                 if(isolated&&!wasIsolated){savedScroll=window.scrollY;window.scrollTo(0,0);}
                 videoOnlyMode=videoOnly;
@@ -346,6 +347,13 @@ class PlayerController(private val activity: MainActivity) {
                     'ytm-app{padding-top:0!important;padding-bottom:0!important}'+
                     '#player-container-id{top:0!important}'+
                     '.player-container .player-size,ytm-watch .player-size{height:var(--weiktube-watch-height)!important;max-height:none!important;padding-bottom:0!important;aspect-ratio:auto!important}'+
+                    // YouTube can retain inline centering offsets from the previous viewport.
+                    // Normalize only the retained player's media box, including the portrait return.
+                    '#player-container-id .html5-video-container{width:100%!important;height:100%!important}'+
+                    '#player-container-id video{left:0!important;top:0!important;width:100%!important;height:100%!important;object-fit:contain!important}'+
+                    // The closed mobile drawer is 360px wide but sits at left:-100vw.
+                    // Below 360px it covers the video; compact modes use native controls.
+                    'html:is([data-weiktube-mini="1"],[data-weiktube-system-pip="1"]) .ytmDrawerLayoutContainerDrawerLayout{display:none!important}'+
                     'html[data-weiktube-video-only="1"],html[data-weiktube-video-only="1"] body{overflow:hidden!important;height:100%!important}'+
                     'html[data-weiktube-video-only="1"] #player-container-id{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;background:#000!important}'+
                     'html[data-weiktube-video-only="1"] #player-container-id :is(#player,.html5-video-player,.html5-video-container,video){width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;aspect-ratio:auto!important}'+

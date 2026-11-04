@@ -22,6 +22,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify retained player layout in Chromium (offline fixture)
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/weiktube-layout" playwright-core@1.61.0
+          WEIKTUBE_PLAYWRIGHT_MODULE="$RUNNER_TEMP/weiktube-layout/node_modules/playwright-core" WEIKTUBE_CHROME_PATH="$(command -v google-chrome)" node scripts/check-player-layout.cjs
       - name: Verify filtering and existing navigation scripts
         run: |
           node scripts/vendor-adblock.mjs --check
