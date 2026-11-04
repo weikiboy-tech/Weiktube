@@ -74,6 +74,42 @@ test('Already loaded video starts on explicit request, not on ordinary allowance
   assert.equal(f.video.playCalls, 1);
 });
 
+test('Ten explicit reselections resume the retained video without replacing or rewinding it', () => {
+  const f = mediaFixture({ ready: 2 });
+  const node = f.context.document.querySelector('video');
+  for (let cycle = 1; cycle <= 10; cycle++) {
+    const seconds = 73 + cycle;
+    node.currentTime = seconds;
+    f.context.weiktubeSetPlayback(false, false); // Returning to Home pauses the current video.
+    assert.equal(node.paused, true);
+    f.context.weiktubeSetPlayback(true, false); // Visibility/permission restoration is not a play request.
+    assert.equal(node.paused, true);
+    assert.equal(node.playCalls, cycle - 1);
+    f.context.weiktubeSetPlayback(true, true); // Explicitly selecting the same source requests playback.
+    assert.equal(node.paused, false);
+    assert.equal(node.playCalls, cycle);
+    assert.equal(f.context.document.querySelector('video'), node);
+    assert.equal(node.currentTime, seconds);
+    f.context.weiktubeSetPlayback(true, false);
+    assert.equal(node.playCalls, cycle, 'A later permission update must not restart playback');
+  }
+});
+
+test('Permission refresh preserves an explicit start until late metadata, without duplicate starts', () => {
+  const f = mediaFixture({ initialVideo: false });
+  f.context.weiktubeSetPlayback(true, true);
+  f.context.weiktubeSetPlayback(true, false); // Compose can refresh permission before metadata arrives.
+  f.install();
+  f.context.weiktubeSetPlayback(true, false);
+  assert.equal(f.video.playCalls, 0);
+  f.insert(); f.video.readyState = 1; f.dispatch('loadedmetadata', f.video);
+  assert.equal(f.video.paused, false);
+  assert.equal(f.video.playCalls, 1);
+  f.dispatch('loadedmetadata', f.video);
+  f.context.weiktubeSetPlayback(true, false);
+  assert.equal(f.video.playCalls, 1);
+});
+
 test('Pause cancels a pending explicit start before video metadata arrives', () => {
   const f = mediaFixture({ initialVideo: false });
   f.context.weiktubeSetPlayback(true, true);
@@ -85,6 +121,7 @@ test('Pause cancels a pending explicit start before video metadata arrives', () 
 
 test('Restoring permission without requestStart never autoplays', () => {
   const f = mediaFixture();
+  f.context.weiktubeSetPlayback(true, true); // A request canceled by pause must not return with permission.
   f.context.weiktubeSetPlayback(false, false);
   f.context.weiktubeSetPlayback(true, false);
   f.video.readyState = 1; f.dispatch('loadedmetadata', f.video);
@@ -141,7 +178,9 @@ test('Mini/expanded transitions preserve video node, position, playback and expa
   assert.equal(node, f.video); assert.equal(node.currentTime, 73); assert.equal(node.paused, false);
   assert.equal(f.styles.length, 1);
   const css = f.styles[0].textContent;
-  assert.ok(!/video\s*\{|iframe\s*\{|filter\s*:|ad-showing|advert/i.test(css), 'No media/ad replacement, inversion or hiding rules');
+  assert.ok(!/(?:^|})\s*video\s*\{|iframe\s*\{|filter\s*:|ad-showing|advert/i.test(css), 'No global media/ad replacement, inversion or hiding rules');
+  assert.match(css, /html\[data-weiktube-video-only="1"\] #player-container-id video\{[^}]*object-fit:contain!important/,
+    'Video sizing is confined to the existing player in landscape-only presentation');
 });
 
 test('Chrome leaves embedded frames, non-YouTube pages and embed endpoints untouched', () => {
@@ -159,6 +198,11 @@ test('Watch geometry uses explicit viewport pixels for full, mini and landscape 
   f.context.innerHeight = 200;
   f.context.weiktubeWatchPresentation(true, true);
   assert.equal(f.cssProperties['--weiktube-watch-height'], '200px');
+  f.context.innerWidth = 196; f.context.innerHeight = 110.25;
+  f.events.resize();
+  assert.equal(f.cssProperties['--weiktube-watch-height'], '110.25px', 'Compact card keeps 16:9 video geometry');
+  f.context.weiktubeWatchPresentation(false, true);
+  assert.equal(f.attrs['data-weiktube-mini'], '0', 'Expanded player restores its own website controls');
   f.context.innerWidth = 900; f.context.innerHeight = 300;
   f.events.resize();
   assert.equal(f.cssProperties['--weiktube-watch-height'], '300px');
@@ -166,5 +210,61 @@ test('Watch geometry uses explicit viewport pixels for full, mini and landscape 
   assert.equal(f.video.currentTime, 73);
   assert.match(f.styles[0].textContent, /height:var\(--weiktube-watch-height\)!important/);
   assert.match(f.styles[0].textContent, /padding-bottom:0!important/);
+});
+
+test('Ten portrait/landscape transitions preserve video identity, time, pause state and detail scroll', () => {
+  const f = watchFixture(); f.install();
+  const node = f.context.document.querySelector('video');
+  const presentation = f.context.weiktubeWatchPresentation;
+  for (let cycle = 0; cycle < 10; cycle++) {
+    const scroll = 345 + cycle * 17;
+    const seconds = 73 + cycle;
+    const paused = cycle % 2 === 0;
+    f.context.scrollY = scroll; node.currentTime = seconds; node.paused = paused;
+    f.context.innerWidth = 600; f.context.innerHeight = 400;
+    presentation(false, true, true);
+    assert.equal(f.attrs['data-weiktube-video-only'], '1');
+    assert.equal(f.attrs['data-weiktube-mini'], '0', 'Landscape retains website controls');
+    assert.equal(f.cssProperties['--weiktube-watch-height'], '400px', 'Uses full height, not the 337.5px 16:9 portrait clamp');
+    assert.equal(f.context.scrollY, 0);
+    f.context.scrollY = 8; presentation(false, false, true); f.install();
+    f.context.innerHeight = 420; f.events.resize();
+    assert.equal(f.cssProperties['--weiktube-watch-height'], '420px');
+    assert.equal(f.context.weiktubeWatchPresentation, presentation);
+    f.context.innerWidth = 363; f.context.innerHeight = 669;
+    presentation(false, true, false);
+    assert.equal(f.attrs['data-weiktube-video-only'], '0');
+    assert.equal(f.attrs['data-weiktube-mini'], '0');
+    assert.equal(f.context.scrollY, scroll);
+    assert.equal(f.cssProperties['--weiktube-watch-height'], '204.1875px');
+    assert.equal(f.context.document.querySelector('video'), node);
+    assert.equal(node.currentTime, seconds); assert.equal(node.paused, paused);
+  }
+  assert.equal(f.styles.length, 1);
+  const css = f.styles[0].textContent;
+  const videoOnlyRules = css.split('}').filter(rule => rule.includes('data-weiktube-video-only'));
+  assert.ok(videoOnlyRules.length > 0);
+  for (const rule of videoOnlyRules) assert.doesNotMatch(rule, /display\s*:\s*none|visibility\s*:\s*hidden/,
+    'Landscape sizing must not hide website playback controls');
+});
+
+test('Mini to landscape to portrait restores the original detail scroll without hiding landscape controls', () => {
+  const f = watchFixture(); f.install();
+  const presentation = f.context.weiktubeWatchPresentation;
+  presentation(true, true, false);
+  assert.equal(f.context.scrollY, 0);
+  assert.equal(f.attrs['data-weiktube-mini'], '1');
+  presentation(false, true, true);
+  assert.equal(f.attrs['data-weiktube-mini'], '0');
+  assert.equal(f.attrs['data-weiktube-video-only'], '1');
+  f.context.scrollY = 9;
+  presentation(true, true, false);
+  assert.equal(f.attrs['data-weiktube-mini'], '1');
+  assert.equal(f.attrs['data-weiktube-video-only'], '0');
+  presentation(false, true, true);
+  presentation(false, true, false);
+  assert.equal(f.context.scrollY, 345, 'Switches between compact and landscape modes must not overwrite the saved portrait position');
+  assert.equal(f.video.currentTime, 73); assert.equal(f.video.paused, false);
+  assert.equal(f.context.document.querySelector('video'), f.video);
 });
 console.log(`PASS ${passed} player script fixtures. Real Android/WebView playback remains a separate device test.`);

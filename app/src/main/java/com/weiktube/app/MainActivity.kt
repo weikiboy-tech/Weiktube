@@ -52,6 +52,19 @@ class MainActivity : ComponentActivity() {
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
     private var orientationBeforeFullscreen = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    private var orientationBeforePlayer: Int? = null
+    private var manualFullscreenSawLandscape = false
+    private val fullscreenOrientation by lazy {
+        object : android.view.OrientationEventListener(this) {
+            override fun onOrientationChanged(degrees: Int) {
+                if (customView == null || !hostResumed || degrees == ORIENTATION_UNKNOWN) return
+                if (degrees in 60..120 || degrees in 240..300) manualFullscreenSawLandscape = true
+                else if (manualFullscreenSawLandscape && (degrees in 0..30 || degrees in 150..210 || degrees in 330..359)) {
+                    hideFullscreen()
+                }
+            }
+        }
+    }
     var foreground by mutableStateOf(true)
         private set
     private var pendingOriginalHomeVideo: String? = null
@@ -102,6 +115,7 @@ class MainActivity : ComponentActivity() {
     fun closeVideo() {
         val returnHome = originalHomePlayer && OriginalHomeReturn.resumeToken() != null
         player.close()
+        syncPlayerPresentation()
         originalHomePlayer = false
         if (returnHome) openOriginalHome()
         else syncOriginalHomeVisibility()
@@ -110,6 +124,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        com.weiktube.filter.YoutubeAdBlock.initialize(this)
         player = PlayerController(this)
         browser = BrowserController(this, shield, ::openVideo)
         updater = UpdateController(this)
@@ -123,6 +138,8 @@ class MainActivity : ComponentActivity() {
             onNavigationState = { homeCanGoBack = it })
         setContent { WeiktubeApp(this, model) }
         if (savedInstanceState != null) {
+            if (savedInstanceState.containsKey("orientation_before_player"))
+                orientationBeforePlayer = savedInstanceState.getInt("orientation_before_player")
             // A new Activity starts on the original Home. The persistent Gecko profile retains login.
             tab = 0
             savedInstanceState.getString("video")?.let { player.open(it, userInitiated = false) }
@@ -154,6 +171,7 @@ class MainActivity : ComponentActivity() {
     }
     fun minimizeWebVideo() {
         player.expanded = false
+        syncPlayerPresentation()
         syncOriginalHomeVisibility()
     }
     fun goHome() {
@@ -227,11 +245,13 @@ class MainActivity : ComponentActivity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pip = isInPictureInPictureMode
+        syncPlayerPresentation()
         if (pip) { browser.pauseMedia(); shorts?.pauseMedia() }
         else if (foreground && isWebTab && !isPersonalHome) activeBrowser.resume()
         syncOriginalHomeVisibility()
     }
     override fun onPause() {
+        fullscreenOrientation.disable()
         hostResumed = false
         syncOriginalHomeVisibility()
         super.onPause()
@@ -247,7 +267,10 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         hostResumed = true
+        if (customView != null && fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()
+        syncPlayerPresentation()
         if (::updater.isInitialized) updater.onForeground()
+        com.weiktube.filter.YoutubeAdBlock.checkForUpdates()
         if (::player.isInitialized) { player.resumeView(); if (isWebTab && !isPersonalHome) activeBrowser.resume() }
         openPendingOriginalHomeVideo()
         syncOriginalHomeVisibility()
@@ -255,8 +278,40 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (::originalHome.isInitialized) originalHome.onWindowFocusChanged(hasFocus)
+        if (hasFocus) updatePlayerSystemBars()
+    }
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        syncPlayerPresentation()
+    }
+
+    /** Rotation changes only the presentation of the retained player, never its document. */
+    fun syncPlayerPresentation() {
+        if (!::player.isInitialized) return
+        val expanded = player.source != null && player.expanded && !pip && !isFinishing && !isDestroyed
+        if (expanded) {
+            if (orientationBeforePlayer == null) orientationBeforePlayer =
+                if (customView == null) requestedOrientation else orientationBeforeFullscreen
+            if (customView == null && requestedOrientation != android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR)
+                requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        } else if (customView == null) {
+            orientationBeforePlayer?.let { requestedOrientation = it }
+            orientationBeforePlayer = null
+        }
+        updatePlayerSystemBars()
+    }
+    private fun updatePlayerSystemBars() {
+        val landscapeVideo = ::player.isInitialized && player.source != null && player.expanded &&
+            !pip && !isFinishing && !isDestroyed && resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            if (fullscreen || landscapeVideo) {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            } else show(WindowInsetsCompat.Type.systemBars())
+        }
     }
     override fun onSaveInstanceState(outState: Bundle) {
+        orientationBeforePlayer?.let { outState.putInt("orientation_before_player", it) }
         outState.putString("browse", browser.currentUrl)
         outState.putInt("tab", tab)
         val url = player.source
@@ -271,19 +326,20 @@ class MainActivity : ComponentActivity() {
         orientationBeforeFullscreen = requestedOrientation
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         (window.decorView as FrameLayout).addView(view, FrameLayout.LayoutParams(-1, -1))
-        WindowInsetsControllerCompat(window, view).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
+        manualFullscreenSawLandscape = false
+        if (hostResumed && fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()
+        updatePlayerSystemBars()
     }
     fun hideFullscreen() {
+        fullscreenOrientation.disable()
+        manualFullscreenSawLandscape = false
         val wasFullscreen = fullscreen
         customView?.let { (window.decorView as FrameLayout).removeView(it) }
         val callback = customCallback
         customView = null; customCallback = null; fullscreen = false
         callback?.onCustomViewHidden()
         if (wasFullscreen) requestedOrientation = orientationBeforeFullscreen
-        WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+        syncPlayerPresentation()
     }
     fun back(): Boolean = when {
         fullscreen -> { hideFullscreen(); true }

@@ -1,0 +1,13 @@
+{
+  "manifest_version": 2,
+  "name": "Weiktube YouTube advertising filter",
+  "version": "1.0.0",
+  "browser_specific_settings": { "gecko": { "id": "weiktube-youtube-adblock@weiktube.local" } },
+  "permissions": [
+    "nativeMessaging", "geckoViewAddons", "webRequest", "webRequestBlocking",
+    "https://youtube.com/*", "https://www.youtube.com/*", "https://m.youtube.com/*",
+    "https://*.doubleclick.net/*", "https://*.googlesyndication.com/*",
+    "https://*.googleadservices.com/*", "https://*.adservice.google.com/*"
+  ],
+  "background": { "scripts": ["background.js"], "persistent": true }
+}

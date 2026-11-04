@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "networkRules": [
+    {
+      "id": "network-1",
+      "host": "doubleclick.net",
+      "pathPrefix": ""
+    },
+    {
+      "id": "network-2",
+      "host": "googlesyndication.com",
+      "pathPrefix": ""
+    },
+    {
+      "id": "network-3",
+      "host": "googleadservices.com",
+      "pathPrefix": ""
+    },
+    {
+      "id": "network-4",
+      "host": "adservice.google.com",
+      "pathPrefix": ""
+    },
+    {
+      "id": "network-5",
+      "host": "youtube.com",
+      "pathPrefix": "/pagead/"
+    },
+    {
+      "id": "network-6",
+      "host": "youtube.com",
+      "pathPrefix": "/api/stats/ads"
+    }
+  ],
+  "scriptlets": [
+    {
+      "name": "set-constant",
+      "args": [
+        "ytInitialPlayerResponse.adPlacements",
+        "undefined"
+      ],
+      "ruleId": "constant-1"
+    },
+    {
+      "name": "set-constant",
+      "args": [
+        "ytInitialPlayerResponse.playerAds",
+        "undefined"
+      ],
+      "ruleId": "constant-2"
+    },
+    {
+      "name": "set-constant",
+      "args": [
+        "ytInitialPlayerResponse.adSlots",
+        "undefined"
+      ],
+      "ruleId": "constant-3"
+    },
+    {
+      "name": "set-constant",
+      "args": [
+        "playerResponse.adPlacements",
+        "undefined"
+      ],
+      "ruleId": "constant-4"
+    },
+    {
+      "name": "set-constant",
+      "args": [
+        "playerResponse.adSlots",
+        "undefined"
+      ],
+      "ruleId": "constant-5"
+    },
+    {
+      "name": "json-prune",
+      "args": [
+        "playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots"
+      ],
+      "ruleId": "player-json"
+    },
+    {
+      "name": "json-prune-fetch-response",
+      "args": [
+        "playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots",
+        "",
+        "url:/^(?:https:\\/\\/(?:m\\.|www\\.)?youtube\\.com)?\\/(?:youtubei\\/v\\d+\\/(?:player|next|browse|get_watch)(?:\\?|$)|watch\\?|playlist\\?|get_watch\\?)/"
+      ],
+      "ruleId": "player-fetch"
+    },
+    {
+      "name": "json-prune-xhr-response",
+      "args": [
+        "playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots",
+        "",
+        "url:/^(?:https:\\/\\/(?:m\\.|www\\.)?youtube\\.com)?\\/(?:youtubei\\/v\\d+\\/(?:player|next|browse|get_watch)(?:\\?|$)|watch\\?|playlist\\?|get_watch\\?)/"
+      ],
+      "ruleId": "player-xhr"
+    }
+  ],
+  "cosmeticSelectors": [
+    "ytd-ad-slot-renderer",
+    "ytm-ad-slot-renderer",
+    "ytd-display-ad-renderer",
+    "ytm-promoted-sparkles-web-renderer",
+    "ytd-promoted-sparkles-web-renderer",
+    "ytd-in-feed-ad-layout-renderer",
+    "ytm-in-feed-ad-layout-renderer",
+    "ytd-promoted-video-renderer",
+    "ytm-promoted-video-renderer"
+  ]
+}

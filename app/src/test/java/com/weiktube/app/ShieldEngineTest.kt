@@ -14,9 +14,9 @@ class ShieldEngineTest {
         assertFalse(engine.shouldBlock("https://notdoubleclick.net/ad", site))
         assertFalse(engine.shouldBlock("https://doubleclick.net.attacker.org/ad", site))
     }
-    @Test fun preservesYoutubeIncludingThirdPartyAds() {
-        assertFalse(engine.shouldBlock("https://doubleclick.net/ad", "https://m.youtube.com/watch?v=abcdefghijk"))
-        assertFalse(engine.shouldBlock("https://doubleclick.net/ad", "https://com.weiktube.app/"))
+    @Test fun blocksThirdPartyAdsOnYoutubeWithoutBlanketCdnBlocking() {
+        assertTrue(engine.shouldBlock("https://doubleclick.net/ad", "https://m.youtube.com/watch?v=abcdefghijk"))
+        assertTrue(engine.shouldBlock("https://doubleclick.net/ad", "https://com.weiktube.app/"))
         engine.config = ShieldConfig(custom = setOf("googlevideo.com"))
         assertFalse(engine.shouldBlock("https://r1.googlevideo.com/videoplayback", site))
     }

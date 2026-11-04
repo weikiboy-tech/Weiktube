@@ -10,6 +10,7 @@ android {
 }
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 dependencies {
+    implementation(project(":content-filter"))
     implementation("org.mozilla.geckoview:geckoview:159.0.20261022150525")
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("androidx.browser:browser:1.10.0")

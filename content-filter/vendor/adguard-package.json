@@ -1,0 +1,127 @@
+{
+  "name": "@adguard/scriptlets",
+  "description": "AdGuard's JavaScript library of Scriptlets and Redirect resources",
+  "type": "module",
+  "lint-staged": {
+    "{src,tests,scripts}/**/*.js": [
+      "eslint"
+    ],
+    "**/*.md": [
+      "markdownlint"
+    ]
+  },
+  "author": "AdGuard",
+  "license": "GPL-3.0",
+  "engines": {
+    "pnpm": ">=10.33.4 <11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AdguardTeam/Scriptlets.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AdguardTeam/Scriptlets/issues"
+  },
+  "homepage": "https://github.com/AdguardTeam/Scriptlets#adguard-scriptlets-and-redirect-resources",
+  "sideEffects": false,
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./redirects": {
+      "types": "./dist/types/redirects/index.d.ts",
+      "import": "./dist/redirects/index.js"
+    },
+    "./converters": {
+      "types": "./dist/types/converters/index.d.ts",
+      "import": "./dist/converters/index.js"
+    },
+    "./validators": {
+      "types": "./dist/types/validators/index.d.ts",
+      "import": "./dist/validators/index.js"
+    }
+  },
+  "dependencies": {
+    "@adguard/agtree": "4.2.1",
+    "@types/trusted-types": "2.0.7",
+    "js-yaml": "3.14.1"
+  },
+  "devDependencies": {
+    "@babel/cli": "7.27.0",
+    "@babel/core": "7.26.10",
+    "@babel/eslint-parser": "7.27.0",
+    "@babel/node": "7.26.0",
+    "@babel/plugin-transform-arrow-functions": "7.25.9",
+    "@babel/plugin-transform-function-name": "7.25.9",
+    "@babel/plugin-transform-regenerator": "7.27.0",
+    "@babel/plugin-transform-runtime": "7.26.10",
+    "@babel/preset-env": "7.26.9",
+    "@babel/preset-typescript": "7.27.0",
+    "@babel/runtime": "7.27.0",
+    "@rollup/plugin-alias": "5.1.1",
+    "@rollup/plugin-babel": "6.0.4",
+    "@rollup/plugin-commonjs": "28.0.3",
+    "@rollup/plugin-json": "6.1.0",
+    "@rollup/plugin-node-resolve": "15.3.1",
+    "@rollup/plugin-replace": "6.0.2",
+    "@rollup/plugin-terser": "0.4.4",
+    "@types/js-yaml": "3.12.10",
+    "@types/node": "22.14.0",
+    "@typescript-eslint/eslint-plugin": "5.62.0",
+    "@typescript-eslint/parser": "5.62.0",
+    "axios": "1.15.0",
+    "chalk": "4.1.2",
+    "commander": "9.5.0",
+    "crypto-js": "4.2.0",
+    "dox": "0.9.1",
+    "eslint": "8.57.1",
+    "eslint-config-airbnb-base": "15.0.0",
+    "eslint-config-airbnb-typescript": "17.1.0",
+    "eslint-import-resolver-typescript": "3.10.0",
+    "eslint-plugin-import": "2.31.0",
+    "eslint-plugin-import-newlines": "1.4.0",
+    "eslint-plugin-jsdoc": "50.6.9",
+    "fs-extra": "10.1.0",
+    "jsdom": "25.0.1",
+    "lint-staged": "12.5.0",
+    "markdownlint": "0.41.1",
+    "markdownlint-cli": "0.49.1",
+    "openurl": "1.1.1",
+    "rimraf": "6.0.1",
+    "rollup": "4.39.0",
+    "rollup-plugin-cleanup": "3.2.1",
+    "rollup-plugin-copy": "3.5.0",
+    "rollup-plugin-dts": "6.2.1",
+    "rollup-plugin-generate-html": "0.2.0",
+    "terser": "5.39.0",
+    "tsx": "4.19.3",
+    "typescript": "5.8.2",
+    "vitest": "2.1.9"
+  },
+  "files": [
+    "dist"
+  ],
+  "version": "2.5.1",
+  "scripts": {
+    "build": "rimraf dist && tsx scripts/build.js",
+    "postbuild": "tsx scripts/check-corelibs-dist.js",
+    "tgz": "pnpm pack && mv adguard-scriptlets-*.tgz scriptlets.tgz",
+    "test": "pnpm test:vitest && pnpm test:smoke && pnpm test:qunit",
+    "test:qunit": "tsx scripts/test.js",
+    "test:qunit:build": "tsx scripts/test.js --build",
+    "test:qunit:run": "tsx scripts/test.js --tests-only",
+    "test:vitest": "vitest run",
+    "test:smoke": "(cd tests/smoke/exports && ./test.sh)",
+    "lint": "pnpm lint:code && pnpm lint:types && pnpm lint:md && pnpm lint:test-lists",
+    "lint:code": "eslint --cache .",
+    "lint:types": "tsc --noEmit",
+    "lint:md": "markdownlint .",
+    "lint:test-lists": "tsx scripts/lint-test-lists.ts",
+    "lint-staged": "lint-staged",
+    "wiki": "pnpm wiki:build-table && pnpm wiki:build-docs",
+    "wiki:build-table": "tsx ./scripts/check-sources-updates.js && tsx ./scripts/build-compatibility-table.js",
+    "wiki:build-docs": "tsx scripts/build-docs.js"
+  }
+}

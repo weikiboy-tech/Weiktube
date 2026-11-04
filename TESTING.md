@@ -141,3 +141,10 @@ YouTubes Live-Webstruktur, Consent-Dialoge, regionale Inhalte, Kontobeschränkun
 - Die APK enthält keine Google-Anmeldung, Cookies oder privaten Kontodaten des Testgeräts. Eine neue Installation startet abgemeldet. Die Google-App ist weiterhin im Testmodus; andere Google-Konten benötigen eine Testnutzer-Freischaltung. Öffentliches Ansehen benötigt keine Google-Anmeldung.
 - Teständerungen der Bildschirmzeit und Rotationssperre wurden zurückgesetzt. Der unveränderte Domainfilter hat automatisierte Regressionstests; eine vollständige neue An/Aus-Geräteprüfung wurde nicht abgeschlossen. YouTube ist wie zuvor vom Filter ausgenommen.
 - Keine Behauptung vollständiger 1:1-Parität: Web- und native Kontositzung bleiben getrennt, eigene/native Übergänge und Mini-Player weichen vom Original ab; YouTube-PiP/Hintergrundwiedergabe bleiben deaktiviert. Mehr Details siehe AUDIT.md.
+# YouTube-Werbeschutz 1.3.5
+
+Der aktuelle [Prüfbericht](ADBLOCK-1.3.5.md) dokumentiert 202 erfolgreiche
+JVM-Tests, Scriptlet-/Gecko-Fixtures und den APK-Build. Keine Gerätetests für
+diese Version. Historische Aussagen weiter oben, wonach YouTube vom Filter
+ausgenommen ist, beschreiben den damaligen Stand vor 1.3.5.
+

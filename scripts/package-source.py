@@ -6,14 +6,17 @@ from zipfile import ZipFile, ZIP_DEFLATED
 # it also contains account screenshots, device captures and local build helpers.
 REQUIRED_FILES = {
     "settings.gradle.kts", "build.gradle.kts", "gradle.properties", "gradlew", "gradlew.bat",
-    ".gitignore", "README.md", "BUILD.md", "TESTING.md", "app/build.gradle.kts",
+    ".gitignore", ".gitattributes", "README.md", "BUILD.md", "TESTING.md", "app/build.gradle.kts",
+    "LICENSE", "THIRD-PARTY-NOTICES.md", "content-filter/build.gradle.kts",
 }
 OPTIONAL_FILES = {"UPDATES.md", "AUDIT.md", "CHANGELOG.md", "PRIVACY.md", "RESTORATION.md", "HOME-CONNECTION-TEST.md", "ORIGINAL-HOME-TEST.md", "WEBSITE-FIRST-TEST.md", "PLAYER-HANDOFF-TEST.md", "PLAYER-RETURN-TEST.md", "GECKO-RETURN-TEST.md", "HOME-TAB-TEST.md", "WEBSITE-LOGIN-TEST.md", "home-data/build.gradle.kts"}
-SOURCE_DIRECTORIES = {"gradle", "scripts", ".github", "app/src", "home-data/src"}
+SOURCE_DIRECTORIES = {"gradle", "scripts", ".github", "app/src", "home-data/src", "content-filter/src", "content-filter/vendor"}
 OPTIONAL_FILES.add("RELEASE-1.3.2.md")
+OPTIONAL_FILES.add("RELEASE-1.3.5.md")
+OPTIONAL_FILES.add("ADBLOCK-1.3.5.md")
 PRIVATE_PARTS = {
     "build", ".gradle", ".kotlin", ".git", "__pycache__", "validation", "screenshots",
-    "signing", "keys", "private", "credentials", ".aws", ".codex", ".agents",
+    "signing", "keys", "private", "credentials", ".aws", ".codex", ".agents", "node_modules",
 }
 PRIVATE_SUFFIXES = {".apk", ".zip", ".log", ".keystore", ".jks", ".p12", ".pfx", ".pem", ".key"}
 PRIVATE_FILES = {"local.properties", "key.properties", "keystore.properties", "signing.properties", ".env"}

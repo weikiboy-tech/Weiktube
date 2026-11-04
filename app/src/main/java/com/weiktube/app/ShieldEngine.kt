@@ -23,8 +23,9 @@ class ShieldEngine {
         val top = Links.host(topLevelUrl)
         val host = Links.host(url)
         if (top.isEmpty() || host.isEmpty()) return false
-        // YouTube and its embedded player are outside Shields, including third-party ad requests.
-        if (youtubeInfrastructure(top) || youtubeInfrastructure(host)) return false
+        // Playback/CDN hosts need the dedicated YouTube policy, never a blanket domain ban.
+        // Third-party ad requests on YouTube are now filtered like those on other sites.
+        if (youtubeInfrastructure(host)) return false
         if (matches(top, c.exceptions) || matches(host, c.exceptions)) return false
         return matches(host, c.custom) || (c.ads && matches(host, ads)) || (c.trackers && matches(host, trackers))
     }

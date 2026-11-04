@@ -1,11 +1,14 @@
-"""Verify original app source, allowing reviewed Home routing hooks and website-first copy."""
+"""Verify original app source, allowing only exact reviewed integration and player changes."""
 from pathlib import Path
 import hashlib
 import json
 
 root = Path(__file__).resolve().parents[1]
+adblock_review = json.loads((root / "scripts/adblock-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
 baseline = json.loads((root / "scripts/home-original-source-hashes.json").read_text(encoding="utf-8"))
 tab_review = json.loads((root / "scripts/home-tab-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
+rotation_review = json.loads((root / "scripts/rotation-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
+mini_review = json.loads((root / "scripts/mini-player-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
 website_login_hook = '''    fun openWebsiteAccount() {
         // Queue before showing Home so a cold engine opens the account entry directly.
         originalHome.openWebsiteAccount()
@@ -126,6 +129,24 @@ allowed = {
         ('"Die Google-Freigabe wird gerade aktualisiert. Bitte kurz warten und erneut versuchen."', '"Die Kontoanmeldung wird gerade aktualisiert. Bitte kurz warten und erneut versuchen."'),
         ('"Bitte unter „Du“ die Google-Freigabe bestätigen."', '"Bitte unter „Du“ die Google-Anmeldung bestätigen."')],
 }
+# Narrow, device-reproduced same-video resume correction. Keep the original hash;
+# any edit beyond these two reviewed substitutions still fails the baseline.
+allowed["app/src/main/java/com/weiktube/app/PlayerController.kt"] = [
+    ('''        if (source != null && rendererAlive && ((id != null && id == Links.videoId(source!!)) || url == source)) {
+            expanded = true
+            if (userInitiated) {
+                playbackAllowed = activity.foreground || activity.pip
+                // Selecting the same video again must resume the retained, possibly paused document.
+                explicitStartRequested = loading
+                applyPlayback(true)
+            }
+            return
+        }
+''', '''        if (source != null && rendererAlive && ((id != null && id == Links.videoId(source!!)) || url == source)) { expanded = true; return }
+'''),
+    ('allowed=next;if(!allowed)pending=false;else if(requestStart)pending=true;',
+     'allowed=next;pending=next&&requestStart;'),
+]
 failures = []
 for name, expected in baseline.items():
     file = root / name
@@ -133,6 +154,30 @@ for name, expected in baseline.items():
         failures.append(name + " missing")
         continue
     content = file.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if name in adblock_review:
+        review = adblock_review[name]
+        for change in review["changes"]:
+            if content.count(change["current"]) != 1:
+                failures.append(name + " reviewed adblock change missing or duplicated")
+            content = content.replace(change["current"], change["previous"], 1)
+        if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+            failures.append(name + " differs outside reviewed adblock changes")
+    if name in rotation_review:
+        review = rotation_review[name]
+        for change in review["changes"]:
+            if content.count(change["current"]) != 1:
+                failures.append(name + " reviewed rotation change missing or duplicated")
+            content = content.replace(change["current"], change["previous"], 1)
+        if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+            failures.append(name + " differs outside reviewed rotation changes")
+    if name in mini_review:
+        review = mini_review[name]
+        for change in review["changes"]:
+            if content.count(change["current"]) != 1:
+                failures.append(name + " reviewed miniplayer change missing or duplicated")
+            content = content.replace(change["current"], change["previous"], 1)
+        if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+            failures.append(name + " differs outside reviewed miniplayer changes")
     if name == "app/src/main/java/com/weiktube/app/UpdateController.kt":
         abi_hook = "UpdateManifest.parse(json, Build.SUPPORTED_ABIS.toList())"
         original_parser = 'UpdateRelease(json.getLong("versionCode"), json.getString("versionName"), json.getString("apkUrl"), json.getString("sha256"), json.optString("notes")).validate()'
@@ -161,4 +206,4 @@ for name, expected in baseline.items():
         failures.append(name + " differs outside reviewed hooks and copy")
 if failures:
     raise SystemExit("FAIL original app scope:\n" + "\n".join(failures))
-print(f"PASS {len(baseline)} original source files preserved; only reviewed Home-tab/routing hooks and website-first copy allowed.")
+print(f"PASS {len(baseline)} original source files preserved; only reviewed Home, resume, miniplayer, rotation and adblock integration changes allowed.")

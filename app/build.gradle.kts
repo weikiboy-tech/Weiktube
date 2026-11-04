@@ -11,8 +11,8 @@ android {
         applicationId = "com.weiktube.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.3.2"
+        versionCode = 19
+        versionName = "1.3.5"
         if (!stableApks) ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -55,6 +55,7 @@ tasks.register("exportStableApks") {
 }
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 dependencies {
+    implementation(project(":content-filter"))
     implementation(project(":home-data"))
     testImplementation("org.json:json:20240303")
     implementation(platform("androidx.compose:compose-bom:2025.02.00"))

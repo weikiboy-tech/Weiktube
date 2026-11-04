@@ -3,13 +3,13 @@ package com.weiktube.app
 import org.junit.Assert.*
 import org.junit.Test
 
-/** Golden baseline: controller refactoring must not silently turn Shields into a YouTube adblocker. */
+/** Preserve content/CDN access while explicitly enabling third-party ad blocking on YouTube. */
 class ShieldBaselineRegressionTest {
-    @Test fun allYoutubeFamiliesExemptBothPagesAndTargetsEvenWithCustomRules() {
+    @Test fun youtubePagesBlockAdsButContentTargetsRemainExemptFromBlanketRules() {
         val families = listOf("youtube.com", "youtu.be", "youtube-nocookie.com", "googlevideo.com", "ytimg.com", "com.weiktube.app")
         val engine = ShieldEngine().apply { config = ShieldConfig(custom = families.toSet() + "doubleclick.net") }
         for (domain in families) for (host in listOf(domain, "child.$domain")) {
-            assertFalse("page=$host", engine.shouldBlock("https://doubleclick.net/ad", "https://$host/"))
+            assertTrue("page=$host", engine.shouldBlock("https://doubleclick.net/ad", "https://$host/"))
             assertFalse("target=$host", engine.shouldBlock("https://$host/media", "https://news.example.org/"))
         }
         assertTrue(engine.shouldBlock("https://doubleclick.net/ad", "https://youtube.com.evil.org/"))

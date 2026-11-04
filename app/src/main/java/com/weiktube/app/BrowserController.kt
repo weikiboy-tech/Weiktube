@@ -32,6 +32,9 @@ class BrowserController(private val activity: MainActivity, private val shield: 
     private var lastOpenedUrl = ""
     private var lastOpenedAt = 0L
     private var documentScript: ScriptHandler? = null
+    private val adHooks = java.util.IdentityHashMap<WebView, WebViewAdBlock>()
+    private var adReady = false
+    private var adRecoveryAttempts = 0
     var nativeChrome: Boolean = true
         set(value) { field = value; refreshDocumentScript(); applyPageSettings() }
     var playbackElsewhere: Boolean = false
@@ -70,11 +73,26 @@ class BrowserController(private val activity: MainActivity, private val shield: 
                 }
             }
         }
+        val browserWeb = this
+        val ads = WebViewAdBlock(this,
+            onReady = { if (alive(browserWeb)) { adReady = true; applyPageSettings() } },
+            onBreakthrough = { _ -> if (alive(browserWeb)) {
+                adReady = false; pausePreviewMedia(); applyPageSettings()
+                if (adRecoveryAttempts++ == 0) {
+                    val attempt = generation
+                    browserWeb.post { if (alive(browserWeb) && attempt == generation) reloadProtectedDocument() }
+                } else error = "YouTube-Werbung erkannt. Bitte Filter aktualisieren und erneut laden."
+            } },
+            onFailure = { message -> if (alive(browserWeb)) {
+                adReady = false; pausePreviewMedia(); applyPageSettings(); error = message
+            } })
+        adHooks[this] = ads
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             documentScript = WebViewCompat.addDocumentStartJavaScript(this, configuredScript(), YOUTUBE_ORIGINS)
         }
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(web: WebView, request: WebResourceRequest): WebResourceResponse? {
+                ads.intercept(request)?.let { return it }
                 return if (shield.intercept(request.url.toString(), topLevel, request.isForMainFrame))
                     WebResourceResponse("text/plain", "UTF-8", 200, "OK", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0))) else null
             }
@@ -122,6 +140,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
             override fun onPageStarted(web: WebView, url: String, favicon: Bitmap?) {
                 if (!alive(web)) return
                 generation++
+                ads.pageStarted(url); adReady = ads.canPlay
                 mediaPlaying = false
                 topLevel = url
                 if (Links.browseWatchUrl(url) == null) currentUrl = url
@@ -132,6 +151,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
             override fun onPageFinished(web: WebView, url: String) {
                 if (!alive(web)) return
                 this@BrowserController.progress = 1f
+                ads.pageFinished()
                 refreshHistory()
                 applyPageSettings()
                 if (playbackElsewhere || !visible) pausePreviewMedia()
@@ -156,6 +176,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
                     this@BrowserController.progress = 1f
                 }
                 (web.parent as? ViewGroup)?.removeView(web)
+                adHooks.remove(web)?.close()
                 web.destroy()
                 return true
             }
@@ -186,12 +207,23 @@ class BrowserController(private val activity: MainActivity, private val shield: 
         if (!rendererAlive) recreate()
         rescuingSpa = false
         error = null; currentUrl = target; topLevel = target
+        adRecoveryAttempts = 0
+        if (adHooks[view]?.prepare(target) != true) return
+        adReady = adHooks[view]?.canPlay == true
+        refreshDocumentScript()
         view.loadUrl(target)
     }
     fun reload() {
+        adRecoveryAttempts = 0
+        reloadProtectedDocument()
+    }
+    private fun reloadProtectedDocument() {
         if (destroyed) return
         if (!rendererAlive) { recover(); return }
         error = null
+        if (adHooks[view]?.prepare(currentUrl) != true) return
+        adReady = adHooks[view]?.canPlay == true
+        refreshDocumentScript()
         view.reload()
     }
     private fun recreate() {
@@ -243,7 +275,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
         if (!rendererAlive || destroyed || !Links.youtube(currentUrl)) return
         view.evaluateJavascript(configuredScript(), null)
     }
-    private fun configuredScript() = "window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;" + BROWSER_SCRIPT
+    private fun configuredScript() = "window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible || !adReady};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;" + BROWSER_SCRIPT
     private fun refreshDocumentScript() {
         if (!rendererAlive || destroyed || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
         documentScript?.remove()
@@ -272,7 +304,10 @@ class BrowserController(private val activity: MainActivity, private val shield: 
         if (!rendererAlive) recover()
         forceSearch = true; searchActive = true
         if (!Links.youtube(currentUrl)) {
-            currentUrl = HOME; topLevel = HOME; view.loadUrl(HOME)
+            currentUrl = HOME; topLevel = HOME
+            if (adHooks[view]?.prepare(HOME) != true) return
+            adReady = adHooks[view]?.canPlay == true
+            view.loadUrl(HOME)
             return
         }
         applyPageSettings()
@@ -314,6 +349,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
         """.trimIndent(), "text/html", "UTF-8", null)
     }
     fun destroy() {
+        adHooks.remove(view)?.close()
         if (destroyed) return
         destroyed = true; generation++
         if (rendererAlive) { view.stopLoading(); view.destroy() }

@@ -64,7 +64,9 @@ object HomeEngine {
     }
 
     private fun recovered(context: Context, engine: GeckoRuntime, ready: (GeckoRuntime) -> Unit, failure: () -> Unit) {
-        HomeExperimentLease.recover(context, engine, { ready(engine) }, failure)
+        HomeExperimentLease.recover(context, engine, {
+            GeckoAdBlock.prepare(context, engine, { ready(engine) }, failure)
+        }, failure)
     }
 
     internal fun recordProof(context: Context, channelId: String, firstCount: Int, nextCount: Int) {

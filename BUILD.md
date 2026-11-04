@@ -132,3 +132,23 @@ sind keine kompatiblen Updates.
 Automatische Prüfung bedeutet: höchstens täglich bei Vordergrundnutzung. Download und Android-Installation bleiben ausdrückliche Benutzeraktionen. Das laufende Gerät muss dem App-Installer die Berechtigung erteilen; Android bestätigt die Installation selbst.
 
 
+# Zusätzliche Prüfungen für den Werbeschutz ab 1.3.5
+
+Das Modul `content-filter` ist Teil des normalen Gradle-Builds. Die benötigten
+AdGuard-Quellen und das generierte Scriptlet-Bundle sind im Quellcodepaket enthalten.
+Zur Offline-Prüfung des Generators und der JavaScript-Fixtures wird Node.js 22
+oder neuer benötigt:
+
+```text
+node scripts/vendor-adblock.mjs --check
+node scripts/check-adblock-scripts.cjs
+node scripts/test-gecko-adblock.mjs
+```
+
+Zusätzlich zu den bestehenden App-/Home-Tests: `:content-filter:testDebugUnitTest`
+und `:content-filter:lintRelease`. Die App enthält bereits signierte Filterregeln
+und einen öffentlichen Prüfschlüssel. Private Signierschlüssel werden nicht
+mitgeliefert und sind für einen lokalen Build nicht erforderlich. Eigene
+veröffentlichte Filterquellen benötigen ein eigenes Schlüsselpaar und einen
+entsprechend angepassten öffentlichen Schlüssel/Downloadpfad.
+

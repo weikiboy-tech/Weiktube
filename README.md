@@ -1,4 +1,11 @@
-# Weiktube 1.3.2
+# Weiktube 1.3.5
+
+**Neu in 1.3.5:** YouTube-Werbeschutz für den bestehenden Player,
+Shorts und die originale Gecko-Startseite. Filter und bekannte Wiedergabefehler
+werden im Adblock-Tab angezeigt. Umfang und Prüfgrenzen stehen in
+[ADBLOCK-1.3.5.md](ADBLOCK-1.3.5.md). Die Version ist automatisiert geprüft;
+die Wirkung gegen aktuelle YouTube-Werbung wurde noch nicht auf einem Handy
+abgenommen. Vollständige Werbefreiheit ist nicht garantiert.
 
 Die reguläre öffentliche Version zeigt die originale YouTube-Startseite direkt
 in Weiktube. Videos öffnen im bestehenden Weiktube-Player; beim Zurückgehen bleibt
@@ -13,7 +20,7 @@ die Startseite erhalten. Der Konto-Einstieg öffnet sich einmal automatisch und 
   für passende Intel-/Emulator-Geräte. Keine Unterstützung für reine 32-Bit-Geräte.
 - Updates über **Einstellungen & Updates → Jetzt nach Updates suchen**. Android
   bestätigt die Installation; die App installiert Updates nicht still im Hintergrund.
-- [Release- und Prüfbericht](RELEASE-1.3.2.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
+- [Release-Informationen](RELEASE-1.3.5.md), [Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
 
 Die Website verwendet das dort angemeldete Konto. Die optionale Google-API-Freigabe
 für Abos/Playlists ist separat; die öffentliche APK-Veröffentlichung erweitert
@@ -43,8 +50,7 @@ erst mal glücklich. Der schiefe Pixel darf vorerst mietfrei wohnen.
 
 Wer eine perfekte App erwartet, ist hier eindeutig falsch. Wer eine experimentelle
 YouTube-Alternative mit eingebautem AdBlock-Tab ausprobieren möchte: herzlich willkommen.
-Den tatsächlichen Filterumfang findest du unter [Adblock und Datenschutz](#adblock-und-datenschutz);
-YouTube-Werbung ist davon ausgenommen.
+Den tatsächlichen Filterumfang findest du unter [Adblock und Datenschutz](#adblock-und-datenschutz).
 **Bug reports are welcome. Whether we fix them is another story.**
 
 **😂 Bitcoin-Miner-Easter-Egg:**
@@ -153,7 +159,7 @@ Ein Tippen auf eine native Abo- oder Verlaufskarte öffnet deren echtes Video im
 | Startseite | Native Ansicht mit eigenem Kontotitel/-avatar, lokal gekennzeichnetem Verlauf und echten Abo-Uploads. Abos werden mit `subscriptions.list(mine=true)` geladen; nur angeforderte Videos aus den zugehörigen Kanälen werden akzeptiert. Keine originalen persönlichen YouTube-Empfehlungen. |
 | Suche und Kanäle | Originale mobile YouTube-Seiten in internen WebViews, einschließlich der von YouTube bereitgestellten Suche. Native Google-Autorisierung erzeugt darin keine Login-Cookies. |
 | Videos | Native Abo-/Verlaufseinträge und geteilte Videolinks öffnen den vollständigen Watch-WebView. Direkte HTTPS-Videodateien verwenden dessen HTML5-Player. Zugangsbeschränkungen bleiben wirksam. |
-| Mini-Player | Dieselbe Original-Videoseite wird verkleinert, ohne IFrame-Transfer; mindestens 200 dp Videohöhe. Im früheren OnePlus-Test blieb über „Du“ und „Abos“ dieselbe Watch-Sitzung erhalten, Position 18 → 39 Sekunden. |
+| Mini-Player | Dieselbe Videoseite bleibt erhalten. Ab 1.3.3: Video im Hochformat nach unten ziehen; kompaktes 16:9-Fenster unten rechts mit Play/Pause, Schließen und Fortschritt. Ein Tipp vergrößert es wieder. |
 | Shorts | Eigene dauerhaft gehaltene Browserinstanz mit YouTubes vertikaler Weboberfläche. Der Wechsel zu Shorts pausiert die normale Videowiedergabe; Audioübergänge gehören zur Geräteabnahme. |
 | Kanäle und Playlists | Nach Google-Freigabe werden eigene Kanäle, eigene Playlists und deren Videoeinträge nativ angezeigt, einschließlich freigegebener privater Playlistdaten. Weitere Einträge lassen sich seitenweise laden. Kanäle öffnen den Browser, einzelne Videos die Original-Videoseite. Native Videoaktionen können nach zusätzlicher Freigabe in eine eigene Playlist speichern. Keine native Playlist-Warteschlange oder automatische Playlist-Fortsetzung. |
 | Abos und Du | „Abos“ zeigt echte neue Uploads abonnierter Kanäle mit Kanalbildern, Video-Thumbnails und Dauer. Zunächst werden 12 Kanäle mit jeweils bis zu 3 Uploads verarbeitet; weitere Kanäle lassen sich laden. Ergebnisse werden innerhalb derselben Kontositzung 5 Minuten zwischengespeichert. Dies ist ein begrenzter Abo-Uploadfeed, kein vollständiger persönlicher Homefeed. „Du“ zeigt eigene Kanäle und Playlists. |
@@ -189,7 +195,36 @@ Im externen OAuth-Testmodus dürfen nur ausdrücklich eingetragene Testnutzer zu
 
 Der Adblock-Tab enthält Weiktube Shields: eine kleine lokale Domainfilter-Engine mit getrennten Basislisten für Werbe- und Trackingdomains, eigenen Listen, Ausnahmen und einem Sitzungszähler. Unterstützt werden reine Domains und Hosts-Dateiformat mit `#`-Kommentaren, bis 256 KiB pro Liste. Domainsegmente und Subdomains werden berücksichtigt; Ausnahmen gelten für Hauptseite oder angefragte Domain.
 
-**YouTube und dessen Player sind einschließlich Werbung vom Blocking ausgenommen.** Weiktube ist kein YouTube-Werbeblocker. Es gibt keine ABP-/EasyList-Regeln, kosmetischen Werbefilter, automatischen Filterlisten-Downloads oder vollständige Brave-Engine in Weiktube. First-Party-/serverseitige Werbung, Service-Worker-, Cache-, WebSocket-, Blob-/Data- und bestimmte Weiterleitungszugriffe sind nicht vollständig erfassbar.
+Ab 1.3.5 gibt es zusätzlich **YouTube-Werbefilter**: ausgewählte AdGuard-Scriptlets
+entfernen bekannte Werbefelder aus anfänglichen Playerdaten sowie passenden
+JSON-, Fetch- und XHR-Antworten. Eng begrenzte Netzwerkregeln und kosmetische
+Filter für explizite Werberenderer ergänzen sie. Dieselbe Filterversion wird vor
+dem Seitenstart in Player/Shorts-WebView und GeckoView eingebunden. Die vorhandene
+Wiedergabe, Kontositzung und Videoübergabe bleiben bestehen.
+
+Bei einem erkannten Werbedurchbruch pausiert und verdeckt der Schutz die Anzeige.
+Der Player versucht einmal, das Video geschützt neu zu laden; danach erscheint
+ein Fehler statt einer stillen Abschaltung des Schutzes. Eine neue Videoauswahl
+oder „Erneut laden“ ist weiter möglich. Das ist **keine Garantie für dauerhaft
+werbefreie oder stets erfolgreiche Wiedergabe**: unbekannte Werbevarianten,
+serverseitig eingefügte Werbung und Änderungen durch YouTube können die Filter
+überfordern. Sponsoring durch den Creator wird nicht übersprungen.
+
+Der Adblock-Tab zeigt Filterversion, Fehler und getrennte Sitzungszähler. Ein
+Zähler ist kein Beleg für vollständige Werbefreiheit. Filterupdates werden
+höchstens einmal täglich oder manuell über HTTPS geladen, mit einem eingebauten
+öffentlichen Schlüssel geprüft und nur nach erfolgreicher Prüfung übernommen.
+Bei Fehlern bleibt der letzte gültige Stand erhalten. Updates enthalten nur
+begrenzte Regeldaten, keinen nachgeladenen ausführbaren Code. Neue Regeln und
+geänderte Einstellungen gelten beim nächsten vollständigen Seitenaufruf;
+vorhandene Dokumente behalten ihre Regeln bis zum Neuladen. Globale Schalter
+und Domainausnahmen sind weiterhin verfügbar. Es ist keine vollständige
+AdGuard-/Brave-Engine und kein allgemeiner ABP-/EasyList-Importer.
+
+Quellcode, GPL-3.0-Lizenz, exakte Upstream-Quellen und Generator werden mitgeliefert;
+siehe [Drittanbieterhinweise](THIRD-PARTY-NOTICES.md). Sitzungs-Cookies, OAuth-Tokens,
+Passwörter und vollständige authentifizierte Antworten werden vom Werbeschutz
+weder protokolliert noch an den Filterupdate-Server übertragen.
 
 Die lokale Shields-Prüfseite fordert genau eine Ressource von der reservierten Testdomain `ads.weiktube.invalid` an. Bei aktiviertem Werbefilter steigt der Sitzungszähler um eins; mit deaktiviertem Filter bleibt er unverändert.
 

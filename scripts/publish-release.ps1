@@ -1,6 +1,6 @@
 param(
-    [int]$VersionCode = 16,
-    [string]$VersionName = '1.3.2',
+    [int]$VersionCode = 19,
+    [string]$VersionName = '1.3.5',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
     [switch]$Publish
@@ -11,11 +11,9 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = "v$VersionName"
-$baseBranch = 'website-login-1.3.1'
-$baseCommit = 'b88b863c7a0a3cc011341a10028b9008aac5dbe0'
-$expectedMain = '8006faaa49463565d638dd67d82c1e0a2649c4dc'
+$expectedMain = '5849277de8738100d78c993fe5dc60c68cebe2ca'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
-$output = Join-Path $project 'dist/stable'
+$output = Join-Path $project "dist/stable-$VersionName"
 $source = Join-Path $project 'Weiktube-Quellcode.zip'
 $stage = Join-Path $project "validation/stable-$VersionName-release-source"
 $verificationPath = Join-Path $output 'release-verification.json'
@@ -25,7 +23,7 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Die originale YouTube-Startseite öffnet direkt in Weiktube. Die Anmeldung wird einmal angeboten und kann übersprungen werden; unter Du kannst du dich jederzeit anmelden oder das Konto wechseln. Kleinere APKs ermöglichen Updates. Deine gespeicherte Website-Sitzung bleibt beim Aktualisieren erhalten.'
+$updateNotes = 'YouTube-Werbefilter für Player, Shorts und originale Startseite, mit signierten Filterupdates und Diagnose. Enthält den kompakten Miniplayer mit Ziehgeste, den X-Schließen-Fix und automatisches Vollbild beim Drehen. 202 automatisierte JVM-Tests und JavaScript-Prüfungen bestanden; keine Geräteabnahme des Werbeschutzes und keine Garantie vollständiger Werbefreiheit. Über die bestehende App installieren, um deine Anmeldung zu behalten.'
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or
     $build -notmatch ('(?m)^\s*versionName\s*=\s*"' + [regex]::Escape($VersionName) + '"\s*$')) {
@@ -85,6 +83,8 @@ foreach ($feedVariant in @(@{abi='arm64-v8a';name='update.json'}, @{abi='x86_64'
     $assets += @{path=$path;name=$feedVariant.name;type='application/json'}
 }
 $assets += @{path=$source;name='Weiktube-Quellcode.zip';type='application/zip'}
+$assets += @{path=(Join-Path $project 'LICENSE');name='LICENSE';type='text/plain'}
+$assets += @{path=$ReleaseNotesFile;name="RELEASE-$VersionName.md";type='text/markdown'}
 $checksums = Join-Path $output 'SHA256SUMS.txt'
 $checksumLines = foreach ($asset in $assets) {
     $asset.hash = (Get-FileHash -LiteralPath $asset.path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -129,29 +129,46 @@ Push-Location (Join-Path $stage 'Weiktube')
 try {
     git init -b main | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Isolated staging initialization failed.' }
-    git config core.autocrlf true
+    git config core.autocrlf false
     git config user.name $githubProfile.login
     git config user.email "$($githubProfile.id)+$($githubProfile.login)@users.noreply.github.com"
     git remote add origin $remote
-    git fetch origin "main:refs/remotes/origin/main" "$($baseBranch):refs/remotes/origin/$baseBranch"
+    git fetch origin "main:refs/remotes/origin/main"
     if ($LASTEXITCODE -ne 0) { throw 'Cannot fetch reviewed history.' }
-    $parent = git rev-parse "origin/$baseBranch"
-    if ($LASTEXITCODE -ne 0 -or $parent -ne $baseCommit) { throw 'Confirmed source branch changed; review before publishing.' }
     $main = git rev-parse origin/main
     if ($LASTEXITCODE -ne 0 -or $main -ne $expectedMain) { throw 'Main changed during preparation.' }
-    git merge-base --is-ancestor $main $parent
-    if ($LASTEXITCODE -ne 0) { throw 'Main is not an ancestor of the reviewed source; do not discard unrelated history.' }
+    # Never drop a file from current main when replacing the portable source tree.
+    $existingPaths = @(git ls-tree -r --name-only $main)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect current main source inventory.' }
+    foreach ($path in $existingPaths) {
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Current main contains an unreviewed file missing from this release: $path" }
+    }
     python scripts/check-home-scope.py
     if ($LASTEXITCODE -ne 0) { throw 'Original-source scope check failed.' }
     git add .
     if ($LASTEXITCODE -ne 0) { throw 'Cannot stage sanitized source.' }
     git add --renormalize .
     if ($LASTEXITCODE -ne 0) { throw 'Cannot normalize sanitized source.' }
+    git update-index --chmod=+x gradlew
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot preserve executable Gradle wrapper.' }
+    $verifyExactAssets = @(
+        'import pathlib, subprocess',
+        'root = pathlib.Path.cwd()',
+        'names = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")',
+        'for name in filter(None, names):',
+        '    if "/src/main/assets/" in name or name.startswith("content-filter/vendor/") or name.endswith(".jar"):',
+        '        staged = subprocess.check_output(["git", "show", ":" + name])',
+        '        if staged != (root / name).read_bytes():',
+        '            raise SystemExit("Git changed signed/vendored asset bytes: " + name)',
+        'print("Verified exact signed and vendored bytes in Git tree")'
+    ) -join "`n"
+    python -c $verifyExactAssets
+    if ($LASTEXITCODE -ne 0) { throw 'Git asset verification failed.' }
     $tree = git write-tree
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create source tree.' }
     # A new isolated repository: preserve the reviewed history without replacing
     # any existing working tree or rewriting any local/remote branch.
-    $commit = git commit-tree $tree -p $baseCommit -m "Weiktube $VersionName stable release"
+    $commit = git commit-tree $tree -p $main -m "Release Weiktube $VersionName with integrated YouTube ad filtering"
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create release commit.' }
     git update-ref refs/heads/main $commit ('0' * 40)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated main ref.' }
@@ -175,6 +192,7 @@ foreach ($asset in $assets) {
     if ($uploaded.size -ne $asset.size -or $uploaded.digest -ne "sha256:$($asset.hash)" -or $uploaded.state -ne 'uploaded') {
         throw "Uploaded asset did not pass size/hash verification: $($asset.name)"
     }
+    Write-Output "Verified upload: $($asset.name)"
 }
 $published = Invoke-RestMethod "https://api.github.com/repos/$Repository/releases/$($release.id)" -Headers $headers -Method Patch -ContentType 'application/json' -Body '{"draft":false,"prerelease":false,"make_latest":"true"}'
 Write-Output "Published: $($published.html_url)"

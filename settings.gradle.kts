@@ -6,3 +6,5 @@ dependencyResolutionManagement {
 rootProject.name = "Weiktube"
 include(":app")
 include(":home-data")
+
+include(":content-filter")

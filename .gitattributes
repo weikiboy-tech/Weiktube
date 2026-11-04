@@ -1,0 +1,7 @@
+* text=auto eol=lf
+# Signatures and reproducible upstream hashes apply to the exact stored bytes.
+**/src/main/assets/** -text
+content-filter/vendor/** -text
+*.jar -text
+*.tgz -text
+*.gz -text
