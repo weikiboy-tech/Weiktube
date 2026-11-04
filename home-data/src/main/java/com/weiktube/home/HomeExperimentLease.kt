@@ -3,6 +3,7 @@ package com.weiktube.home
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
@@ -31,15 +32,20 @@ internal object HomeExperimentLease {
 
     fun acquire(context: Context, runtime: GeckoRuntime, ready: (Lease) -> Unit, failure: () -> Unit) {
         check(Looper.myLooper() == Looper.getMainLooper())
-        if (owner != null || recovering) { failure(); return }
+        if (owner != null || recovering) {
+            Log.w("WeiktubeHome", if (owner != null) "LEASE_OWNER_BUSY" else "LEASE_RECOVERY_BUSY")
+            failure(); return
+        }
         val app = context.applicationContext
         val lease = Lease(app, runtime)
         owner = lease
         // Durable before any asynchronous mutation, including a new click-extension install.
         if (!prefs(app).edit().putBoolean("cleanup_click", true).commit()) {
+            Log.w("WeiktubeHome", "LEASE_MARKER_WRITE_FAILED")
             owner = null; failure(); return
         }
         fun failed() {
+            Log.w("WeiktubeHome", "LEASE_ACQUIRE_OPERATION_FAILED")
             if (owner === lease) owner = null
             recover(app, runtime, failure, failure)
         }
@@ -62,7 +68,12 @@ internal object HomeExperimentLease {
 
     fun recover(context: Context, runtime: GeckoRuntime, ready: () -> Unit, failure: () -> Unit) {
         check(Looper.myLooper() == Looper.getMainLooper())
-        if (owner != null) { failure(); return }
+        if (owner != null) {
+            // A retained/parked document still owns its extension. Never clear its lease
+            // merely because a second host asks for a runtime during lifecycle changes.
+            Log.w("WeiktubeHome", "LEASE_OWNER_BUSY")
+            failure(); return
+        }
         waiters += ready to failure
         if (recovering) return
         val app = context.applicationContext
@@ -73,6 +84,7 @@ internal object HomeExperimentLease {
         recovering = true
         fun complete(success: Boolean) {
             val saved = success && p.edit().remove("restore_old").remove("cleanup_click").commit()
+            if (!saved) Log.w("WeiktubeHome", if (success) "LEASE_MARKER_WRITE_FAILED" else "LEASE_RECOVERY_OPERATION_FAILED")
             recovering = false
             val callbacks = waiters.toList(); waiters.clear()
             callbacks.forEach { if (saved) it.first() else it.second() }

@@ -17,6 +17,7 @@ const read = name => fs.readFileSync(new URL(name, root), 'utf8');
 const engine = read('HomeEngine.kt');
 const home = read('OriginalHomeController.kt');
 const diagnostic = read('HomeConnectionActivity.kt');
+const retained = read('OriginalHomeReturn.kt');
 const between = (source, start, end) => {
   const from = source.indexOf(start);
   const to = source.indexOf(end, from + start.length);
@@ -52,6 +53,20 @@ assert(diagnostic.includes('if (!protectionReady) return GeckoResult.fromValue(A
 assert(diagnostic.includes('else if (protectionReady) session.loadUri(HOME)'), 'diagnostic explicit reload is gated');
 assert(diagnostic.includes('if (!active || !protectionReady) return@button'), 'profile switching is gated');
 assert(diagnostic.includes('preparing = false; protectionReady = false; initialNavigationPending = false'), 'stop clears only per-session preparation state');
+
+// The handler itself is exercised with JVM session/lease fakes in HomeContentRecoveryTest.
+// These contracts connect those tests to every real Gecko ContentDelegate, including parked pages.
+for (const [name, source] of [['Home', home], ['parked Home', retained], ['diagnostic', diagnostic]]) {
+  const callbacks = source.slice(source.indexOf('override fun onCrash('));
+  assert(callbacks.includes('contentRecovery.lost(session, HomeContentLoss.CRASHED)'), `${name}: content crash releases the owned document`);
+  assert(callbacks.includes('override fun onKill(session: GeckoSession) { contentRecovery.lost(session, HomeContentLoss.KILLED) }'), `${name}: content kill must not fall through Gecko's no-op default`);
+}
+const visible = between(home, 'fun setVisible(', 'private fun resumeOrPrepare(');
+assert(visible.indexOf('firstOrNull { !it.isOpen }') < visible.indexOf('if (active &&'), 'closed retained windows are checked before the active-view fast path');
+assert(visible.includes('active && !lostContent'), 'a missed kill callback must bypass the healthy-document fast path');
+const take = between(retained, 'internal fun take(', 'internal fun park(');
+assert(take.includes('held.retained.sessions().any { !it.isOpen }'), 'parked closed windows cannot be handed back as a working document');
+assert(take.includes('discard()'), 'a lost parked document releases its bridge and extension lease');
 
 class Clock {
   time = 0;

@@ -1,6 +1,62 @@
 # Weiktube – Prüfprotokoll
 
-## Aktueller Stand 1.3.9: Miniplayer-/PiP-Geometrie
+## Aktueller Stand 1.3.10: Wiederherstellung nach Prozessverlust
+
+Version 1.3.10 / Code 24 korrigiert begrenzte Lifecycle- und Cleanup-Pfade.
+Die vorhandenen Code-Lücken sind unabhängig vom Handy prüfbar; die tatsächliche
+Ursache des gemeldeten Gerätefehlers ist damit noch nicht nachgewiesen.
+Die browserseitige Pause aus 1.3.9 bleibt ein eigener offener Befund.
+
+| Prüfung | Stand für 1.3.10 |
+| --- | --- |
+| 22 neue Player-Lifecycle-Tests mit Robolectric | Bestanden; echte Controller-/WebViewClient-Callbacks mit simulierten Android-WebViews, kein Chromium-Renderer |
+| Fünf neue Home-Content-Recovery-Tests | Bestanden; Sitzungs-/Host-Fakes, kein laufendes Gecko |
+| Gesamte JVM-Regressionen | 263 bestanden: 166 App, 77 Home, 20 Filter; keine Fehler, Fehlschläge oder Skips; Filter-Ergebnisse von Gradle als aktuell übernommen |
+| Player-/Observer-Script-Fixtures | 16 Player- und 5 Observer-Fixtures bestanden |
+| Weitere Scriptprüfungen | Native PiP-Quellverträge, 120 modellierte Home-Starts, zehn modellierte Home-Bridge-Rückkehrzyklen und vorhandene Adblock-Scripts bestanden |
+| Lokale Chromium-Pixel-/Layoutfixture | Erneut bestanden: negative Überdeckungskontrollen und zehn Mini-/PiP-/Rückkehrzyklen; Videoknoten, Quelle, Zeit, Pause und Scrollposition erhalten; kein Android- oder Live-YouTube-Test |
+| Release-Lint | App/Home: 0 Fehler, 33/41 Warnungen |
+| Release-Build und APK-Signatur-/Versions-/Hashprüfung | Bestanden für ARM64 und x86-64; ursprüngliches Zertifikat, nicht debuggbar, unter 128 MiB; geprüfte Release-Dateien bytegleich zu den Build-Artefakten |
+| Handy und echter Android-Emulator | Nicht durchgeführt; Nutzer übernimmt APK-Abnahme |
+
+Die Player-Tests verwenden den echten `PlayerController` und seine
+`WebViewClient`-Callbacks mit Robolectric-WebViews (API 35). Sie starten weder
+Gecko, Compose noch Netzwerk-/Videowiedergabe. Die Lifecycle-Fixtures schalten
+den Filter vorübergehend aus, weil die JVM keine Document-Start-JavaScript-
+Engine enthält; ein eigener Test lässt ihn eingeschaltet und prüft, dass
+fehlende Filterbereitschaft das Laden weiterhin verhindert.
+
+Geprüft wurden insbesondere Retry-/Auswahl-Races nach Rendererabbruch,
+veraltete Poll-/Navigations-/Vollbild-Callbacks, ein begrenzter automatischer
+Wiederherstellungsversuch, gespeicherte Position und Benutzerpause, Abbruch
+durch Schließen/Zerstören, zehn gesunde Hintergrundrückkehrzyklen ohne Reload,
+Activity-Wiederherstellung pausiert und minimiert sowie fehlgeschlagene
+Ersatzinitialisierung. Die Home-Fakes prüften Kill/Crash, verspätete Meldungen,
+geschlossene Sitzungen, gesunde Rückkehr und verworfene geparkte Rückgabetokens.
+
+Die folgenden zwölf praktischen Abläufe sind **alle nicht durchgeführt**:
+
+| Geräteablauf | Stand |
+| --- | --- |
+| 1. Startseite öffnen, Video wählen, zum Player wechseln und zurück | Nicht durchgeführt |
+| 2. Zehn verschiedene Videos nacheinander öffnen und zurückkehren | Nicht durchgeführt |
+| 3. Dasselbe Video erneut öffnen sowie Scrollposition und weitere Klicks prüfen | Nicht durchgeführt |
+| 4. Laufendes Video in den Hintergrund schicken und zur App zurückkehren | Nicht durchgeführt |
+| 5. Manuell pausiertes Video verlassen/zurückholen, ohne unerwartetes Autoplay | Nicht durchgeführt |
+| 6. Internen Miniplayer verkleinern, vergrößern und per X schließen | Nicht durchgeführt |
+| 7. Hoch-/Querformat und Vollbild mehrfach wechseln, danach weitere Videos öffnen | Nicht durchgeführt |
+| 8. System-PiP öffnen, Play/Pause verwenden, vergrößern und schließen | Nicht durchgeführt |
+| 9. Bildschirm ausschalten/sperren, entsperren und Wiedergabe manuell fortsetzen | Nicht durchgeführt |
+| 10. Player-Rendererverlust im Vorder-/Hintergrund samt begrenzter Wiederherstellung prüfen | Nicht durchgeführt |
+| 11. Gecko-Inhaltsverlust nach Hintergrundaufenthalt, neue Startseite und erhaltene Anmeldung prüfen | Nicht durchgeführt |
+| 12. Activity-/App-Prozesswiederherstellung mit gespeicherter Position sowie Adblock, Shorts, Abos und Du prüfen | Nicht durchgeführt |
+
+Ein simulierter Callback testet keinen echten Chromium-/Gecko-Prozessabbruch.
+Ebenso beweisen diese Tests weder sichtbare Videoframes noch Ton, Android-
+Compositing oder durchgängige YouTube-Wiedergabe. Details und Änderungsumfang:
+[RELEASE-1.3.10.md](RELEASE-1.3.10.md).
+
+## Vorheriger Stand 1.3.9: Miniplayer-/PiP-Geometrie
 
 **Finaler Prüfstand mit Schubladenkorrektur:** Release-Build und Artefaktprüfung
 bestanden, 236 JVM-Tests grün:

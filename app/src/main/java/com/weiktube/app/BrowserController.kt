@@ -175,16 +175,20 @@ class BrowserController(private val activity: MainActivity, private val shield: 
                     error = "Die Webansicht wurde beendet. Mit „Erneut versuchen“ wird sie wiederhergestellt."
                     this@BrowserController.progress = 1f
                 }
+                activity.releasePlayerFullscreen(web)
                 (web.parent as? ViewGroup)?.removeView(web)
-                adHooks.remove(web)?.close()
-                web.destroy()
+                runCatching { adHooks.remove(web)?.close() }
+                runCatching { web.destroy() }
                 return true
             }
         }
         webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(web: WebView, newProgress: Int) { if (alive(web)) this@BrowserController.progress = newProgress / 100f }
-            override fun onShowCustomView(webView: android.view.View, callback: CustomViewCallback) { activity.showFullscreen(webView, callback) }
-            override fun onHideCustomView() { activity.hideFullscreen() }
+            override fun onShowCustomView(webView: android.view.View, callback: CustomViewCallback) {
+                if (alive(browserWeb)) activity.showFullscreen(webView, callback, browserWeb)
+                else runCatching { callback.onCustomViewHidden() }
+            }
+            override fun onHideCustomView() { if (alive(browserWeb)) activity.hideFullscreen() }
         }
     }
 

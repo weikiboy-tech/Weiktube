@@ -1,4 +1,18 @@
-# Weiktube 1.3.9
+# Weiktube 1.3.10
+
+**Neu in 1.3.10:** Gezielte Wiederherstellung nach beendetem Player- oder
+Gecko-Inhaltsprozess. Tote Ansichten werden nicht wiederverwendet, veraltete
+Callbacks können die neue Videoauswahl nicht überschreiben und eine alte
+Vollbildfläche wird ihrem Besitzer zugeordnet und entfernt. Gesunde Ansichten
+bleiben beim Zurückkehren erhalten; es gibt keinen pauschalen Reload oder
+Timeout, der langsame Seiten beendet. Die neue Diagnose verwendet feste
+Ereigniscodes ohne URLs, Video-IDs oder Zugangsdaten.
+
+**Prüfstand:** Release-Build, 263 JVM-Tests, Scriptprüfungen und APK-Prüfung
+bestanden, darunter 22 neue Player-Robolectric-Tests und fünf Home-Tests mit
+Sitzungs-Fakes. Kein Handy-/Android-Emulatortest. Die konkrete
+Ursache des Gerätefehlers ist nicht bestätigt; auch die in 1.3.9 beobachtete
+YouTube-Pause ist nicht als behoben belegt. Details: [Release 1.3.10](RELEASE-1.3.10.md).
 
 **Neu in 1.3.9:** Gezielte Korrekturen für Miniplayer und Android-Bild-in-Bild.
 Beide Darstellungen verwenden dieselbe Videofläche; zurückgebliebene
@@ -62,7 +76,7 @@ die Startseite erhalten. Der Konto-Einstieg öffnet sich einmal automatisch und 
   für passende Intel-/Emulator-Geräte. Keine Unterstützung für reine 32-Bit-Geräte.
 - Updates über **Einstellungen & Updates → Jetzt nach Updates suchen**. Android
   bestätigt die Installation; die App installiert Updates nicht still im Hintergrund.
-- [Release 1.3.9](RELEASE-1.3.9.md), [Release 1.3.8](RELEASE-1.3.8.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
+- [Release 1.3.10](RELEASE-1.3.10.md), [Release 1.3.9](RELEASE-1.3.9.md), [Release 1.3.8](RELEASE-1.3.8.md), [Adblock-Prüfbericht](ADBLOCK-1.3.5.md), [Quellcode herunterladen](https://github.com/weikiboy-tech/Weiktube/releases/latest/download/Weiktube-Quellcode.zip).
 
 Die Website verwendet das dort angemeldete Konto. Die optionale Google-API-Freigabe
 für Abos/Playlists ist separat; die öffentliche APK-Veröffentlichung erweitert

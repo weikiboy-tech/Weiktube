@@ -1,6 +1,7 @@
 package com.weiktube.home
 
 import android.os.Looper
+import android.util.Log
 import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -59,6 +60,11 @@ object OriginalHomeReturn {
         mainThread()
         val held = entry ?: return null
         if (!held.policy.take(token)) return null
+        if (held.retained.sessions().any { !it.isOpen }) {
+            Log.w("WeiktubeHome", "PARKED_CONTENT_CLOSED")
+            discard()
+            return null
+        }
         entry = null
         return held.retained
     }
@@ -70,6 +76,10 @@ object OriginalHomeReturn {
         val token = UUID.randomUUID().toString()
         val held = Entry(OriginalHomeReturnPolicy(token, canonical), retained)
         entry = held
+        val contentRecovery = HomeContentRecovery<GeckoSession>(
+            { entry === held && it in retained.sessions() }, ::discard,
+            { cause -> Log.w("WeiktubeHome", "PARKED_${cause.diagnostic}") },
+        )
         retained.media.values.forEach { runCatching { it.pause(); it.muteAudio(true) } }
         retained.sessions().forEach { session ->
             session.settings.suspendMediaWhenInactive = true
@@ -85,7 +95,8 @@ object OriginalHomeReturn {
             session.progressDelegate = object : GeckoSession.ProgressDelegate {}
             session.historyDelegate = null
             session.contentDelegate = object : GeckoSession.ContentDelegate {
-                override fun onCrash(session: GeckoSession) { if (entry === held) discard() }
+                override fun onCrash(session: GeckoSession) { contentRecovery.lost(session, HomeContentLoss.CRASHED) }
+                override fun onKill(session: GeckoSession) { contentRecovery.lost(session, HomeContentLoss.KILLED) }
                 override fun onCloseRequest(session: GeckoSession) { if (entry === held) discard() }
             }
             session.mediaSessionDelegate = object : MediaSession.Delegate {

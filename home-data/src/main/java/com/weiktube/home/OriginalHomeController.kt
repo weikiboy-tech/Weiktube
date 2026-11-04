@@ -92,6 +92,10 @@ class OriginalHomeController(
     private val connections = mutableMapOf<GeckoSession, OriginalHomeReturn.Connection>()
     private val requestedNavigation = mutableMapOf<GeckoSession, String>()
     private val loggedRoutingCauses = mutableSetOf<String>()
+    private val contentRecovery = HomeContentRecovery<GeckoSession>(::owns, ::stopSessions) { cause ->
+        Log.w("WeiktubeHome", cause.diagnostic)
+        setStatus("Die YouTube-Webseite wurde beendet. Deine Anmeldung bleibt gespeichert. Bitte erneut versuchen.")
+    }
 
     init {
         root = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(18, 18, 18)) }
@@ -179,6 +183,10 @@ class OriginalHomeController(
         if (disposed) return
         root.visibility = if (visible) View.VISIBLE else View.INVISIBLE
         if (!visible) { if (active) suspend(); return }
+        // onKill closes Gecko's window before its callback. Also cover a missed callback while
+        // detached: a non-null Java session alone does not mean it can render or accept input.
+        val closed = listOfNotNull(main, popup).firstOrNull { !it.isOpen }
+        val lostContent = closed != null && contentRecovery.lost(closed, HomeContentLoss.CLOSED)
         // Read the presentation marker again: explicit website-data deletion may have cleared it.
         // Do not replace a pending deep link, retained player return, or an existing channel/search.
         if (embedded && accountSetup.offerAutomatically(pendingNavigation == null && parkedToken == null &&
@@ -187,7 +195,7 @@ class OriginalHomeController(
             resetProof()
             notifyNavigationState()
         }
-        if (active && parkedToken == null && pendingNavigation == null && !initialNavigationPending) {
+        if (active && !lostContent && parkedToken == null && pendingNavigation == null && !initialNavigationPending) {
             restoreVisibleFocus()
             updateControls()
             return
@@ -411,8 +419,9 @@ class OriginalHomeController(
         contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onCloseRequest(session: GeckoSession) { if (session === popup) closePopup() }
             override fun onCrash(session: GeckoSession) {
-                if (owns(session)) { stopSessions(); setStatus("Der Webtest wurde beendet. Die Original-App bleibt verfügbar; Home startet einen neuen Versuch.") }
+                contentRecovery.lost(session, HomeContentLoss.CRASHED)
             }
+            override fun onKill(session: GeckoSession) { contentRecovery.lost(session, HomeContentLoss.KILLED) }
         }
         mediaSessionDelegate = object : MediaSession.Delegate {
             override fun onActivated(session: GeckoSession, mediaSession: MediaSession) {

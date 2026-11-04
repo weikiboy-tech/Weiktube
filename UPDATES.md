@@ -4,6 +4,29 @@ Die App prüft beim Öffnen maximal einmal pro 24 Stunden auf eine neue Version.
 
 Standardquelle: `https://github.com/weikiboy-tech/Weiktube/releases/latest/download/update.json`. Die Quelle kann geändert werden. Die tatsächlich angebotene Version steht im veröffentlichten Feed. Ein lokal vorbereiteter Versionsstand ist noch kein verfügbares Update. Fehlt eine Release-Datei oder ist sie nicht erreichbar, meldet die App einen Serverfehler; sie behauptet dann nicht, aktuell zu sein.
 
+## Version 1.3.10 – Wiederherstellung nach Prozessverlust
+
+Version 1.3.10 / Code 24 ergänzt die sichere Entsorgung beendeter Player-
+WebViews, höchstens einen automatischen Wiederherstellungsversuch pro expliziter
+Videoauswahl und die Wiederherstellung der zuletzt bekannten Position. Manuelle
+Pause, Schließen und eine neue Auswahl haben Vorrang vor wartender Recovery.
+Gesunde Dokumente werden bei gewöhnlicher Hintergrundrückkehr nicht neu geladen.
+Gecko behandelt auch beendete Inhalte und bereits geschlossene Sitzungen;
+die gespeicherte Website-Anmeldung wird dabei nicht gelöscht.
+
+Die Diagnose protokolliert feste Ereigniscodes ohne URLs, Video-IDs, Cookies,
+Tokens oder vollständige Seitenantworten. Adblock-Regeln, Kontoanbindung und
+Wiedergabeimplementierung werden nicht ersetzt. Der Release-Build, 263 JVM-Tests
+(einschließlich 22 zusätzlicher Player- und fünf Home-Tests), Scriptprüfungen
+und Artefaktprüfung sind bestanden. Beide APKs behalten das ursprüngliche
+Signierzertifikat, sind nicht debuggbar und unter 128 MiB.
+Kein Gerätetest; der Nutzer prüft die APK.
+Der offene YouTube-Pause-Befund aus 1.3.9 wird nicht als behoben behauptet.
+Details: [RELEASE-1.3.10.md](RELEASE-1.3.10.md).
+
+Die Veröffentlichung bündelt ARM64-/x86-64-APKs, Quellcode, Feeds und Prüfsummen.
+Die vorhandene `latest`-Quelle zeigt jeweils die öffentlich freigegebene Version.
+
 ## Version 1.3.9 – Miniplayer-/PiP-Korrektur
 
 Version 1.3.9 / Code 23 korrigiert die bestehende Videobox für Miniplayer und

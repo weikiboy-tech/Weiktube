@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
     val canHandleBack get() = fullscreen || player.source != null || !isWebTab || tab == 1 ||
         (if (isPersonalHome) homeCanGoBack else auxiliaryBrowser || browser.searchActive || activeBrowser.canGoBack)
     private var customView: View? = null
+    private var customViewOwner: android.webkit.WebView? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
     private var orientationBeforeFullscreen = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var orientationBeforePlayer: Int? = null
@@ -126,6 +127,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PlayerDiagnostics.record(if (savedInstanceState == null) PlayerDiagnostics.Event.ACTIVITY_CREATE else PlayerDiagnostics.Event.ACTIVITY_RESTORE)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         com.weiktube.filter.YoutubeAdBlock.initialize(this)
         player = PlayerController(this)
@@ -150,7 +152,9 @@ class MainActivity : ComponentActivity() {
                 orientationBeforePlayer = savedInstanceState.getInt("orientation_before_player")
             // A new Activity starts on the original Home. The persistent Gecko profile retains login.
             tab = 0
-            savedInstanceState.getString("video")?.let { player.open(it, userInitiated = false) }
+            savedInstanceState.getString("video")?.let {
+                player.restore(it, savedInstanceState.getDouble("video_position", Links.startSeconds(it).toDouble()))
+            }
             player.expanded = false
             originalHomePlayer = savedInstanceState.getBoolean("original_home_player", false) && OriginalHomeReturn.resumeToken() != null
             // A recreated Activity shows Home with the existing saved player minimized and paused.
@@ -265,6 +269,7 @@ class MainActivity : ComponentActivity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pip = isInPictureInPictureMode
+        PlayerDiagnostics.record(if (pip) PlayerDiagnostics.Event.PIP_ENTER else PlayerDiagnostics.Event.PIP_EXIT)
         if (pip) hideFullscreen()
         syncPlayerPresentation()
         if (pip) { browser.pauseMedia(); shorts?.pauseMedia() }
@@ -273,6 +278,7 @@ class MainActivity : ComponentActivity() {
         if (::nativePip.isInitialized) nativePip.modeChanged(pip)
     }
     override fun onPause() {
+        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_PAUSE)
         fullscreenOrientation.disable()
         hostResumed = false
         syncOriginalHomeVisibility()
@@ -282,6 +288,7 @@ class MainActivity : ComponentActivity() {
         browser.pauseMedia(); shorts?.pauseMedia()
     }
     override fun onStop() {
+        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_STOP)
         foreground = false
         player.pauseView()
         browser.pauseMedia(); shorts?.pauseMedia()
@@ -291,13 +298,18 @@ class MainActivity : ComponentActivity() {
     }
     override fun onStart() {
         super.onStart()
+        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_START)
+        // Reconcile with Android rather than retaining a stale PiP callback flag after backgrounding.
+        pip = isInPictureInPictureMode
         foreground = true
         screenOff = screenIsUnavailable()
+        if (::nativePip.isInitialized) nativePip.modeChanged(pip)
     }
     private fun screenIsUnavailable() = getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked ||
         !getSystemService(android.os.PowerManager::class.java).isInteractive
     override fun onResume() {
         super.onResume()
+        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_RESUME)
         hostResumed = true
         screenOff = screenIsUnavailable()
         if (customView != null && fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()
@@ -316,6 +328,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        PlayerDiagnostics.record(PlayerDiagnostics.Event.CONFIGURATION)
         syncPlayerPresentation()
         syncPipState()
     }
@@ -352,12 +365,13 @@ class MainActivity : ComponentActivity() {
         val url = player.source
         outState.putString("video", if (url != null && player.isYoutube) "https://www.youtube.com/watch?v=${Links.videoId(url)}&t=${player.position.toInt()}" else url)
         outState.putBoolean("expanded", player.expanded)
+        outState.putDouble("video_position", player.position)
         outState.putBoolean("original_home_player", originalHomePlayer)
         super.onSaveInstanceState(outState)
     }
-    fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
+    fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback, owner: android.webkit.WebView? = null) {
         if (customView != null) { callback.onCustomViewHidden(); return }
-        customView = view; customCallback = callback; fullscreen = true
+        customView = view; customCallback = callback; customViewOwner = owner; fullscreen = true
         orientationBeforeFullscreen = requestedOrientation
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         (window.decorView as FrameLayout).addView(view, FrameLayout.LayoutParams(-1, -1))
@@ -371,10 +385,16 @@ class MainActivity : ComponentActivity() {
         val wasFullscreen = fullscreen
         customView?.let { (window.decorView as FrameLayout).removeView(it) }
         val callback = customCallback
-        customView = null; customCallback = null; fullscreen = false
+        customView = null; customCallback = null; customViewOwner = null; fullscreen = false
         callback?.onCustomViewHidden()
         if (wasFullscreen) requestedOrientation = orientationBeforeFullscreen
         syncPlayerPresentation()
+    }
+    /** A renderer-owned fullscreen surface must not cover the replacement player. */
+    internal fun releasePlayerFullscreen(owner: android.webkit.WebView) {
+        if (customViewOwner !== owner) return
+        customCallback = null // Never invoke a callback into the dead renderer.
+        hideFullscreen()
     }
     fun back(): Boolean = when {
         fullscreen -> { hideFullscreen(); true }
@@ -446,6 +466,7 @@ class MainActivity : ComponentActivity() {
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
     override fun onDestroy() {
+        PlayerDiagnostics.record(PlayerDiagnostics.Event.ACTIVITY_DESTROY)
         hostResumed = false
         if (::nativePip.isInitialized) nativePip.close()
         originalHome.close()

@@ -3,6 +3,7 @@ package com.weiktube.home
 import android.content.Context
 import android.os.Looper
 import android.os.Handler
+import android.util.Log
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.StorageController
 
@@ -28,7 +29,10 @@ object HomeEngine {
         check(Looper.myLooper() == Looper.getMainLooper())
         val app = context.applicationContext
         val engine = try { runtime ?: GeckoRuntime.create(app).also { runtime = it } }
-        catch (_: Exception) { onFailure(); return }
+        catch (_: Exception) {
+            Log.w("WeiktubeHome", "RUNTIME_CREATE_FAILED")
+            onFailure(); return
+        }
         if (clearing || prefs(app).getBoolean("clear_pending", false)) {
             waiting += onReady to onFailure
             beginClear(app, engine)
@@ -56,6 +60,7 @@ object HomeEngine {
         }, {
             mainHandler.post {
                 // Retain clear_pending, so a failed clear never silently reopens the old account.
+                Log.w("WeiktubeHome", "PROFILE_CLEAR_FAILED")
                 clearing = false
                 val callbacks = waiting.toList(); waiting.clear()
                 callbacks.forEach { it.second() }

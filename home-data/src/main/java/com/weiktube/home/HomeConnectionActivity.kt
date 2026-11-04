@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -181,6 +182,9 @@ class HomeConnectionActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         active = true
+        listOfNotNull(main, child).firstOrNull { !it.isOpen }?.let {
+            contentRecovery.lost(it, HomeContentLoss.CLOSED)
+        }
         if (::root.isInitialized && main == null && !stoppedForClear) prepare()
         main?.setActive(true); child?.setActive(true)
         loadInitialPage()
@@ -369,7 +373,8 @@ class HomeConnectionActivity : ComponentActivity() {
                 if (session === main) { diagnostics.title(title); updateDiagnostics() }
             }
             override fun onCloseRequest(session: GeckoSession) { if (session === child) closeChild() }
-            override fun onCrash(session: GeckoSession) { if (owns(session)) { stopSessions(); fail("Die Anmelde-Engine wurde beendet. Bitte Anmeldung erneut öffnen.") } }
+            override fun onCrash(session: GeckoSession) { contentRecovery.lost(session, HomeContentLoss.CRASHED) }
+            override fun onKill(session: GeckoSession) { contentRecovery.lost(session, HomeContentLoss.KILLED) }
         }
         permissionDelegate = object : GeckoSession.PermissionDelegate {
             override fun onContentPermissionRequest(session: GeckoSession, perm: GeckoSession.PermissionDelegate.ContentPermission): GeckoResult<Int> =
@@ -524,6 +529,10 @@ class HomeConnectionActivity : ComponentActivity() {
         if (::status.isInitialized) status.text = text
         if (::report.isInitialized) report.visibility = View.VISIBLE
         updateDiagnostics()
+    }
+    private val contentRecovery = HomeContentRecovery<GeckoSession>(::owns, ::stopSessions) { cause ->
+        Log.w("WeiktubeHome", "DIAGNOSTIC_${cause.diagnostic}")
+        fail("Die Anmelde-Engine wurde beendet. Deine Website-Anmeldung bleibt gespeichert. Bitte YouTube erneut öffnen.")
     }
     private fun stopSessions() {
         preparing = false; protectionReady = false; initialNavigationPending = false
