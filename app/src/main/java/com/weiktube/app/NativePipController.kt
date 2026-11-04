@@ -26,6 +26,7 @@ internal class NativePipController(
     private val screenOff: () -> Unit,
     private val message: (String) -> Unit,
     private val screenUnlocked: () -> Unit = {},
+    private val screenOn: () -> Unit = screenUnlocked,
 ) {
     data class Snapshot(
         val source: String?, val ready: Boolean, val playing: Boolean,
@@ -61,6 +62,7 @@ internal class NativePipController(
             if (closed) return
             when (intent.action) {
                 Intent.ACTION_SCREEN_OFF -> screenOff()
+                Intent.ACTION_SCREEN_ON -> screenOn()
                 Intent.ACTION_USER_PRESENT -> screenUnlocked()
                 else -> return
             }
@@ -73,6 +75,7 @@ internal class NativePipController(
             addDataScheme("weiktube-pip")
         }, ContextCompat.RECEIVER_NOT_EXPORTED)
         ContextCompat.registerReceiver(activity, screenReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF).apply {
+            addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
         }, ContextCompat.RECEIVER_NOT_EXPORTED)
     }

@@ -1,10 +1,94 @@
 # Player-Diagnose: Dokumentwechsel, Hintergrundrückkehr und PiP
 
-Dieser Bericht trennt die Dokument-/Lifecycle-Befunde für 1.3.12 vom bereits
-reproduzierten öffentlichen Browser-Pausepfad aus 1.3.11. **Die Ursache des
+Dieser Bericht trennt den Bildschirmstatus-Abgleich in 1.3.13, die Dokument-/
+Lifecycle-Befunde für 1.3.12 und den öffentlichen Browser-Pausepfad aus 1.3.11. **Die Ursache des
 schwarzen Players nach längerem Hintergrundaufenthalt auf dem Handy ist nicht
-bestätigt; die browserseitige Mini-/PiP-Pause ist nicht behoben.** Es wurde kein
-aktueller Android-Handy-, Emulator- oder angemeldeter Kontotest durchgeführt.
+bestätigt; die browserseitige Mini-/PiP-Pause ist nicht behoben.** Die Korrektur
+von 1.3.13 wurde bisher nicht auf einem Android-Handy/-Emulator oder mit einem
+angemeldeten Konto praktisch geprüft.
+
+## 1.3.13: Sperrstatus und Fokus nach dem Ruhemodus
+
+Der Nutzer meldet den schwarzen Player nach ungefähr fünf Minuten Ruhemodus
+auch mit 1.3.12. Diese Rückmeldung ist eine praktische Gegenprobe zum bisherigen
+Fix: **Der gemeldete Gerätefehler ist durch 1.3.12 nicht behoben.** Aus dem Foto
+allein lassen sich Rendererzustand, WebView-Pause und Ursache nicht ablesen.
+
+Die neue isolierte Gegenprobe umfasst sieben Fokus-/Sperrstatus-Tests: Zwei
+schlugen mit dem vorherigen Code fehl, fünf Kontrollen bestanden. In den
+Fehlfällen bleibt `screenOff=true`, obwohl PowerManager und Keyguard bereits
+ein interaktives, entsperrtes Gerät melden. Beim Fokusgewinn wurde dieser
+gespeicherte Zustand nicht erneut abgeglichen; die native WebView blieb pausiert.
+Die Fixture ruft den echten `MainActivity`-Fokus-Callback auf und injiziert das
+alte Flag gezielt. Sie startet weder `MainActivity.onCreate` noch Compose,
+Gecko oder Chromium und beweist keine tatsächliche Ereignisfolge auf dem Handy.
+Lokale Belege: `validation/screen-state-before-1.3.13/`.
+
+Der gemeinsame Abgleich liest bei `ACTIVITY_START`, `ACTIVITY_RESUME`,
+`WINDOW_FOCUS` sowie `SCREEN_OFF`, `SCREEN_ON` und `USER_PRESENT` den aktuellen
+Systemzustand. Die Sperre ist aktiv, solange der Bildschirm nicht interaktiv
+oder der Keyguard gesperrt ist. Eine alte `SCREEN_OFF`-Nachricht blockiert ein
+inzwischen entsperrtes Gerät nicht erneut; `SCREEN_ON` allein hebt einen
+gesperrten Keyguard nicht auf. Bei zulässiger Rückkehr wird dieselbe gesunde
+native WebView fortgesetzt. Daraus folgt kein neuer Play-, Load-, View-Austausch-
+oder Recovery-Timer-Pfad. Die bereits vorhandene Behandlung belegten Dokument-/
+Rendererverlusts bleibt erhalten. Fokusverlust allein unterbricht sichtbares PiP nicht.
+
+Beispiel des festen, rein nativen Diagnoseschemas:
+
+```text
+SCREEN_STATE signal=WINDOW_FOCUS process=00000000-0000-4000-8000-000000000000 activity=2 controller=0 view=0 interactive=true keyguard=false previouslyBlocked=true blocked=false foreground=true
+```
+
+| Feld | Interpretation |
+| --- | --- |
+| `signal` | Anlass der erneuten Abfrage, kein Beweis für den aktuellen Bildschirmzustand |
+| `interactive`, `keyguard` | Aktuell gelesene PowerManager-/Keyguard-Werte |
+| `previouslyBlocked`, `blocked` | Vorher gespeicherte bzw. neu abgeleitete App-Sperre |
+| `foreground` | Activity ist nach ihrem Lifecycle im Vordergrund; separate Voraussetzung für das Fortsetzen |
+| `process`, `activity` | Native Instanzen wie unten beschrieben; Controller/View sind bei dieser Hostmeldung nicht angegeben (`0`) |
+
+`previouslyBlocked=true blocked=false` bei aktivem, entsperrtem Gerät zeigt
+die Korrektur eines veralteten Flags. Erst nachfolgende View-/Gate- und
+Medienbeobachtungen können weitere Zustände belegen; der Eintrag selbst beweist
+weder sichtbare Frames noch Wiedergabe. Es werden keine Seiten- oder Kontodaten
+erhoben.
+
+Android garantiert keine feste Broadcast-Lieferzeit und nennt ab Android 14
+insbesondere zurückgestellte `ACTION_SCREEN_ON`-Meldungen bei gecachten Apps.
+Das spricht für eine aktuelle Statusabfrage statt Annahmen über die Reihenfolge.
+Es beweist nicht, dass genau diese Verzögerung auf dem Nutzergerät stattfand.
+[Android-Broadcasts](https://developer.android.com/develop/background-work/background-tasks/broadcasts)
+
+Chromiums `BrowserViewRenderer` setzt mit `SetIsPaused` den internen Pausenzustand;
+`IsClientVisible` berücksichtigt ihn und `UpdateBeginFrameSource` trennt bei
+fehlender Client-Sichtbarkeit die Frame-Quelle. Window-/Attachment-Zustände
+werden separat behandelt. Daher ist antwortendes JavaScript allein kein Beweis
+für fortlaufende native Frame-Ausgabe. Eine Ressourcenneuvergabe nach Unsichtbarkeit
+ist eine mögliche zusätzliche Erklärung, **kein nachgewiesener Handybefund**.
+[Chromium BrowserViewRenderer](https://github.com/chromium/chromium/blob/main/android_webview/browser/gfx/browser_view_renderer.cc),
+[WebView.onPause](https://developer.android.com/reference/android/webkit/WebView#onPause())
+
+Nach der Korrektur bestanden 46 gezielte Tests: 15 Bildschirmstatus-, 24 native
+PiP- und sieben Diagnosefälle. Die erweiterten Bildschirmtests führen auch den
+echten Receiver-Aufruf über den MainActivity-Abgleich bis zum vorhandenen Player
+aus; Android-Zustände sind kontrolliert, keine realen Handybroadcasts. Ein
+zusätzlicher Fall prüft nach Entsperren das Schließen und Öffnen eines anderen
+Videos mit Dokument-Commit und erlaubter nativer Play-Anforderung in derselben
+WebView. Anschließend bestand die erneut ausgeführte vollständige App-Suite;
+Produktionscode und APKs wurden dafür nicht geändert.
+Der abschließende Debug-/Release-Build war erfolgreich. 322 JVM-Tests bestanden:
+225 App, 77 Home, 20 Filter; unveränderte Home-/Filter-Ergebnisse wurden von
+Gradle als aktuell übernommen. App-Lint meldet keine Fehler und 37 Warnungen.
+Scope-Abgleich mit 46 ursprünglichen Quelldateien und native PiP-Quellverträge
+bestanden. Beide Release-APKs sind auf Paket/Version/Code 27, ursprüngliches
+Signierzertifikat, richtige ABI, Größe und SHA-256 geprüft; nicht debuggbar und
+jeweils unter 128 MiB. Prüfsummen stehen in [Release 1.3.13](../RELEASE-1.3.13.md).
+Die unveränderten JavaScript-/Chromium-Pixeltests aus 1.3.12 wurden für 1.3.13
+nicht erneut ausgeführt; daraus wird kein neuer Renderingnachweis abgeleitet.
+Neue Handy-/Emulatortests, praktische 30-Sekunden-/5-/15-Minuten-Ruhemodus-Abläufe
+und sichtbare Mini-/PiP-Wiedergabe wurden nicht geprüft. Die nachfolgenden
+früheren Teststände sind kein Ersatz dafür. [Release 1.3.13](../RELEASE-1.3.13.md).
 
 ## 1.3.12: Belegte Dokument-Races und begrenzte Wiederherstellung
 

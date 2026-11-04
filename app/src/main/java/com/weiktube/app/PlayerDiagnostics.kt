@@ -30,6 +30,7 @@ internal object PlayerDiagnostics {
         GATE_ALLOWED, GATE_HOST_BLOCKED, GATE_POLICY_BLOCKED, GATE_FILTER_BLOCKED,
     }
     enum class PauseReason { USER, HOST_STOP, SCREEN_LOCK, SHORTS_SELECTED, ACCOUNT_ACTION, FILTER_FAILURE, FILTER_RECOVERY, CLOSE }
+    enum class ScreenSignal { ACTIVITY_START, ACTIVITY_RESUME, SCREEN_OFF, SCREEN_ON, USER_PRESENT, WINDOW_FOCUS }
     enum class RestoreKind { COLD_START, ACTIVITY_RECREATION, PROCESS_RESTORE, RESTORE_UNKNOWN }
     enum class Visibility { VISIBLE, INVISIBLE, GONE, UNKNOWN }
 
@@ -77,6 +78,13 @@ internal object PlayerDiagnostics {
     fun pause(reason: PauseReason, generation: Long, activityId: Long = 0, controllerId: Long = 0, viewId: Long = 0) {
         android.util.Log.i("WeiktubePlayer", "APP_PAUSE reason=${reason.name} generation=${generation.coerceAtLeast(0)} " +
             identities(activityId, controllerId, viewId))
+    }
+
+    fun screen(signal: ScreenSignal, activityId: Long, interactive: Boolean, locked: Boolean,
+               previouslyBlocked: Boolean, blocked: Boolean, foreground: Boolean) {
+        android.util.Log.i("WeiktubePlayer", "SCREEN_STATE signal=${signal.name} " +
+            identities(activityId, 0, 0) + " interactive=$interactive keyguard=$locked " +
+            "previouslyBlocked=$previouslyBlocked blocked=$blocked foreground=$foreground")
     }
 
     fun record(event: Event, generation: Long = 0, state: String = "HOST", activityId: Long = 0,

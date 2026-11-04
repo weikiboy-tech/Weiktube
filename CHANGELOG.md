@@ -1,5 +1,35 @@
 # Änderungsverlauf
 
+## 1.3.13 / Code 27 – Bildschirmstatus nach dem Entsperren
+
+Der Nutzer meldet den schwarzen Player nach rund fünf Minuten Ruhemodus auch
+mit 1.3.12. Dessen vorherige Korrekturen sind kein erfolgreicher Gerätefix.
+
+- Aktuellen Power-/Keyguard-Status bei Fokusgewinn, Start, Resume und
+  `SCREEN_OFF`/`SCREEN_ON`/`USER_PRESENT` abgleichen, statt einen alten
+  Bildschirm-Sperrstatus allein aufgrund einer Broadcast-Bezeichnung zu behalten.
+- Bei zulässiger Rückkehr dieselbe gesunde native WebView fortsetzen, ohne Play,
+  Reload oder View-Austausch. Manuelle Pause bleibt erhalten.
+- `SCREEN_ON` weiterhin vom tatsächlichen Entsperren unterscheiden;
+  verspätetes `SCREEN_OFF` blockiert ein inzwischen entsperrtes Gerät nicht
+  erneut. Fokusverlust allein pausiert sichtbares PiP nicht.
+- Feste `SCREEN_STATE`-Diagnose mit aktuellem und bisherigem Sperrstatus,
+  ohne Seiten-, Konto- oder Zugriffsdaten.
+- Gegenprobe vor dem Fix: sieben neue Fokus-/Sperrstatus-Tests, zwei
+  reproduzierte Fehler und fünf erfolgreiche Kontrollen. Danach 46 gezielte
+  Fälle bestanden: 15 Bildschirmstatus-, 24 native PiP- und sieben Diagnose-
+  Tests. Darunter ist Entsperren → Video schließen → anderes Video öffnen
+  und Play anfordern in derselben fortgesetzten WebView.
+- Vollständiger Debug-/Release-Build und 322 JVM-Tests bestanden: 225 App,
+  77 Home, 20 Filter; unveränderte Home-/Filter-Ergebnisse als aktuell übernommen.
+  App-Lint ohne Fehler, 37 Warnungen. Release-APKs, Scope-Abgleich und native
+  PiP-Quellverträge geprüft. Die unveränderten JavaScript-/Pixeltests aus
+  1.3.12 wurden für 1.3.13 nicht erneut ausgeführt.
+
+Kein aktueller Handy-/Emulatortest; die konkrete Geräteursache bleibt
+unbestätigt. Die bekannte YouTube-Pause in Mini/PiP bleibt offen.
+[Release 1.3.13](RELEASE-1.3.13.md).
+
 ## 1.3.12 / Code 26 – Dokumentwechsel und Hintergrunddiagnose
 
 - Verspätete Seiten-, Fehler- und History-Meldungen eines vorherigen Videos

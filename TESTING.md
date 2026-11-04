@@ -1,6 +1,53 @@
 # Weiktube – Prüfprotokoll
 
-## Aktueller Stand 1.3.12: Dokumentzuordnung und Hintergrundrückkehr
+## Aktueller Stand 1.3.13: Bildschirmstatus nach Entsperren
+
+**Nutzerrückmeldung:** 1.3.12 zeigt auf dem Handy nach rund fünf Minuten
+Ruhemodus weiterhin den schwarzen Player. Damit hat diese Version den
+gemeldeten praktischen Fehler nicht behoben. Der neue Bildschirmstatus-Fix
+behandelt eine separat im Code reproduzierte Lücke; der Nachweis auf diesem
+Handy fehlt weiterhin.
+
+| Prüfung | Abschließender Stand für 1.3.13 |
+| --- | --- |
+| Gegenprobe vor der Korrektur | Sieben `MainActivityScreenStateTest`-Fälle: zwei Fehlfälle bei altem Sperrflag trotz interaktivem, entsperrtem Gerät; fünf Kontrollen bestanden; lokale Belege in `validation/screen-state-before-1.3.13/` |
+| Gezielte Regression nach Korrektur | 46 bestanden: 15 `MainActivityScreenStateTest`-, 24 `NativePipControllerTest`- und sieben `PlayerDiagnosticsTest`-Fälle |
+| Vollständige JVM-Regression | 322 bestanden: 225 App, 77 Home, 20 Filter; unveränderte Home-/Filter-Ergebnisse von Gradle als aktuell übernommen |
+| Debug-/Release-Build und App-Lint | Vollständiger Gradle-Lauf `BUILD SUCCESSFUL`; Lint ohne Fehler, 37 Warnungen |
+| Release-APK-Prüfung | ARM64/x86-64: Paket `com.weiktube.app`, Version 1.3.13/Code 27, ursprüngliches Signierzertifikat, nicht debuggbar, richtige ABI, jeweils unter 128 MiB; Größen und SHA-256 in den Release-Notizen |
+| Scope und native PiP-Quellverträge | Bestanden; Scope-Abgleich mit 46 ursprünglichen Quelldateien |
+| JavaScript-/Chromium-Pixeltests | Unverändert gegenüber 1.3.12, für 1.3.13 nicht erneut ausgeführt; kein neuer Pixel- oder Browsernachweis |
+| Handy-/Emulatorabnahme des neuen Fixes | Nicht durchgeführt |
+
+Die neue Robolectric-Fixture ruft den echten Fokus-Callback von `MainActivity`
+auf und verwendet den vorhandenen `PlayerController`, eine aufzeichnende
+WebView sowie kontrollierte PowerManager-/Keyguard-Zustände. Das veraltete
+Sperrflag wird gezielt injiziert. Sie startet weder `MainActivity.onCreate`,
+Compose, Gecko, Anmeldung noch Chromium-/Medienwiedergabe. Sie beweist die
+fehlende Zustandsabstimmung, nicht die tatsächliche Broadcast-Reihenfolge
+auf dem Handy und keine sichtbare Videoausgabe.
+
+Die Kontrollen umfassen weiterhin gesperrten bzw. nicht interaktiven Bildschirm,
+gestoppte Activity, Fokusverlust bei sichtbarem PiP und wiederholten gesunden
+Fokusgewinn. Geprüft werden außerdem zehn Rückkehrzyklen mit derselben View,
+erhaltener Position und ohne neue Lade- oder Play-Anforderung. Die erweiterten
+Fälle prüfen auch die tatsächliche Receiver-Verbindung vom `NativePipController`
+zum echten MainActivity-Abgleich und vorhandenen Player mit kontrollierten
+Systemzuständen. Ein zusätzlicher Fall prüft nach dem Entsperren Schließen,
+Auswahl eines anderen Videos, Dokument-Commit und erlaubte native Play-Anforderung
+in derselben fortgesetzten WebView. Alle 46 gezielten Fälle sind in der
+erfolgreichen Gesamtsuite mit 322 JVM-Tests enthalten. Nach Ergänzung dieses
+Tests wurde die vollständige App-Suite erneut ausgeführt; Produktionscode
+und geprüfte APKs blieben unverändert.
+
+Die praktischen Tests nach 30 Sekunden, fünf und 15 Minuten Ruhemodus,
+Power-Taste/Sperren/Entsperren, tatsächliche Broadcast-Reihenfolgen,
+System-Prozessverlust, Rendererabbruch und laufende Mini-/PiP-Wiedergabe
+sind **nicht durchgeführt**. Die Browser-Pause aus 1.3.11 bleibt ein eigener
+offener Befund. [Release 1.3.13](RELEASE-1.3.13.md),
+[Player-Diagnose](docs/PLAYBACK-DIAGNOSTICS.md).
+
+## Vorheriger Stand 1.3.12: Dokumentzuordnung und Hintergrundrückkehr
 
 Die Ursache des gemeldeten schwarzen Players nach 5/15 Minuten auf dem Handy
 ist **nicht bestätigt**. Reproduziert wurden dagegen veraltete Dokument-

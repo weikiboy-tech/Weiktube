@@ -149,10 +149,10 @@ class MainActivity : ComponentActivity() {
             onExit = { selectTab(0) },
             onNavigationState = { homeCanGoBack = it })
         nativePip = NativePipController(this, ::pipSnapshot, player::play, player::pause, {
-            screenOff = true
-            player.pauseView(PlayerDiagnostics.PauseReason.SCREEN_LOCK); browser.pauseMedia(); shorts?.pauseMedia()
-            keepAwake(false)
-        }, ::message, screenUnlocked = { screenOff = screenIsUnavailable() })
+            reconcileScreenState(PlayerDiagnostics.ScreenSignal.SCREEN_OFF)
+        }, ::message,
+            screenUnlocked = { reconcileScreenState(PlayerDiagnostics.ScreenSignal.USER_PRESENT) },
+            screenOn = { reconcileScreenState(PlayerDiagnostics.ScreenSignal.SCREEN_ON) })
         setContent { WeiktubeApp(this, model) }
         if (savedInstanceState != null) {
             if (savedInstanceState.containsKey("orientation_before_player"))
@@ -309,16 +309,32 @@ class MainActivity : ComponentActivity() {
         // Reconcile with Android rather than retaining a stale PiP callback flag after backgrounding.
         pip = isInPictureInPictureMode
         foreground = true
-        screenOff = screenIsUnavailable()
+        reconcileScreenState(PlayerDiagnostics.ScreenSignal.ACTIVITY_START, resumeIfAllowed = false)
         if (::nativePip.isInitialized) nativePip.modeChanged(pip)
     }
-    private fun screenIsUnavailable() = getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked ||
-        !getSystemService(android.os.PowerManager::class.java).isInteractive
+    /** Broadcasts can be deferred while cached. Their name is not the current screen state. */
+    internal fun reconcileScreenState(signal: PlayerDiagnostics.ScreenSignal, resumeIfAllowed: Boolean = true) {
+        val interactive = getSystemService(android.os.PowerManager::class.java).isInteractive
+        val locked = getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
+        val previous = screenOff
+        screenOff = !interactive || locked
+        PlayerDiagnostics.screen(signal, diagnosticActivityId, interactive, locked, previous, screenOff, foreground)
+        if (!::player.isInitialized) return
+        if (screenOff) {
+            player.pauseView(PlayerDiagnostics.PauseReason.SCREEN_LOCK)
+            if (::browser.isInitialized) browser.pauseMedia()
+            shorts?.pauseMedia()
+            keepAwake(false)
+        } else if (resumeIfAllowed && playerMayRun) {
+            // Resume the retained native view, not playback. User Pause and policy remain intact.
+            player.resumeView()
+        }
+    }
     override fun onResume() {
         super.onResume()
         traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_RESUME)
         hostResumed = true
-        screenOff = screenIsUnavailable()
+        reconcileScreenState(PlayerDiagnostics.ScreenSignal.ACTIVITY_RESUME, resumeIfAllowed = false)
         if (customView != null && fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()
         syncPlayerPresentation()
         if (::updater.isInitialized) updater.onForeground()
@@ -330,6 +346,9 @@ class MainActivity : ComponentActivity() {
     }
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        // Unlock need not cause another onResume, and USER_PRESENT may have been deferred.
+        // Focus loss alone must never pause visible PiP.
+        if (hasFocus) reconcileScreenState(PlayerDiagnostics.ScreenSignal.WINDOW_FOCUS)
         if (::originalHome.isInitialized) originalHome.onWindowFocusChanged(hasFocus)
         if (hasFocus) updatePlayerSystemBars()
     }
