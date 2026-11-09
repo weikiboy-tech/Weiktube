@@ -54,6 +54,12 @@ object HistoryCodec {
         val item = HistoryEntry(canonical, title.trim().take(200).ifBlank { fallbackTitle }, now.coerceAtLeast(0))
         return encode(listOf(item) + previous.filterNot { it.url == canonical }.take(LIMIT - 1))
     }
+    /** Late metadata must not move an old selection or recreate an explicitly cleared history. */
+    fun updateTitle(raw: String?, url: String, title: String): String {
+        val canonical = Links.historyUrl(url)
+        val clean = title.trim().take(200)
+        return encode(decode(raw).map { if (it.url == canonical && clean.isNotBlank()) it.copy(title = clean) else it })
+    }
 }
 
 class WeiktubeModel(application: Application) : AndroidViewModel(application) {
@@ -94,5 +100,9 @@ class WeiktubeModel(application: Application) : AndroidViewModel(application) {
     fun record(url: String, title: String) = edit { p ->
         if (p[booleanPreferencesKey("saveHistory")] == false) return@edit
         p[stringPreferencesKey("history")] = HistoryCodec.add(p[stringPreferencesKey("history")], url, title, System.currentTimeMillis())
+    }
+    fun updateHistoryTitle(url: String, title: String) = edit { p ->
+        if (p[booleanPreferencesKey("saveHistory")] == false) return@edit
+        p[stringPreferencesKey("history")] = HistoryCodec.updateTitle(p[stringPreferencesKey("history")], url, title)
     }
 }

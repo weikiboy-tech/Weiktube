@@ -22,7 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun AccountScreen(controller: YoutubeAccountController, onOpenUrl: (String) -> Unit, subscriptionsOnly: Boolean = false, homeConnection: @Composable () -> Unit = {}) {
+fun AccountScreen(controller: YoutubeAccountController, onOpenUrl: (String) -> Unit, subscriptionsOnly: Boolean = false, homeConnection: @Composable () -> Unit = {}, recentHistory: @Composable () -> Unit = {}) {
     LaunchedEffect(controller) { controller.onAccountOpened() }
     val selected = controller.selectedPlaylist.takeUnless { subscriptionsOnly }
     BackHandler(selected != null) { controller.closePlaylist() }
@@ -35,6 +35,7 @@ fun AccountScreen(controller: YoutubeAccountController, onOpenUrl: (String) -> U
     Surface(Modifier.fillMaxSize()) {
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (!subscriptionsOnly) item(key = "home_connection") { homeConnection() }
+            if (!subscriptionsOnly) item(key = "recent_history") { recentHistory() }
             if (controller.connected) {
                 item {
                     val channel = controller.ownChannels.firstOrNull()

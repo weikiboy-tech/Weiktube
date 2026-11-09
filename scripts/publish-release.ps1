@@ -1,6 +1,6 @@
 param(
-    [int]$VersionCode = 27,
-    [string]$VersionName = '1.3.13',
+    [int]$VersionCode = 28,
+    [string]$VersionName = '1.3.14',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
     [switch]$Publish,
@@ -12,7 +12,7 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = if ($Preview) { "v$VersionName-preview" } else { "v$VersionName" }
-$expectedMain = '25cf4c5645ebc3ff1f33480b7cc13c94285d26c8'
+$expectedMain = 'bf743c6f1a4ae41bb6b53daff64e227d1125da8b'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
 $channel = if ($Preview) { 'preview' } else { 'stable' }
 $output = Join-Path $project "dist/$channel-$VersionName"
@@ -25,7 +25,7 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Ruhemodus-Korrektur: Ein veralteter Bildschirm-Sperrzustand konnte die Player-WebView nach dem Entsperren dauerhaft pausiert lassen. Fensterfokus und Bildschirmereignisse gleichen jetzt den aktuellen Android-Zustand ab. Die vorhandene WebView wird fortgesetzt, ohne automatisches Play oder Neuladen. Echte Sperren und Benutzerpausen bleiben erhalten. Automatisiert geprüft, noch kein Gerätetest zur dauerhaften Behebung des gemeldeten Schwarzbilds. YouTube-seitige PiP-Pause bleibt offen.'
+$updateNotes = 'Mini/PiP: Die bestehende Player-WebView behält ihre Layoutgröße; Android skaliert die Videofläche. Tonstart und lokaler Verlauf verbessert. Nutzer bestätigt funktionierende Wiedergabe. Vollständige Langzeittests beider PiP-Modi stehen noch aus; siehe Release-Hinweise.'
 if ($Preview) { $updateNotes += ' Dies ist eine Vorabveröffentlichung ohne Änderung des regulären Updatekanals.' }
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or
@@ -171,7 +171,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create source tree.' }
     # A new isolated repository: preserve the reviewed history without replacing
     # any existing working tree or rewriting any local/remote branch.
-    $commit = git commit-tree $tree -p $main -m "Publish Weiktube $VersionName diagnostic build to the requested update channel"
+    $commit = git commit-tree $tree -p $main -m "Publish Weiktube $VersionName player viewport and audio update"
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create release commit.' }
     git update-ref refs/heads/main $commit ('0' * 40)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated main ref.' }
@@ -181,7 +181,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Normal fast-forward push failed; review remote state before retrying.' }
 } finally { Pop-Location }
 
-$releaseName = if ($Preview) { "Weiktube $VersionName – Diagnose-Vorabversion" } else { "Weiktube $VersionName – Diagnose-Update" }
+$releaseName = if ($Preview) { "Weiktube $VersionName – Diagnose-Vorabversion" } else { "Weiktube $VersionName – Mini-Player und Ton" }
 $body = @{tag_name=$tag;target_commitish=$commit;name=$releaseName;body=$notes;draft=$true;prerelease=[bool]$Preview;make_latest='false'} | ConvertTo-Json
 $release = Invoke-RestMethod "https://api.github.com/repos/$Repository/releases" -Headers $headers -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body))
 $upload = $release.upload_url -replace '\{.*$', ''

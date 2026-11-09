@@ -1,5 +1,28 @@
 # Weiktube – Prüfprotokoll
 
+## Release 1.3.14
+
+Native Skalierung bei erhaltener Player-WebView-Größe, bestätigter Tonstart und lokaler Verlauf. Testergebnisse und verbleibende Grenzen: [Release-Hinweise](RELEASE-1.3.14.md). Ältere Prüfstände unten sind historische Befunde.
+
+## Unveröffentlicht: Verlauf, Mini/PiP und Ton (09.11.2026)
+
+332 JVM-Tests bestanden (235 App / 77 Home / 20 Filter), Debug-/Release-Builds
+und Lint erfolgreich; 0 Lint-Fehler, 37 Warnungen. Neue Compose-, DataStore- und
+Controller-Tests sowie lokale Chromium-Medien-/Pixeltests durchgeführt.
+Anschließend echte OnePlus-Tests über WLAN-ADB und android-use durchgeführt:
+YouTube-Tonstart korrigiert und vom Nutzer bestätigt; Mini und Android-PiP pausieren
+YouTube weiterhin. Der Geräte-Debugger belegt den YouTube-internen Aufruf
+`!this.getVideoData().backgroundable && this.pauseVideo()` bei sichtbarer Seite.
+Direktes HTTPS-Testvideo läuft dagegen im internen Mini unmuted weiter.
+Nach der Tonänderung: 235 App-JVM-Tests und 19 Script-Fixtures bestanden,
+Debug-/Release-Build erfolgreich (Paketierung erst beim Wiederholen erfolgreich).
+Zehn erfolgreiche Geräte-Rundläufe, fünfminütige Dauertests beider Modi und
+hörbarer Ton in Android-PiP sind **nicht nachgewiesen**. axdroid war nicht verbunden;
+seine isolierte Upstream-Suite besteht mit 48 Tests und einem optionalen Skip.
+Keine Veröffentlichung und kein vollständiger YouTube-PiP-Fix.
+Details, genaue Änderungen, Changelog-Entwurf und Gerätecheckliste:
+[Prüfbericht](docs/HISTORY-PIP-AUDIO-REVIEW.md).
+
 ## Aktueller Stand 1.3.13: Bildschirmstatus nach Entsperren
 
 **Nutzerrückmeldung:** 1.3.12 zeigt auf dem Handy nach rund fünf Minuten

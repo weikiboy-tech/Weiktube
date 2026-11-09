@@ -10,6 +10,7 @@ class PlayerPlaybackDiagnosticsTest {
         .put("sequence", 1).put("elapsedMs", 20).put("video", true).put("paused", false)
         .put("connected", true).put("hidden", false).put("readyState", 4).put("mini", true)
         .put("pip", false).put("width", 196).put("height", 110)
+        .put("muted", true).put("defaultMuted", false).put("volumePercent", 70)
 
     @Test fun acceptsTypedBoundedStateWithoutLoggingCorrelation() {
         val state = PlayerPlaybackDiagnostics.decode(payload().toString(), token)!!
@@ -18,7 +19,7 @@ class PlayerPlaybackDiagnosticsTest {
         val log = PlayerPlaybackDiagnostics.format(state)
         assertFalse(log.contains(token))
         assertFalse(log.contains("token"))
-        assertEquals("event=PAUSE_CALL reason=APP_COMMAND seq=1 elapsedMs=20 video=true paused=false connected=true hidden=false ready=4 mini=true pip=false width=196 height=110", log)
+        assertEquals("event=PAUSE_CALL reason=APP_COMMAND seq=1 elapsedMs=20 video=true paused=false connected=true hidden=false ready=4 mini=true pip=false width=196 height=110 muted=true defaultMuted=false volumePercent=70", log)
     }
 
     @Test fun rejectsForeignTokenAdditionalDataAndOversizedMessages() {
@@ -41,9 +42,9 @@ class PlayerPlaybackDiagnosticsTest {
     }
 
     @Test fun rejectsCoercionAndOutOfRangeNumbers() {
-        for (key in listOf("video", "paused", "connected", "hidden", "mini", "pip"))
+        for (key in listOf("video", "paused", "connected", "hidden", "mini", "pip", "muted", "defaultMuted"))
             assertNull(PlayerPlaybackDiagnostics.decode(payload().put(key, "true").toString(), token))
-        for (key in listOf("sequence", "elapsedMs", "readyState", "width", "height")) {
+        for (key in listOf("sequence", "elapsedMs", "readyState", "width", "height", "volumePercent")) {
             for (invalid in listOf(-1, 0.5, "3", JSONObject.NULL, 1e30))
                 assertNull("$key=$invalid", PlayerPlaybackDiagnostics.decode(payload().put(key, invalid).toString(), token))
         }
@@ -51,6 +52,7 @@ class PlayerPlaybackDiagnosticsTest {
         assertNull(PlayerPlaybackDiagnostics.decode(payload().put("readyState", 5).toString(), token))
         assertNull(PlayerPlaybackDiagnostics.decode(payload().put("width", 16385).toString(), token))
         assertNull(PlayerPlaybackDiagnostics.decode(payload().put("elapsedMs", 86_400_001).toString(), token))
+        assertNull(PlayerPlaybackDiagnostics.decode(payload().put("volumePercent", 101).toString(), token))
     }
 
     @Test fun nativeRateLimitUsesRollingMinuteAndNeverExceeds120() {

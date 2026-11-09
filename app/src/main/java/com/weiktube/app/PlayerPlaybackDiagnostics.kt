@@ -13,19 +13,20 @@ import java.util.UUID
 internal object PlayerPlaybackDiagnostics {
     private const val BRIDGE = "WeiktubePlaybackDiagnostics"
     private val origins = setOf("https://m.youtube.com", "https://www.youtube.com", "https://youtube.com", "https://com.weiktube.app")
-    internal enum class Event { INITIAL, PLAY, PLAYING, PAUSE_CALL, PAUSE, ENDED, VISIBILITY, PAGE_HIDE, BLUR, METADATA, EMPTIED, RESIZE }
+    internal enum class Event { INITIAL, PLAY, PLAYING, PAUSE_CALL, PAUSE, ENDED, VISIBILITY, PAGE_HIDE, BLUR, METADATA, EMPTIED, RESIZE, VOLUME }
     internal enum class Reason { NONE, APP_COMMAND, APP_GUARD, JS_UNATTRIBUTED, ENGINE_OR_UNOBSERVED }
     internal data class State(
         val event: Event, val reason: Reason, val sequence: Int, val elapsedMs: Int,
         val video: Boolean, val paused: Boolean, val connected: Boolean, val hidden: Boolean,
         val readyState: Int, val mini: Boolean, val pip: Boolean, val width: Int, val height: Int,
+        val muted: Boolean, val defaultMuted: Boolean, val volumePercent: Int,
     )
 
     internal fun decode(raw: String, token: String): State? {
         if (raw.length > 768 || token.isEmpty() || token.length > 64) return null
         return runCatching {
             val data = JSONObject(raw)
-            if (data.length() != 14 || data.opt("token") != token) return null
+            if (data.length() != 17 || data.opt("token") != token) return null
             fun flag(key: String): Boolean? = data.opt(key) as? Boolean
             fun integer(key: String, min: Int, max: Int): Int? {
                 val value = (data.opt(key) as? Number)?.toDouble() ?: return null
@@ -42,7 +43,9 @@ internal object PlayerPlaybackDiagnostics {
                 flag("connected") ?: return null, flag("hidden") ?: return null,
                 integer("readyState", 0, 4) ?: return null, flag("mini") ?: return null,
                 flag("pip") ?: return null, integer("width", 0, 16384) ?: return null,
-                integer("height", 0, 16384) ?: return null)
+                integer("height", 0, 16384) ?: return null,
+                flag("muted") ?: return null, flag("defaultMuted") ?: return null,
+                integer("volumePercent", 0, 100) ?: return null)
         }.getOrNull()
     }
 
@@ -60,7 +63,7 @@ internal object PlayerPlaybackDiagnostics {
     internal fun format(state: State): String = with(state) {
         "event=${event.name} reason=${reason.name} seq=$sequence elapsedMs=$elapsedMs " +
             "video=$video paused=$paused connected=$connected hidden=$hidden ready=$readyState " +
-            "mini=$mini pip=$pip width=$width height=$height"
+            "mini=$mini pip=$pip width=$width height=$height muted=$muted defaultMuted=$defaultMuted volumePercent=$volumePercent"
     }
 
     fun install(web: WebView): Hooks = Hooks(web)
@@ -123,7 +126,9 @@ internal object PlayerPlaybackDiagnostics {
                 hidden:!!document.hidden,readyState:v?integer(v.readyState,4):0,
                 mini:!!root&&root.getAttribute('data-weiktube-mini')==='1',
                 pip:!!root&&root.getAttribute('data-weiktube-system-pip')==='1',
-                width:integer(window.innerWidth,16384),height:integer(window.innerHeight,16384)};
+                width:integer(window.innerWidth,16384),height:integer(window.innerHeight,16384),
+                muted:!!v&&!!v.muted,defaultMuted:!!v&&!!v.defaultMuted,
+                volumePercent:v&&Number.isFinite(v.volume)?Math.round(Math.max(0,Math.min(1,v.volume))*100):0};
               window.WeiktubePlaybackDiagnostics.postMessage(JSON.stringify(payload));
             }catch(ignore){}
           }
@@ -150,7 +155,7 @@ internal object PlayerPlaybackDiagnostics {
               Object.defineProperty(proto,'pause',Object.assign({},descriptor,{value:wrapped}));
             }
           }catch(ignore){}
-          var names={play:'PLAY',playing:'PLAYING',pause:'PAUSE',ended:'ENDED',loadedmetadata:'METADATA',emptied:'EMPTIED'};
+          var names={play:'PLAY',playing:'PLAYING',pause:'PAUSE',ended:'ENDED',loadedmetadata:'METADATA',emptied:'EMPTIED',volumechange:'VOLUME'};
           Object.keys(names).forEach(function(type){
             document.addEventListener(type,function(e){
               if(!media(e.target))return;

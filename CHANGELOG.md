@@ -1,5 +1,27 @@
 # Änderungsverlauf
 
+## Release 1.3.14
+
+Native Skalierung bei erhaltener Player-WebView-Größe, bestätigter Tonstart und lokaler Verlauf. Testergebnisse und verbleibende Grenzen: [Release-Hinweise](RELEASE-1.3.14.md). Ältere Prüfstände unten sind historische Befunde.
+
+## Unveröffentlicht – Entwurf für die nächste Version
+
+- Lokales „Kürzlich angesehen“-Karussell im Du-Tab, mit Vorschaubildern,
+  „Alle anzeigen“, Leerzustand und Hinweis auf pausierte Aufzeichnung.
+- Erneute Videoauswahl aktualisiert den Verlauf; verspätete Titelmeldungen
+  ändern keine Reihenfolge und legen nach dem Löschen keine Einträge neu an.
+- Bestätigung vor dem Löschen des lokalen Verlaufs.
+- Begrenzte Playback-Diagnose um Stummschaltung und Medienlautstärke erweitert.
+- Einmaliger Tonstart bei expliziter neuer Videoauswahl; spätere Stummschaltung
+  und Pause bleiben erhalten. Auf dem OnePlus mit sofortigem Ton und ohne
+  verbleibenden Hinweis vom Nutzer bestätigt.
+- Neue UI-/DataStore-/Modustests und lokale Chromium-Medienkontrollen.
+  YouTube-PiP bleibt offen; die quellenseitige Pause wurde auf dem Gerät
+  am tatsächlichen Aufrufer nachgewiesen. Keine Umgehung der Freigabeprüfung,
+  kein vollständiger Wiedergabefix behauptet, keine Veröffentlichung erfolgt.
+
+[Prüfbericht und Geräteanleitung](docs/HISTORY-PIP-AUDIO-REVIEW.md).
+
 ## 1.3.13 / Code 27 – Bildschirmstatus nach dem Entsperren
 
 Der Nutzer meldet den schwarzen Player nach rund fünf Minuten Ruhemodus auch

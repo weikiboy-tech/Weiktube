@@ -171,7 +171,9 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                 when (a.tab) {
                     2 -> SettingsScreen(prefs, model, a, shieldsOnly = true)
                     3 -> SubscriptionsScreen(a.subscriptionFeed, a.youtubeAccount, a::openVideo, a::openAccountUrl)
-                    4 -> AccountScreen(a.youtubeAccount, a::openAccountUrl, homeConnection = { HomeConnectionEntry(a, a.youtubeAccount) })
+                    4 -> AccountScreen(a.youtubeAccount, a::openAccountUrl,
+                        homeConnection = { HomeConnectionEntry(a, a.youtubeAccount) },
+                        recentHistory = { RecentHistorySection(prefs, a::openVideo, { a.selectTab(6) }) })
                     5 -> SettingsScreen(prefs, model, a)
                     6 -> HistoryScreen(prefs, model, a)
                     else -> {
@@ -199,6 +201,16 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
             val corner by animateDpAsState(if (mini) 12.dp else 0.dp, tween(180), label = "playerCorner")
             val portrait = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
             val density = LocalDensity.current
+            // Expansion must finish before the document can follow the host again;
+            // otherwise its first expansion frame would still be a tiny web viewport.
+            val stableViewport = BuildConfig.STABLE_PLAYER_VIEWPORT
+            val expandingPlayer = stableViewport && full && !a.pip &&
+                (playerWidth != maxWidth || playerHeight != targetHeight)
+            val retainViewport = stableViewport && (mini || a.pip || expandingPlayer)
+            val normalViewportWidth = with(density) { maxWidth.roundToPx() }
+            val normalViewportHeight = with(density) {
+                (availableHeight - if (landscapeVideo) 0.dp else 44.dp).coerceAtLeast(1.dp).roundToPx()
+            }
             var dragPixels by remember { mutableFloatStateOf(0f) }
             val dragVisual by animateFloatAsState(dragPixels, tween(if (dragPixels > 0f) 0 else 120), label = "playerDrag")
             LaunchedEffect(full, p.source, a.pip) { dragPixels = 0f }
@@ -217,10 +229,12 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                 it.visibility = if (playerVisible) android.view.View.VISIBLE else android.view.View.INVISIBLE
                                 // PiP has no in-window system bars. Clear old phone/cutout insets there too.
                                 it.setSystemInsetsHandledByHost(!landscapeVideo)
+                                it.setViewportPresentation(retainViewport, p.source, p.videoWidth, p.videoHeight,
+                                    normalViewportWidth, normalViewportHeight)
                                 it.configure(enabled = full && portrait && !a.fullscreen && !a.pip,
                                     youtube = p.isYoutube, onDrag = { distance -> dragPixels = distance },
                                     onMinimize = a::minimizeWebVideo)
-                                p.setPresentation(mini, dark, landscapeVideo || a.pip, systemPip = a.pip)
+                                p.setPresentation(mini || expandingPlayer, dark, landscapeVideo || a.pip, systemPip = a.pip)
                             })
                     }
                     if (hasPlayer && full && !a.pip && !landscapeVideo) {
@@ -307,13 +321,14 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
 }
 @Composable
 private fun HistoryScreen(prefs: Preferences, model: WeiktubeModel, a: MainActivity) {
+    var confirmDelete by remember { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize()) {
         LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Text("Deine Mediathek", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold) }
             item { Text("Zuletzt in Weiktube geöffnet · lokal auf diesem Gerät", style = MaterialTheme.typography.bodyMedium) }
             item { Row {
                 TextButton(onClick = a::openAccountScreen) { Text("Deine Playlists") }
-                TextButton(onClick = model::clearHistory) { Text("Verlauf löschen") }
+                TextButton(onClick = { confirmDelete = true }, enabled = prefs.history.isNotEmpty()) { Text("Verlauf löschen") }
             } }
             if (prefs.history.isEmpty()) item { Text("Noch keine Videos im Verlauf. Öffne ein Video oder teile einen YouTube-Link mit Weiktube.") }
             items(prefs.history, key = { it.url }) { item ->
@@ -329,6 +344,10 @@ private fun HistoryScreen(prefs: Preferences, model: WeiktubeModel, a: MainActiv
             }
         }
     }
+    if (confirmDelete) HistoryDeleteDialog(onDismiss = { confirmDelete = false }, onConfirm = {
+        confirmDelete = false
+        model.clearHistory()
+    })
 }
 
 @Composable

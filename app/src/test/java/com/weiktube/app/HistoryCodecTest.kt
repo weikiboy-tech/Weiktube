@@ -4,6 +4,23 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class HistoryCodecTest {
+    @Test fun lateMetadataDoesNotReorderSelectionsOrRecreateClearedHistory() {
+        val first = HistoryCodec.add(null, "https://youtu.be/abcdefghijk", "First", 10)
+        val second = HistoryCodec.add(first, "https://youtu.be/12345678901", "Second", 20)
+        val updated = HistoryCodec.decode(HistoryCodec.updateTitle(second, "https://youtu.be/abcdefghijk", "Actual title"))
+        assertEquals(listOf("Second", "Actual title"), updated.map { it.title })
+        assertEquals(listOf(20L, 10L), updated.map { it.time })
+        assertTrue(HistoryCodec.decode(HistoryCodec.updateTitle("[]", "https://youtu.be/abcdefghijk", "Late")).isEmpty())
+    }
+
+    @Test fun reselectingKnownVideoMovesItFirstWithoutLosingItsTitle() {
+        val first = HistoryCodec.add(null, "https://youtu.be/abcdefghijk", "First", 10)
+        val second = HistoryCodec.add(first, "https://youtu.be/12345678901", "Second", 20)
+        val restored = HistoryCodec.decode(HistoryCodec.add(second, "https://m.youtube.com/watch?v=abcdefghijk", "", 30))
+        assertEquals(listOf("First", "Second"), restored.map { it.title })
+        assertEquals(30L, restored.first().time)
+        assertEquals(restored, HistoryCodec.decode(HistoryCodec.encode(restored)))
+    }
     @Test fun corruptIndividualEntriesDoNotLoseGoodEntriesOrCrashTheNextWrite() {
         val broken = """[1,null,{"url":"javascript:bad"},{"url":"https://youtu.be/abcdefghijk","title":"Old","time":1}]"""
         assertEquals(1, HistoryCodec.decode(broken).size)

@@ -119,7 +119,7 @@ fun PersonalHomeScreen(
 }
 
 @Composable
-private fun HistoryPreview(entry: HistoryEntry, onOpenVideo: (String) -> Unit) {
+internal fun HistoryPreview(entry: HistoryEntry, onOpenVideo: (String) -> Unit) {
     val thumbnail = remember(entry.url) { Links.videoId(entry.url)?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }.orEmpty() }
     Surface(onClick = { onOpenVideo(entry.url) }, modifier = Modifier.width(208.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column {

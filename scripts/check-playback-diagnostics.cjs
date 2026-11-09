@@ -47,6 +47,14 @@ function fixture({origin='https://m.youtube.com', embedded=false, bridge=true}={
     windowEvent(type){for(const fn of windows.get(type)||[])fn();},latest(){return messages.at(-1);}};
 }
 
+test('Volume changes distinguish muted media from zero volume without modifying either',()=>{
+  const f=fixture();f.current.muted=true;f.current.defaultMuted=true;f.current.volume=0.6;f.start();
+  assert.equal(f.latest().muted,true);assert.equal(f.latest().defaultMuted,true);assert.equal(f.latest().volumePercent,60);
+  f.current.muted=false;f.current.volume=0;f.emit('volumechange');
+  assert.equal(f.latest().event,'VOLUME');assert.equal(f.latest().muted,false);assert.equal(f.latest().volumePercent,0);
+  assert.equal(f.current.muted,false);assert.equal(f.current.volume,0);assert.equal(f.current.pauseCount,0);
+});
+
 test('Transparent pause preserves receiver, arguments, return value and descriptor; installs once',()=>{
   const f=fixture();f.start();const wrapped=f.Media.prototype.pause;
   assert.equal(f.current.pause('argument',7),f.current.result);f.flush();
@@ -104,7 +112,7 @@ test('Only fixed event/state fields cross the bridge; no credentials, URL, time 
   f.current.readyState=99;f.windowEvent('pagehide');f.windowEvent('blur');f.windowEvent('resize');
   assert.equal(f.latest().event,'RESIZE');assert.equal(f.latest().pip,true);
   assert.equal(f.latest().width,0);assert.equal(f.latest().height,0);assert.equal(f.latest().readyState,0);
-  assert.deepEqual(Object.keys(f.latest()).sort(),['token','event','reason','sequence','elapsedMs','video','paused','connected','hidden','readyState','mini','pip','width','height'].sort());
+  assert.deepEqual(Object.keys(f.latest()).sort(),['token','event','reason','sequence','elapsedMs','video','paused','connected','hidden','readyState','mini','pip','width','height','muted','defaultMuted','volumePercent'].sort());
   assert.equal(f.current.pauseCount,0,'read-only state events never pause or start media');
 });
 

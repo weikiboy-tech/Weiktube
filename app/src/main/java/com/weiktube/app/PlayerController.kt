@@ -44,6 +44,7 @@ class PlayerController(
     private var adRecoveryAttempts = 0
     private var playbackAllowed = true
     private var explicitStartRequested = false
+    private var audibleStartRequested = false
     private var destroyed = false
     private var rendererAlive = true
     private var viewPaused = false
@@ -368,9 +369,12 @@ class PlayerController(
             adRecoveryVideo = id; adRecoveryAttempts = 0
         }
         source = "https://www.youtube.com/watch?v=$id"
+        activity.model.record(source!!, "")
     }
     fun open(url: String, userInitiated: Boolean = true) {
         openSelected(url, userInitiated)
+        if (userInitiated && source != null && Links.historyUrl(source!!) == Links.historyUrl(url))
+            activity.model.record(source!!, title.takeUnless { it == "Video" || it == "HTTPS-Video" }.orEmpty())
     }
     /** Process recreation is intentionally paused; no saved Play state can start background audio. */
     fun restore(url: String, seconds: Double) {
@@ -402,6 +406,7 @@ class PlayerController(
         }
         playbackAllowed = activity.playerMayRun
         explicitStartRequested = userInitiated
+        audibleStartRequested = userInitiated && !recovery
         generation++; source = if (id != null) "https://www.youtube.com/watch?v=$id" else url
         documentCommitted = false
         recoveryDocumentPending = recovery
@@ -486,7 +491,7 @@ class PlayerController(
                     duration = value.optDouble("duration", 0.0).coerceAtLeast(0.0)
                 }
                 value.optString("title").removeSuffix(" - YouTube").trim().takeIf { it.isNotBlank() && it != "YouTube" }?.let { title = it.take(300) }
-                if (title != "Video" && title != lastRecordedTitle) { lastRecordedTitle = title; source?.let { activity.model.record(it, title) } }
+                if (title != "Video" && title != lastRecordedTitle) { lastRecordedTitle = title; source?.let { activity.model.updateHistoryTitle(it, title) } }
             }
         }
     }
@@ -525,13 +530,18 @@ class PlayerController(
                 else -> PlayerDiagnostics.Event.GATE_FILTER_BLOCKED
             })
         }
-        view.evaluateJavascript(MEDIA_GUARD + ";window.weiktubeSetPlayback($allowed,${start && allowed});", null)
+        val requestSound = allowed && start && audibleStartRequested
+        if (requestSound) audibleStartRequested = false
+        view.evaluateJavascript(MEDIA_GUARD +
+            (if (requestSound) ";window.weiktubeRequestAudibleStart();" else "") +
+            ";window.weiktubeSetPlayback($allowed,${start && allowed});", null)
     }
     fun pause() = pauseFor(PlayerDiagnostics.PauseReason.USER)
     internal fun pauseFor(reason: PlayerDiagnostics.PauseReason) {
         PlayerDiagnostics.pause(reason, generation, activity.diagnosticActivityId, diagnosticControllerId, currentViewId)
         pendingRecovery = pendingRecovery?.copy(play = false)
         explicitStartRequested = false
+        audibleStartRequested = false
         playbackAllowed = false
         playbackObservationRevision++
         if (rendererAlive && source != null) view.evaluateJavascript("""
@@ -614,13 +624,23 @@ class PlayerController(
         internal val MEDIA_GUARD = """
             (function(){
               if(window.weiktubeSetPlayback)return;
-              var allowed=false,pending=false;
+              var allowed=false,pending=false,audible=false;
+              // One explicit selection may request sound. Never reassert mute/volume on
+              // presentation changes, resume, or subsequent user mute/pause operations.
+              window.weiktubeRequestAudibleStart=function(){audible=true;};
+              document.addEventListener('playing',function(e){
+                var v=e.target;if(!allowed||!audible||!v||v.tagName!=='VIDEO')return;
+                audible=false;
+                var p=document.getElementById&&document.getElementById('movie_player');
+                if(p&&typeof p.unMute==='function')p.unMute();
+                v.muted=false;
+              },true);
               function pause(m){if(window.weiktubePlaybackScope)window.weiktubePlaybackScope('APP_GUARD',function(){m.pause();});else m.pause();}
               function start(v){if(allowed&&pending&&v){pending=false;v.play().catch(function(){});}}
               document.addEventListener('play',function(e){if(!allowed&&e.target&&e.target.pause)pause(e.target);},true);
               document.addEventListener('loadedmetadata',function(e){if(e.target&&e.target.tagName==='VIDEO')start(e.target);},true);
               window.weiktubeSetPlayback=function(next,requestStart){
-                allowed=next;if(!allowed)pending=false;else if(requestStart)pending=true;
+                allowed=next;if(!allowed){pending=false;audible=false;}else if(requestStart)pending=true;
                 var v=document.querySelector('video');
                 if(!allowed)document.querySelectorAll('video,audio').forEach(pause);
                 else if(v&&v.readyState>0)start(v);

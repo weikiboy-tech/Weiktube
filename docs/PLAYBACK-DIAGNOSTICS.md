@@ -465,3 +465,17 @@ funktionierend, wenn der betreffende Android-Ablauf tatsächlich geprüft ist.
 Die vorliegende Diagnose erklärt den reproduzierten Browser-Pausepfad und
 korrigiert einen begrenzten Bedienfehler; sie behauptet keinen fertigen
 PiP-Fix.
+# Ergänzung vom 09.11.2026 – Medienlautstärke, unveröffentlicht
+
+Die begrenzte `WeiktubePlayback`-Diagnose meldet zusätzlich `VOLUME` bei
+`volumechange` und enthält `muted`, `defaultMuted` sowie `volumePercent` (0–100).
+Der Decoder akzeptiert ausschließlich das feste Schema mit 17 Feldern; Herkunft,
+Dokumentkennung, Sequenz und Rate-Limit bleiben geprüft. Die zusätzlichen Werte
+sind rein lesend und werden bei sämtlichen Diagnoseereignissen mitgeführt.
+Sie erfassen weder Android-Systemlautstärke noch tatsächliche Lautsprecherausgabe.
+Ein Volume-Ereignis identifiziert nicht automatisch den Verursacher.
+
+Das dient zur Trennung von Pausieren, Medienstummschaltung und Lautstärke null.
+Die gemeldete wiederholte Tonfreigabe und YouTube-Mini/PiP sind weiterhin nicht
+als behoben bestätigt. [Aktueller Testbericht und Geräteabläufe](HISTORY-PIP-AUDIO-REVIEW.md).
+

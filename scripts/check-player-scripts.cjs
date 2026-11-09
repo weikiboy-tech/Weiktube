@@ -45,6 +45,34 @@ function mediaFixture({ initialVideo = true, ready = 0 } = {}) {
   return { context, video, audio, dispatch, listeners, install, insert() { present = true; } };
 }
 
+test('Explicit selection requests sound once; later user mute survives playing and mode updates', () => {
+  const f = mediaFixture({ ready: 4 });
+  f.video.muted = true;
+  let unmuteCalls = 0;
+  f.context.document.getElementById = () => ({ unMute() { unmuteCalls++; } });
+  f.context.weiktubeRequestAudibleStart();
+  f.context.weiktubeSetPlayback(true, true);
+  f.dispatch('playing', f.video);
+  assert.equal(f.video.muted, false);
+  assert.equal(unmuteCalls, 1);
+  f.video.muted = true;
+  f.context.weiktubeSetPlayback(true, false);
+  f.dispatch('playing', f.video);
+  assert.equal(f.video.muted, true);
+  assert.equal(unmuteCalls, 1);
+});
+
+test('Pause cancels pending sound; ordinary resume never unmutes', () => {
+  const f = mediaFixture({ ready: 4 });
+  f.video.muted = true;
+  f.context.weiktubeRequestAudibleStart();
+  f.context.weiktubeSetPlayback(true, true);
+  f.context.weiktubeSetPlayback(false, false);
+  f.context.weiktubeSetPlayback(true, true);
+  f.dispatch('playing', f.video);
+  assert.equal(f.video.muted, true);
+});
+
 test('Denied/background media is paused, including late play events', () => {
   const f = mediaFixture();
   f.video.play(); f.audio.play();

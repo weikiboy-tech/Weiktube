@@ -1,5 +1,19 @@
 # Weiktube 1.3.13 – Bildschirmstatus nach dem Entsperren
 
+## Release 1.3.14
+
+Native Skalierung bei erhaltener Player-WebView-Größe, bestätigter Tonstart und lokaler Verlauf. Testergebnisse und verbleibende Grenzen: [Release-Hinweise](RELEASE-1.3.14.md). Ältere Prüfstände unten sind historische Befunde.
+
+**Unveröffentlichter Arbeitsstand vom 09.11.2026:** Im Tab „Du“ gibt es jetzt ein
+lokales Verlaufskarussell mit „Alle anzeigen“ und Löschbestätigung. Videoauswahl
+und verspätete Titelupdates werden getrennt gespeichert. Die Diagnose erfasst
+zusätzlich Stummschaltung und Medienlautstärke. 332 JVM-Tests, Builds und lokale
+Chromium-Kontrollen bestehen. Ein einmaliger Tonstart bei bewusster Videoauswahl
+wurde auf dem OnePlus getestet und vom Nutzer bestätigt: Ton sofort, Hinweis weg.
+YouTube-Mini/PiP bleibt eingeschränkt: Die Pause wurde direkt im YouTube-Player
+bei dessen Prüfung `backgroundable=false` nachgewiesen. Keine neue Version
+veröffentlicht. [Änderungen, Testgrenzen und Geräteanleitung](docs/HISTORY-PIP-AUDIO-REVIEW.md).
+
 **1.3.12 hat den gemeldeten Handyfehler nicht behoben:** Nach rund fünf Minuten
 Ruhemodus trat der schwarze Player beim Nutzer weiterhin auf. 1.3.13 korrigiert
 eine zusätzliche reproduzierte Lücke: Ein alter Sperrstatus konnte die WebView

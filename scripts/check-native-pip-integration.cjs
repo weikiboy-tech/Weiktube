@@ -9,6 +9,8 @@ const activity = read(dir + 'MainActivity.kt');
 const player = read(dir + 'PlayerController.kt');
 const ui = read(dir + 'WeiktubeUi.kt');
 const native = read(dir + 'NativePipController.kt');
+assert.doesNotMatch(read(dir + 'PlayerGestureLayout.kt'), /loadUrl\(|evaluateJavascript\(|\.onPause\(|\.onResume\(|\.play\(|\.pause\(/,
+  'native viewport mapping must not load or command playback');
 const block = (source, from, to) => {
   const start = source.indexOf(from), end = source.indexOf(to, start + from.length);
   assert(start >= 0 && end > start, `missing boundaries ${from}`);
@@ -47,7 +49,9 @@ assert.doesNotMatch(minimizedByBack, /player\.(pause|pauseView|close|destroy|ope
   'minimizing an Original Home video is not a stop/reload/pause command');
 assert.doesNotMatch(block(activity, 'fun minimizeWebVideo()', 'fun goHome()'), /player\.(pause|pauseView|close|destroy|open)\(/,
   'the shared minimization path changes presentation only');
-assert.match(ui, /p\.setPresentation\(mini, dark, landscapeVideo \|\| a\.pip, systemPip = a\.pip\)/);
+assert.match(ui, /p\.setPresentation\(mini \|\| expandingPlayer, dark, landscapeVideo \|\| a\.pip, systemPip = a\.pip\)/);
+assert.match(ui, /val retainViewport = stableViewport && \(mini \|\| a\.pip \|\| expandingPlayer\)/);
+assert.match(ui, /it\.setViewportPresentation\(retainViewport, p\.source, p\.videoWidth, p\.videoHeight,/);
 assert.match(ui, /p\.setPlaybackAllowed\(!actions && a\.playerMayRun/);
 const miniControls = block(ui, 'if (mini && playerVisible)', 'if (p.error != null)');
 assert.match(miniControls, /val miniPlaying = p\.playing/);

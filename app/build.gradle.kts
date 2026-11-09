@@ -11,14 +11,20 @@ android {
         applicationId = "com.weiktube.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 27
-        versionName = "1.3.13"
+        versionCode = 28
+        versionName = "1.3.14"
         if (!stableApks) ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     buildTypes {
+        getByName("debug") {
+            buildConfigField("boolean", "STABLE_PLAYER_VIEWPORT",
+                providers.gradleProperty("weiktubeStablePlayerViewport").map(String::toBoolean).getOrElse(true).toString())
+        }
         getByName("release") {
+            buildConfigField("boolean", "STABLE_PLAYER_VIEWPORT", "true")
             isDebuggable = false
             isMinifyEnabled = false
             // Preserve the signing identity of all previously installed versions.
@@ -72,6 +78,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 tasks.register("exportHomeConnectionApk") {
     dependsOn("assembleDebug")

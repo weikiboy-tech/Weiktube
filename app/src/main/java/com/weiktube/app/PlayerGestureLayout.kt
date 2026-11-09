@@ -27,6 +27,57 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     private var ownsTouch = false
     private var childDisallowed = false
     private var systemInsetsHandledByHost = true
+    private var stableCompact = false
+    private var viewportSource: String? = null
+    private var logicalWidth = 0
+    private var logicalHeight = 0
+    private var mediaWidth = 0
+    private var mediaHeight = 0
+
+    /** The fallback is the measured full app content area, never the compact card's size. */
+    internal fun setViewportPresentation(compact: Boolean, source: String?, videoWidth: Int, videoHeight: Int,
+                                         normalWidth: Int, normalHeight: Int) {
+        val sourceChanged = viewportSource != source
+        val modeChanged = stableCompact != compact
+        val oldWidth = logicalWidth
+        val oldHeight = logicalHeight
+        if (sourceChanged) {
+            viewportSource = source
+            logicalWidth = 0; logicalHeight = 0
+        }
+        if (compact && (logicalWidth <= 0 || logicalHeight <= 0) && normalWidth > 0 && normalHeight > 0) {
+            logicalWidth = normalWidth; logicalHeight = normalHeight
+        }
+        val dimensionsChanged = mediaWidth != videoWidth || mediaHeight != videoHeight
+        stableCompact = compact
+        mediaWidth = videoWidth; mediaHeight = videoHeight
+        if (modeChanged || sourceChanged || dimensionsChanged || oldWidth != logicalWidth || oldHeight != logicalHeight) {
+            if (!compact) clearViewportTransform()
+            requestLayout()
+            if (modeChanged || sourceChanged) android.util.Log.i("WeiktubeViewport",
+                "compact=$compact sourceChanged=$sourceChanged logical=${logicalWidth}x$logicalHeight")
+        }
+    }
+
+    private fun clearViewportTransform() {
+        getChildAt(0)?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (stableCompact) {
+            // Do not call FrameLayout.onMeasure: it would first resize the retained WebView.
+            setMeasuredDimension(resolveSize(suggestedMinimumWidth, widthMeasureSpec),
+                resolveSize(suggestedMinimumHeight, heightMeasureSpec))
+            if (logicalWidth > 0 && logicalHeight > 0)
+                getChildAt(0)?.measure(MeasureSpec.makeMeasureSpec(logicalWidth, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(logicalHeight, MeasureSpec.EXACTLY))
+        } else {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            if (!stableCompact && measuredWidth > 0 && measuredHeight > 0) {
+                logicalWidth = measuredWidth; logicalHeight = measuredHeight
+            }
+        }
+    }
     private val replayInsets = Runnable {
         if (isAttachedToWindow) ViewCompat.getRootWindowInsets(this)?.let(::dispatchPlayerInsets)
     }
@@ -78,7 +129,19 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
-        super.onLayout(changed, left, top, right, bottom)
+        if (stableCompact && logicalWidth > 0 && logicalHeight > 0) {
+            getChildAt(0)?.apply {
+                layout(0, 0, logicalWidth, logicalHeight)
+                pivotX = 0f; pivotY = 0f
+                PlayerViewportTransform.fit(logicalWidth, logicalHeight, this@PlayerGestureLayout.width,
+                    this@PlayerGestureLayout.height, mediaWidth, mediaHeight)?.let {
+                    scaleX = it.scale; scaleY = it.scale; translationX = it.x; translationY = it.y
+                }
+            }
+        } else if (!stableCompact) {
+            clearViewportTransform()
+            super.onLayout(changed, left, top, right, bottom)
+        }
         if (changed) scheduleInsetsReplay()
     }
 

@@ -4,10 +4,47 @@ import hashlib
 import json
 
 root = Path(__file__).resolve().parents[1]
+
+viewport_review = json.loads((root / "scripts/stable-viewport-reviewed-changes.json").read_text(encoding="utf-8"))
+viewport_originals = {}
+for name, review in viewport_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " stable viewport change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed stable viewport changes")
+    viewport_originals[name] = content
+for name, expected in viewport_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed viewport helper/test")
+
+def before_viewport(name):
+    return viewport_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
+history_audio_review = json.loads((root / "scripts/history-audio-reviewed-changes.json").read_text(encoding="utf-8"))
+history_audio_originals = {}
+for name, review in history_audio_review["files"].items():
+    content = before_viewport(name)
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " history/audio change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed history/audio changes")
+    history_audio_originals[name] = content
+for name, expected in history_audio_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed history component")
+
+def before_history_audio(name):
+    return history_audio_originals.get(name, before_viewport(name))
+
 screen_review = json.loads((root / "scripts/screen-reviewed-changes.json").read_text(encoding="utf-8"))
 screen_originals = {}
 for name, review in screen_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_history_audio(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " screen state change missing or duplicated")
@@ -16,11 +53,11 @@ for name, review in screen_review["files"].items():
         raise SystemExit(name + " differs outside reviewed screen state recovery")
     screen_originals[name] = content
 for name, expected in screen_review["addedFiles"].items():
-    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+    if hashlib.sha256(before_history_audio(name).encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed screen state helper")
 
 def before_screen(name):
-    return screen_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    return screen_originals.get(name, before_history_audio(name))
 
 document_review = json.loads((root / "scripts/document-reviewed-changes.json").read_text(encoding="utf-8"))
 document_originals = {}
@@ -99,7 +136,7 @@ for name, expected in pip_review["addedFiles"].items():
 portrait_review = json.loads((root / "scripts/portrait-insets-reviewed-changes.json").read_text(encoding="utf-8"))["files"]
 portrait_originals = {}
 for name, review in portrait_review.items():
-    content = pip_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    content = pip_originals.get(name, before_history_audio(name))
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " portrait-inset change missing or duplicated")

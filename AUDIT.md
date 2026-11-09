@@ -1,5 +1,14 @@
 # Weiktube – Funktionsaudit und Neuaufbau
 
+**Einordnung vom 09.11.2026:** Die folgende Matrix beschreibt den historischen
+Stand 1.2.3, nicht alle späteren Implementierungen. Die originale Gecko-Startseite,
+der aktuelle Werbeschutz und das native PiP sind inzwischen vorhanden; ihr aktueller
+Prüfstand steht in README/TESTING. Der neueste unveröffentlichte Auftrag ergänzt
+den lokalen Verlauf im Du-Tab und einen einmaligen hörbaren Videostart.
+Der Tonfix wurde auf dem OnePlus vom Nutzer bestätigt. YouTube-PiP bleibt offen;
+die Pause durch YouTubes eigene `backgroundable`-Prüfung ist am Gerät belegt.
+[Aktueller Prüfbericht](docs/HISTORY-PIP-AUDIO-REVIEW.md).
+
 Vergleichsziel des Auftrags: Bedienabläufe der offiziellen YouTube-Android-App **21.43.528**, mit eigenständigem Weiktube-Branding. Dieses Dokument beschreibt technische Unterschiede und prüfbare Abnahmekriterien. Es behauptet keine identische Oberfläche, Zugriff auf nicht öffentliche YouTube-Funktionen oder bestandene Tests, die nicht tatsächlich ausgeführt wurden.
 
 ## Ausgangslage
