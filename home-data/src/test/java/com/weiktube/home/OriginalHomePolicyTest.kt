@@ -21,10 +21,16 @@ class OriginalHomePolicyTest {
     private val expected = "https://www.youtube.com/watch?v=$id"
 
     @Test fun validatedPublicVideoTypesOpenTheOriginalPlayerWithoutOtherQueryData() {
-        for (url in listOf("https://m.youtube.com/watch?v=$id&list=private&t=60#private", "https://www.youtube.com/shorts/$id",
+        for (url in listOf("https://m.youtube.com/watch?v=$id&list=private&t=60#private", 
             "https://youtube.com/live/$id", "https://youtu.be/$id?si=private", "https://www.youtube.com:443/watch?v=$id")) {
             assertEquals(url, expected, OriginalHomePolicy.videoUrl(url))
         }
+    }
+    @Test fun shortsKeepTheirDestinationAcrossRepeatedCanonicalization() {
+        assertEquals("https://www.youtube.com/shorts/", OriginalHomePolicy.videoUrl("https://m.youtube.com/shorts"))
+        val short = "https://www.youtube.com/shorts/$id"
+        assertEquals(short, OriginalHomePolicy.videoUrl("https://m.youtube.com/shorts/$id?si=private"))
+        assertEquals(short, OriginalHomePolicy.videoUrl(short))
     }
     @Test fun malformedAndNonPublicVideoLinksAreRejected() {
         for (url in listOf("http://www.youtube.com/watch?v=$id", "https://youtube.com.evil.test/watch?v=$id", "https://evil@youtube.com/watch?v=$id",

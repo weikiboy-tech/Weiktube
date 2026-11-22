@@ -16,7 +16,7 @@ object WatchNavigationScript {
         if (uri.port !in setOf(-1, 443)) return null
         if (Links.host(url) == "accounts.google.com") return url
         if (!Links.youtube(url)) return null
-        if (Links.videoId(url) != null) return Links.canonicalYoutubeUrl(url)
+        if (Links.videoId(url) != null || Links.isShorts(url)) return Links.canonicalYoutubeUrl(url)
         val path = uri.path.orEmpty()
         val publicPage = path == "/" || path == "/results" || path in setOf("/feed/you", "/feed/library", "/feed/subscriptions") ||
             path.matches(Regex("/(?:channel|user|c)/[^/]+/?")) || path.matches(Regex("/@[^/]+/?")) ||
@@ -67,7 +67,7 @@ object WatchNavigationScript {
             var video=yt&&/^[A-Za-z0-9_-]{11}$/.test(id||'');
             var channel=yt&&(/^\/(channel|user|c)\/[^/]+\/?$/.test(p)||/^\/@[^/]+\/?$/.test(p));
             var playlist=yt&&p==='/playlist'&&/^[A-Za-z0-9_-]{1,128}$/.test(u.searchParams.get('list')||'');
-            var browse=yt&&['/','/results','/feed/you','/feed/library','/feed/subscriptions'].includes(p);
+            var browse=yt&&['/','/results','/feed/you','/feed/library','/feed/subscriptions','/shorts','/shorts/'].includes(p);
             if(!(video||channel||playlist||browse||u.hostname==='accounts.google.com'))return;
             e.preventDefault();e.stopImmediatePropagation();window.WeiktubeWatchNavigation.postMessage(u.href);
           },true);

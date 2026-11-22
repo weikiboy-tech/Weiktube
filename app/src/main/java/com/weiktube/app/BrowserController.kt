@@ -48,6 +48,9 @@ class BrowserController(private val activity: MainActivity, private val shield: 
     var view: WebView by mutableStateOf(createWebView())
         private set
 
+    private fun browseDestination(url: String): String? =
+        if (activity.tab != 1 && Links.isShorts(url)) Links.canonicalYoutubeUrl(url) else Links.browseWatchUrl(url)
+
     private fun alive(web: WebView) = !destroyed && rendererAlive && web === view
 
     private fun createWebView(): WebView = WebView(activity).apply {
@@ -69,7 +72,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
                 // No arbitrary native action, token, cookie, credential or page data is exposed.
                 if (alive(web) && mainFrame && origin.toString().trimEnd('/') in YOUTUBE_ORIGINS) {
                     val raw = runCatching { message.data }.getOrNull().orEmpty()
-                    if (raw.length <= 8192) Links.browseWatchUrl(raw)?.let(::dispatchVideo)
+                    if (raw.length <= 8192) browseDestination(raw)?.let(::dispatchVideo)
                 }
             }
         }
@@ -99,7 +102,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
             override fun shouldOverrideUrlLoading(web: WebView, request: WebResourceRequest): Boolean {
                 if (!request.isForMainFrame || !alive(web)) return false
                 val url = request.url.toString()
-                Links.browseWatchUrl(url)?.let { dispatchVideo(it); return true }
+                browseDestination(url)?.let { dispatchVideo(it); return true }
                 if (!Links.https(url) || Links.host(url) == "accounts.google.com") {
                     val upgraded = Links.canonicalYoutubeUrl(url)
                     if (upgraded != null && !Links.https(url)) navigate(upgraded)
@@ -110,7 +113,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
             }
             override fun doUpdateVisitedHistory(web: WebView, url: String?, isReload: Boolean) {
                 if (!alive(web) || url == null || url == "about:blank") return
-                val watch = Links.browseWatchUrl(url)
+                val watch = browseDestination(url)
                 if (watch != null && !rescuingSpa) {
                     // Fallback for programmatic SPA navigation without a clicked anchor. Return through
                     // the website's own history, preserving its feed/scroll instead of loading Home.
@@ -143,7 +146,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
                 ads.pageStarted(url); adReady = ads.canPlay
                 mediaPlaying = false
                 topLevel = url
-                if (Links.browseWatchUrl(url) == null) currentUrl = url
+                if (browseDestination(url) == null) currentUrl = url
                 error = null
                 this@BrowserController.progress = 0.1f
                 refreshHistory()
@@ -204,7 +207,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
     @Suppress("UNUSED_PARAMETER")
     fun navigate(url: String, allowWebPlayback: Boolean = false) {
         if (destroyed) return
-        Links.browseWatchUrl(url)?.let { dispatchVideo(it); return }
+        browseDestination(url)?.let { dispatchVideo(it); return }
         val target = if (Links.youtube(url) && !Links.https(url)) Links.canonicalYoutubeUrl(url) ?: url else url.trim()
         if (!Links.https(target)) { error = "Nur sichere HTTPS-Adressen werden unterstützt."; return }
         forceSearch = false; searchActive = false
@@ -238,7 +241,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
     fun recover() {
         if (destroyed) return
         if (!rendererAlive) recreate()
-        val target = currentUrl.takeIf { Links.https(it) && Links.browseWatchUrl(it) == null }
+        val target = currentUrl.takeIf { Links.https(it) && browseDestination(it) == null }
             ?: lastBrowse.takeIf(Links::https) ?: HOME
         navigate(target)
     }
@@ -279,7 +282,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
         if (!rendererAlive || destroyed || !Links.youtube(currentUrl)) return
         view.evaluateJavascript(configuredScript(), null)
     }
-    private fun configuredScript() = "window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible || !adReady};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;" + BROWSER_SCRIPT
+    private fun configuredScript() = "window.weiktubeShortsTab=${activity.tab == 1};window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible || !adReady};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;" + BROWSER_SCRIPT
     private fun refreshDocumentScript() {
         if (!rendererAlive || destroyed || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
         documentScript?.remove()
@@ -380,6 +383,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
                 if(!anchor||!window.WeiktubeNavigation)return;
                 var u;try{u=new URL(anchor.href,location.href);}catch(ignore){return;}
                 if(!['youtube.com','www.youtube.com','m.youtube.com','youtu.be'].includes(u.hostname)||u.username||u.password||!['https:','http:'].includes(u.protocol)||u.port)return;
+                if(window.weiktubeShortsTab!==true && /^\/shorts(?:\/[A-Za-z0-9_-]{11})?\/?$/.test(u.pathname)){e.preventDefault();e.stopImmediatePropagation();window.WeiktubeNavigation.postMessage(u.href);return;}
                 var pieces=u.pathname.split('/');var id=u.hostname==='youtu.be'?u.pathname.slice(1):u.pathname==='/watch'?u.searchParams.get('v'):(pieces.length===3&&['live','embed'].includes(pieces[1])?pieces[2]:null);
                 if(!/^[A-Za-z0-9_-]{11}$/.test(id||''))return;
                 e.preventDefault();e.stopImmediatePropagation();window.WeiktubeNavigation.postMessage(u.href);

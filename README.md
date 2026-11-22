@@ -1,4 +1,8 @@
-# Weiktube 1.3.13 – Bildschirmstatus nach dem Entsperren
+# Weiktube 1.3.15
+
+## Release 1.3.15
+
+Shorts im Shorts-Tab, gespeicherte Wiedergabepositionen und keine Reaktion auf Kopfüberhalten. [Änderungen und Testgrenzen](RELEASE-1.3.15.md). Die älteren Abschnitte unten dokumentieren frühere Arbeitsstände.
 
 ## Release 1.3.14
 

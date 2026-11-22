@@ -1,5 +1,9 @@
 # Weiktube – Prüfprotokoll
 
+## Release 1.3.15
+
+Shorts im Shorts-Tab, gespeicherte Wiedergabepositionen und keine Reaktion auf Kopfüberhalten. [Änderungen und Testgrenzen](RELEASE-1.3.15.md). Die älteren Abschnitte unten dokumentieren frühere Arbeitsstände.
+
 ## Release 1.3.14
 
 Native Skalierung bei erhaltener Player-WebView-Größe, bestätigter Tonstart und lokaler Verlauf. Testergebnisse und verbleibende Grenzen: [Release-Hinweise](RELEASE-1.3.14.md). Ältere Prüfstände unten sind historische Befunde.

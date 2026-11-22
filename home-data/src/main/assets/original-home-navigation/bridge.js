@@ -59,13 +59,15 @@
     if (!recognizable) return { kind: 'other' };
     if (!raw || raw.length > 8192 || /[\x00-\x20\x7f\\]/.test(raw) || url.protocol !== 'https:' || url.username || url.password || url.port)
       return { kind: 'invalid' };
+    if (youtubeHosts.includes(url.hostname) && ['/shorts', '/shorts/'].includes(url.pathname))
+      return { kind: 'video', url: 'https://www.youtube.com/shorts/' };
     const parts = url.pathname.slice(1).split('/');
     let id;
     if (url.hostname === 'youtu.be' && parts.length === 1) id = parts[0];
     else if (url.pathname === '/watch' && url.searchParams.getAll('v').length === 1) id = url.searchParams.get('v');
     else if (parts.length === 2 && ['shorts', 'live'].includes(parts[0])) id = parts[1];
     return typeof id === 'string' && idPattern.test(id)
-      ? { kind: 'video', url: `https://www.youtube.com/watch?v=${id}` } : { kind: 'invalid' };
+      ? { kind: 'video', url: parts[0] === 'shorts' ? `https://www.youtube.com/shorts/${id}` : `https://www.youtube.com/watch?v=${id}` } : { kind: 'invalid' };
   }
 
   // Only known public navigation properties on the clicked renderer. Skip all accessors.
@@ -84,7 +86,7 @@
       if (watch != null) {
         const id = own(watch, 'videoId');
         return typeof id === 'string' && idPattern.test(id)
-          ? { kind: 'video', url: `https://www.youtube.com/watch?v=${id}` } : { kind: 'invalid' };
+          ? { kind: 'video', url: key === 'reelWatchEndpoint' ? `https://www.youtube.com/shorts/${id}` : `https://www.youtube.com/watch?v=${id}` } : { kind: 'invalid' };
       }
     }
     const url = at(value, ['commandMetadata', 'webCommandMetadata', 'url']);

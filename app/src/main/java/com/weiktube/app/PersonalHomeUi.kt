@@ -120,10 +120,16 @@ fun PersonalHomeScreen(
 
 @Composable
 internal fun HistoryPreview(entry: HistoryEntry, onOpenVideo: (String) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val progress = (context as? MainActivity)?.model?.progress?.get(entry.url)
     val thumbnail = remember(entry.url) { Links.videoId(entry.url)?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" }.orEmpty() }
     Surface(onClick = { onOpenVideo(entry.url) }, modifier = Modifier.width(208.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column {
             RemoteThumbnail(thumbnail, null, Modifier.fillMaxWidth().aspectRatio(16f / 9f), shape = RoundedCornerShape(0.dp), fallback = Icons.Rounded.PlayCircle)
+            if (progress != null) {
+                LinearProgressIndicator(progress = { (progress.seconds / progress.duration).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                Text("Weiter bei ${progress.label}", Modifier.padding(start = 10.dp, top = 6.dp), style = MaterialTheme.typography.labelSmall)
+            }
             Text(entry.title.ifBlank { "Video" }, Modifier.padding(10.dp), maxLines = 2, minLines = 2,
                 overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         }

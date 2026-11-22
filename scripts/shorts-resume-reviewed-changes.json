@@ -1,0 +1,168 @@
+{
+  "reason": "Preserve Shorts destination and local per-video progress; existing player/rendering retained.",
+  "files": {
+    "app/src/main/java/com/weiktube/app/PlayerController.kt": {
+      "previousSha256": "192dfc7cb3a21698fed52f63c5905c0cee2e9b8423fac9e1d8bfa226c0d2b7cf",
+      "changes": [
+        {
+          "current": "    private var videoOnly = false\n    private var systemPip = false\n    private var lastRecordedTitle = \"\"\n    private var progressSampleValid = false\n    private var awaitingResumePosition: Double? = null\n    private var historyRevision = 0\n    var resumedAt by mutableDoubleStateOf(0.0); private set\n    private fun saveProgress() {\n        if (progressSampleValid && activity.model.preferencesReady && historyRevision == activity.model.historyRevision)\n            source?.let { activity.model.progress.save(it, position, duration, force = true) }\n    }\n    fun restartFromBeginning() {\n        val url = source ?: return\n        activity.model.progress.remove(url)\n        progressSampleValid = false\n        openSelected(url, userInitiated = true, startAt = 0.0)\n    }\n    val pipReady: Boolean\n        get() = !destroyed && rendererAlive && !rendererUnresponsive && documentCommitted && source != null && !loading && error == null &&\n            (!isYoutube || adHooks[view]?.canPlay == true)\n",
+          "previous": "    private var videoOnly = false\n    private var systemPip = false\n    private var lastRecordedTitle = \"\"\n    val pipReady: Boolean\n        get() = !destroyed && rendererAlive && !rendererUnresponsive && documentCommitted && source != null && !loading && error == null &&\n            (!isYoutube || adHooks[view]?.canPlay == true)\n"
+        },
+        {
+          "current": "        if (!isYoutube || source == null) return\n        val id = Links.videoId(url) ?: return\n        if (id != Links.videoId(source!!)) {\n            saveProgress(); progressSampleValid = false; awaitingResumePosition = null\n            generation++; position = 0.0; duration = 0.0; title = \"Video\"; lastRecordedTitle = \"\"\n            videoWidth = 0; videoHeight = 0\n            adRecoveryVideo = id; adRecoveryAttempts = 0\n",
+          "previous": "        if (!isYoutube || source == null) return\n        val id = Links.videoId(url) ?: return\n        if (id != Links.videoId(source!!)) {\n            generation++; position = 0.0; duration = 0.0; title = \"Video\"; lastRecordedTitle = \"\"\n            videoWidth = 0; videoHeight = 0\n            adRecoveryVideo = id; adRecoveryAttempts = 0\n"
+        },
+        {
+          "current": "            if (pendingRecovery != null) trace(PlayerDiagnostics.Event.RECOVERY_CANCELLED)\n            pendingRecovery = null; automaticRecoveries = 0\n        }\n        val requiresLoad = !rendererAlive || error != null || startAt != null || Links.hasStartTime(url) ||\n            (source != null && !documentCommitted && !loading)\n        if (!ensureRenderer()) return\n        resumeLiveView()\n",
+          "previous": "            if (pendingRecovery != null) trace(PlayerDiagnostics.Event.RECOVERY_CANCELLED)\n            pendingRecovery = null; automaticRecoveries = 0\n        }\n        val requiresLoad = !rendererAlive || error != null || startAt != null ||\n            (source != null && !documentCommitted && !loading)\n        if (!ensureRenderer()) return\n        resumeLiveView()\n"
+        },
+        {
+          "current": "            }\n            return\n        }\n        saveProgress()\n        progressSampleValid = false\n        historyRevision = activity.model.historyRevision\n        playbackAllowed = activity.playerMayRun\n        explicitStartRequested = userInitiated\n        audibleStartRequested = userInitiated && !recovery\n",
+          "previous": "            }\n            return\n        }\n        playbackAllowed = activity.playerMayRun\n        explicitStartRequested = userInitiated\n        audibleStartRequested = userInitiated && !recovery\n"
+        },
+        {
+          "current": "        documentCommitted = false\n        recoveryDocumentPending = recovery\n        isYoutube = id != null; expanded = true; mini = false; error = null\n        val remembered = if (startAt == null && !Links.hasStartTime(url)) activity.model.progress.get(url)?.seconds else null\n        position = (startAt ?: remembered ?: Links.startSeconds(url).toDouble()).takeIf { it.isFinite() && it >= 0.0 } ?: 0.0\n        resumedAt = remembered ?: 0.0\n        awaitingResumePosition = position.takeIf { it > 0 }\n        duration = 0.0; playing = false; loading = true; title = \"Video\"; lastRecordedTitle = \"\"\n        videoWidth = 0; videoHeight = 0\n        playbackHooks[view]?.prepare()\n",
+          "previous": "        documentCommitted = false\n        recoveryDocumentPending = recovery\n        isYoutube = id != null; expanded = true; mini = false; error = null\n        position = (startAt ?: Links.startSeconds(url).toDouble()).takeIf { it.isFinite() && it >= 0.0 } ?: 0.0\n        duration = 0.0; playing = false; loading = true; title = \"Video\"; lastRecordedTitle = \"\"\n        videoWidth = 0; videoHeight = 0\n        playbackHooks[view]?.prepare()\n"
+        },
+        {
+          "current": "        val observationRevision = playbackObservationRevision\n        view.evaluateJavascript(\"\"\"\n            (function(){var v=document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');\n              return JSON.stringify({mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,\n              playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,\n              duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,\n              title:h?h.textContent:(document.title||''),url:location.href});})()\n",
+          "previous": "        val observationRevision = playbackObservationRevision\n        view.evaluateJavascript(\"\"\"\n            (function(){var v=document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');\n              return JSON.stringify({hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,\n              playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,\n              duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,\n              title:h?h.textContent:(document.title||''),url:location.href});})()\n"
+        },
+        {
+          "current": "                if (!isYoutube || adHooks[view]?.blocked != true) {\n                    position = value.optDouble(\"position\", position).coerceAtLeast(0.0)\n                    duration = value.optDouble(\"duration\", 0.0).coerceAtLeast(0.0)\n                    if (awaitingResumePosition?.let { position >= it - 2 } == true) awaitingResumePosition = null\n                    progressSampleValid = awaitingResumePosition == null && value.optInt(\"mediaReady\") >= 2 && !value.optBoolean(\"seeking\") &&\n                        position.isFinite() && duration.isFinite() && position >= 1 && duration > position &&\n                        (!isYoutube || adHooks[view]?.canPlay == true)\n                    if (activity.model.preferencesReady && historyRevision == activity.model.historyRevision) {\n                        if (value.optBoolean(\"ended\") && (!isYoutube || adHooks[view]?.canPlay == true) && duration > 0 && position >= duration - 1) {\n                            source?.let(activity.model.progress::remove); progressSampleValid = false\n                        } else if (progressSampleValid) source?.let { activity.model.progress.save(it, position, duration) }\n                    }\n                }\n                value.optString(\"title\").removeSuffix(\" - YouTube\").trim().takeIf { it.isNotBlank() && it != \"YouTube\" }?.let { title = it.take(300) }\n                if (title != \"Video\" && title != lastRecordedTitle) { lastRecordedTitle = title; source?.let { activity.model.updateHistoryTitle(it, title) } }\n",
+          "previous": "                if (!isYoutube || adHooks[view]?.blocked != true) {\n                    position = value.optDouble(\"position\", position).coerceAtLeast(0.0)\n                    duration = value.optDouble(\"duration\", 0.0).coerceAtLeast(0.0)\n                }\n                value.optString(\"title\").removeSuffix(\" - YouTube\").trim().takeIf { it.isNotBlank() && it != \"YouTube\" }?.let { title = it.take(300) }\n                if (title != \"Video\" && title != lastRecordedTitle) { lastRecordedTitle = title; source?.let { activity.model.updateHistoryTitle(it, title) } }\n"
+        },
+        {
+          "current": "    }\n    fun pause() = pauseFor(PlayerDiagnostics.PauseReason.USER)\n    internal fun pauseFor(reason: PlayerDiagnostics.PauseReason) {\n        saveProgress()\n        PlayerDiagnostics.pause(reason, generation, activity.diagnosticActivityId, diagnosticControllerId, currentViewId)\n        pendingRecovery = pendingRecovery?.copy(play = false)\n        explicitStartRequested = false\n",
+          "previous": "    }\n    fun pause() = pauseFor(PlayerDiagnostics.PauseReason.USER)\n    internal fun pauseFor(reason: PlayerDiagnostics.PauseReason) {\n        PlayerDiagnostics.pause(reason, generation, activity.diagnosticActivityId, diagnosticControllerId, currentViewId)\n        pendingRecovery = pendingRecovery?.copy(play = false)\n        explicitStartRequested = false\n"
+        },
+        {
+          "current": "    }\n    fun destroy() {\n        if (destroyed) return\n        saveProgress()\n        destroyed = true; pendingRecovery = null; generation++; playbackObservationRevision++\n        rendererAlive = false; playing = false; loading = false\n        disposeView(view)\n",
+          "previous": "    }\n    fun destroy() {\n        if (destroyed) return\n        destroyed = true; pendingRecovery = null; generation++; playbackObservationRevision++\n        rendererAlive = false; playing = false; loading = false\n        disposeView(view)\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/MainActivity.kt": {
+      "previousSha256": "3be6fac3afa50800419ae5a2c4a8817f8909c3fdf7cc162ce5b47ca63ff04365",
+      "changes": [
+        {
+          "current": "    private lateinit var nativePip: NativePipController\n    private var pendingOriginalHomeVideo: String? = null\n    private var originalHomePlayer = false\n    private var shortsFromHome = false\n    // The embedded view uses the same one-time return ticket and existing player entry point.\n    private fun acceptOriginalHomeVideo(token: String, raw: String) {\n        val url = OriginalHomeReturn.acceptPlayerResult(token, raw)\n",
+          "previous": "    private lateinit var nativePip: NativePipController\n    private var pendingOriginalHomeVideo: String? = null\n    private var originalHomePlayer = false\n    // The embedded view uses the same one-time return ticket and existing player entry point.\n    private fun acceptOriginalHomeVideo(token: String, raw: String) {\n        val url = OriginalHomeReturn.acceptPlayerResult(token, raw)\n"
+        },
+        {
+          "current": "        if (Links.videoId(url) != null) openVideo(url) else if (Links.youtube(url) && Links.https(url)) openAccountUrl(url)\n    }\n    fun openVideo(url: String) {\n        if (Links.isShorts(url) && Links.videoId(url) != null) {\n            pendingOriginalHomeVideo = null\n            shortsFromHome = tab == 0\n            selectTab(1)\n            ensureShorts().navigate(\"https://m.youtube.com/shorts/${Links.videoId(url)}\")\n            return\n        }\n        pendingOriginalHomeVideo = null\n        originalHomePlayer = false\n        browser.closeSearch()\n",
+          "previous": "        if (Links.videoId(url) != null) openVideo(url) else if (Links.youtube(url) && Links.https(url)) openAccountUrl(url)\n    }\n    fun openVideo(url: String) {\n        pendingOriginalHomeVideo = null\n        originalHomePlayer = false\n        browser.closeSearch()\n"
+        },
+        {
+          "current": "        if (reselectedHome) originalHome.goHome()\n    }\n    fun selectTab(value: Int) {\n        if (value != 1) shortsFromHome = false\n        browser.closeSearch()\n        tab = value\n        if (player.source != null) player.expanded = false\n",
+          "previous": "        if (reselectedHome) originalHome.goHome()\n    }\n    fun selectTab(value: Int) {\n        browser.closeSearch()\n        tab = value\n        if (player.source != null) player.expanded = false\n"
+        },
+        {
+          "current": "    }\n    fun back(): Boolean = when {\n        fullscreen -> { hideFullscreen(); true }\n        tab == 1 && shortsFromHome && !(player.source != null && player.expanded) -> { shortsFromHome = false; openOriginalHome(); true }\n        player.source != null && player.expanded -> {\n            // Back, the down arrow and the drag gesture minimize the same retained player.\n            // Returning to its Home document is not a playback-pause command.\n",
+          "previous": "    }\n    fun back(): Boolean = when {\n        fullscreen -> { hideFullscreen(); true }\n        player.source != null && player.expanded -> {\n            // Back, the down arrow and the drag gesture minimize the same retained player.\n            // Returning to its Home document is not a playback-pause command.\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/WeiktubeModel.kt": {
+      "previousSha256": "e40b7137f77f6756f78b2d54413880c2b7eb7a52f4348d76d3e8228d80f9c1c4",
+      "changes": [
+        {
+          "current": "}\n\nclass WeiktubeModel(application: Application) : AndroidViewModel(application) {\n    val progress = PlaybackProgressStore(application)\n    private val store = application.settingsStore\n    var preferencesReady = false; private set\n    val error = MutableStateFlow<String?>(null)\n    val preferences = store.data.catch { e ->\n        if (e is IOException) { error.value = \"Einstellungen konnten nicht geladen werden.\"; emit(emptyPreferences()) } else throw e\n    }.map { p ->\n        progress.enabled = p[booleanPreferencesKey(\"saveHistory\")] ?: true\n        preferencesReady = true\n        Preferences(p[stringPreferencesKey(\"theme\")] ?: \"System\", p[booleanPreferencesKey(\"shield\")] ?: true,\n            p[booleanPreferencesKey(\"ads\")] ?: true, p[booleanPreferencesKey(\"trackers\")] ?: true,\n            p[stringPreferencesKey(\"domains\")] ?: \"\", p[stringPreferencesKey(\"exceptions\")] ?: \"\",\n",
+          "previous": "}\n\nclass WeiktubeModel(application: Application) : AndroidViewModel(application) {\n    private val store = application.settingsStore\n    val error = MutableStateFlow<String?>(null)\n    val preferences = store.data.catch { e ->\n        if (e is IOException) { error.value = \"Einstellungen konnten nicht geladen werden.\"; emit(emptyPreferences()) } else throw e\n    }.map { p ->\n        Preferences(p[stringPreferencesKey(\"theme\")] ?: \"System\", p[booleanPreferencesKey(\"shield\")] ?: true,\n            p[booleanPreferencesKey(\"ads\")] ?: true, p[booleanPreferencesKey(\"trackers\")] ?: true,\n            p[stringPreferencesKey(\"domains\")] ?: \"\", p[stringPreferencesKey(\"exceptions\")] ?: \"\",\n"
+        },
+        {
+          "current": "    private fun edit(block: (MutablePreferences) -> Unit) { viewModelScope.launch {\n        try { store.edit(block) } catch (_: IOException) { error.value = \"Speichern fehlgeschlagen. Bitte Speicherplatz prüfen.\" }\n    } }\n    fun boolean(key: String, value: Boolean) {\n        if (key == \"saveHistory\") progress.enabled = value\n        edit { it[booleanPreferencesKey(key)] = value }\n    }\n    fun string(key: String, value: String) = edit { it[stringPreferencesKey(key)] = value }\n    fun saveFilters(domains: String, exceptions: String) {\n        ShieldEngine.parse(domains)\n",
+          "previous": "    private fun edit(block: (MutablePreferences) -> Unit) { viewModelScope.launch {\n        try { store.edit(block) } catch (_: IOException) { error.value = \"Speichern fehlgeschlagen. Bitte Speicherplatz prüfen.\" }\n    } }\n    fun boolean(key: String, value: Boolean) = edit { it[booleanPreferencesKey(key)] = value }\n    fun string(key: String, value: String) = edit { it[stringPreferencesKey(key)] = value }\n    fun saveFilters(domains: String, exceptions: String) {\n        ShieldEngine.parse(domains)\n"
+        },
+        {
+          "current": "            it[stringPreferencesKey(\"exceptions\")] = exceptions\n        }\n    }\n    var historyRevision = 0; private set\n    fun clearHistory() { historyRevision++; progress.clear(); string(\"history\", \"[]\") }\n    fun record(url: String, title: String) = edit { p ->\n        if (p[booleanPreferencesKey(\"saveHistory\")] == false) return@edit\n        p[stringPreferencesKey(\"history\")] = HistoryCodec.add(p[stringPreferencesKey(\"history\")], url, title, System.currentTimeMillis())\n",
+          "previous": "            it[stringPreferencesKey(\"exceptions\")] = exceptions\n        }\n    }\n    fun clearHistory() = string(\"history\", \"[]\")\n    fun record(url: String, title: String) = edit { p ->\n        if (p[booleanPreferencesKey(\"saveHistory\")] == false) return@edit\n        p[stringPreferencesKey(\"history\")] = HistoryCodec.add(p[stringPreferencesKey(\"history\")], url, title, System.currentTimeMillis())\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/WeiktubeUi.kt": {
+      "previousSha256": "b0a3dfb5547af6f87c255700c253c35383998a036b50fa6d8bfa882c106b33df",
+      "changes": [
+        {
+          "current": "        a.syncOriginalHomeVisibility()\n    }\n    Column(Modifier.fillMaxSize().then(if (a.pip || landscapeVideo) Modifier else Modifier.safeDrawingPadding())) {\n        if (!a.pip && !full && !personalHome && a.tab != 1 && !a.browser.searchActive) {\n            Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {\n                Image(painterResource(R.drawable.ic_weiktube), \"Weiktube Logo\", Modifier.size(28.dp))\n                Text(\"Weiktube\", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp).weight(1f))\n",
+          "previous": "        a.syncOriginalHomeVisibility()\n    }\n    Column(Modifier.fillMaxSize().then(if (a.pip || landscapeVideo) Modifier else Modifier.safeDrawingPadding())) {\n        if (!a.pip && !full && !personalHome && !a.browser.searchActive) {\n            Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {\n                Image(painterResource(R.drawable.ic_weiktube), \"Weiktube Logo\", Modifier.size(28.dp))\n                Text(\"Weiktube\", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp).weight(1f))\n"
+        },
+        {
+          "current": "                    }\n                    if (hasPlayer && full && !a.pip && !landscapeVideo) {\n                        if (p.loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))\n                        if (p.resumedAt > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {\n                            Text(\"An letzter Stelle fortgesetzt\", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)\n                            TextButton(onClick = p::restartFromBeginning) { Text(\"Von vorne\") }\n                        }\n                        p.error?.let { error ->\n                            Surface(color = MaterialTheme.colorScheme.errorContainer) {\n                                Column(Modifier.fillMaxWidth().padding(12.dp)) {\n",
+          "previous": "                    }\n                    if (hasPlayer && full && !a.pip && !landscapeVideo) {\n                        if (p.loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))\n                        p.error?.let { error ->\n                            Surface(color = MaterialTheme.colorScheme.errorContainer) {\n                                Column(Modifier.fillMaxWidth().padding(12.dp)) {\n"
+        },
+        {
+          "current": "                        Icon(Icons.Rounded.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))\n                        Column(Modifier.padding(start = 12.dp)) {\n                            Text(item.title, fontWeight = FontWeight.SemiBold, maxLines = 2)\n                            a.model.progress.get(item.url)?.let { saved ->\n                                Text(\"Weiter bei ${saved.label}\", style = MaterialTheme.typography.labelMedium)\n                                LinearProgressIndicator(progress = { playerProgress(saved.seconds, saved.duration) }, modifier = Modifier.fillMaxWidth())\n                            }\n                            Text(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.time)), style = MaterialTheme.typography.labelMedium)\n                        }\n                    }\n",
+          "previous": "                        Icon(Icons.Rounded.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))\n                        Column(Modifier.padding(start = 12.dp)) {\n                            Text(item.title, fontWeight = FontWeight.SemiBold, maxLines = 2)\n                            Text(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.time)), style = MaterialTheme.typography.labelMedium)\n                        }\n                    }\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/PersonalHomeUi.kt": {
+      "previousSha256": "f7f6c4e58d519f2f3cdd28435b48298d0f348208acbb7f024c006f15a839eef5",
+      "changes": [
+        {
+          "current": "\n@Composable\ninternal fun HistoryPreview(entry: HistoryEntry, onOpenVideo: (String) -> Unit) {\n    val context = androidx.compose.ui.platform.LocalContext.current\n    val progress = (context as? MainActivity)?.model?.progress?.get(entry.url)\n    val thumbnail = remember(entry.url) { Links.videoId(entry.url)?.let { \"https://i.ytimg.com/vi/$it/hqdefault.jpg\" }.orEmpty() }\n    Surface(onClick = { onOpenVideo(entry.url) }, modifier = Modifier.width(208.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {\n        Column {\n            RemoteThumbnail(thumbnail, null, Modifier.fillMaxWidth().aspectRatio(16f / 9f), shape = RoundedCornerShape(0.dp), fallback = Icons.Rounded.PlayCircle)\n            if (progress != null) {\n                LinearProgressIndicator(progress = { (progress.seconds / progress.duration).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())\n                Text(\"Weiter bei ${progress.label}\", Modifier.padding(start = 10.dp, top = 6.dp), style = MaterialTheme.typography.labelSmall)\n            }\n            Text(entry.title.ifBlank { \"Video\" }, Modifier.padding(10.dp), maxLines = 2, minLines = 2,\n                overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)\n        }\n",
+          "previous": "\n@Composable\ninternal fun HistoryPreview(entry: HistoryEntry, onOpenVideo: (String) -> Unit) {\n    val thumbnail = remember(entry.url) { Links.videoId(entry.url)?.let { \"https://i.ytimg.com/vi/$it/hqdefault.jpg\" }.orEmpty() }\n    Surface(onClick = { onOpenVideo(entry.url) }, modifier = Modifier.width(208.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {\n        Column {\n            RemoteThumbnail(thumbnail, null, Modifier.fillMaxWidth().aspectRatio(16f / 9f), shape = RoundedCornerShape(0.dp), fallback = Icons.Rounded.PlayCircle)\n            Text(entry.title.ifBlank { \"Video\" }, Modifier.padding(10.dp), maxLines = 2, minLines = 2,\n                overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)\n        }\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/Links.kt": {
+      "previousSha256": "56f98e292389fff43ac419d0dd5c1dcee8ae47fdf73929c25513489ef00d5508",
+      "changes": [
+        {
+          "current": "        }\n        return id?.takeIf(idPattern::matches)\n    }\n\n    fun hasStartTime(url: String): Boolean = uri(url)?.let {\n        val q = parameters(it.rawQuery); val f = parameters(it.rawFragment)\n        \"t\" in q || \"start\" in q || \"t\" in f\n    } ?: false\n\n    fun startSeconds(url: String): Int {\n        val u = uri(url) ?: return 0\n",
+          "previous": "        }\n        return id?.takeIf(idPattern::matches)\n    }\n\n    fun startSeconds(url: String): Int {\n        val u = uri(url) ?: return 0\n"
+        }
+      ]
+    },
+    "home-data/src/main/java/com/weiktube/home/OriginalHomePolicy.kt": {
+      "previousSha256": "cb3f80b41b1ff57950e8d494bdc9cc7f9a901dac26d40eeac1bac620bd0b3512",
+      "changes": [
+        {
+          "current": "            name in youtubeHosts && segments.size == 2 && segments[0] in setOf(\"shorts\", \"live\") -> segments[1]\n            else -> null\n        }\n        return id?.takeIf(videoId::matches)?.let {\n            if (segments.size == 2 && segments[0] == \"shorts\") \"https://www.youtube.com/shorts/$it\"\n            else \"https://www.youtube.com/watch?v=$it\"\n        }\n    }\n}\n",
+          "previous": "            name in youtubeHosts && segments.size == 2 && segments[0] in setOf(\"shorts\", \"live\") -> segments[1]\n            else -> null\n        }\n        return id?.takeIf(videoId::matches)?.let { \"https://www.youtube.com/watch?v=$it\" }\n    }\n}\n"
+        }
+      ]
+    },
+    "home-data/src/main/assets/original-home-navigation/bridge.js": {
+      "previousSha256": "752301f66d058f5a737f4e3bd218ce5f5d957ab04b10f5db5b126f9400c050ec",
+      "changes": [
+        {
+          "current": "    else if (url.pathname === '/watch' && url.searchParams.getAll('v').length === 1) id = url.searchParams.get('v');\n    else if (parts.length === 2 && ['shorts', 'live'].includes(parts[0])) id = parts[1];\n    return typeof id === 'string' && idPattern.test(id)\n      ? { kind: 'video', url: parts[0] === 'shorts' ? `https://www.youtube.com/shorts/${id}` : `https://www.youtube.com/watch?v=${id}` } : { kind: 'invalid' };\n  }\n\n  // Only known public navigation properties on the clicked renderer. Skip all accessors.\n",
+          "previous": "    else if (url.pathname === '/watch' && url.searchParams.getAll('v').length === 1) id = url.searchParams.get('v');\n    else if (parts.length === 2 && ['shorts', 'live'].includes(parts[0])) id = parts[1];\n    return typeof id === 'string' && idPattern.test(id)\n      ? { kind: 'video', url: `https://www.youtube.com/watch?v=${id}` } : { kind: 'invalid' };\n  }\n\n  // Only known public navigation properties on the clicked renderer. Skip all accessors.\n"
+        },
+        {
+          "current": "      if (watch != null) {\n        const id = own(watch, 'videoId');\n        return typeof id === 'string' && idPattern.test(id)\n          ? { kind: 'video', url: key === 'reelWatchEndpoint' ? `https://www.youtube.com/shorts/${id}` : `https://www.youtube.com/watch?v=${id}` } : { kind: 'invalid' };\n      }\n    }\n    const url = at(value, ['commandMetadata', 'webCommandMetadata', 'url']);\n",
+          "previous": "      if (watch != null) {\n        const id = own(watch, 'videoId');\n        return typeof id === 'string' && idPattern.test(id)\n          ? { kind: 'video', url: `https://www.youtube.com/watch?v=${id}` } : { kind: 'invalid' };\n      }\n    }\n    const url = at(value, ['commandMetadata', 'webCommandMetadata', 'url']);\n"
+        }
+      ]
+    },
+    "home-data/src/main/assets/original-home-navigation/manifest.json": {
+      "previousSha256": "ce524d7e9440b514252e7e767db37a4f18db3469dd3ebb13d450be71dfdba408",
+      "changes": [
+        {
+          "current": "{\n  \"manifest_version\": 2,\n  \"name\": \"Weiktube Original Home video handoff\",\n  \"version\": \"2.0.2\",\n  \"browser_specific_settings\": { \"gecko\": { \"id\": \"original-home-navigation@weiktube.local\" } },\n  \"permissions\": [\"nativeMessaging\", \"nativeMessagingFromContent\", \"geckoViewAddons\"],\n  \"content_scripts\": [{\n",
+          "previous": "{\n  \"manifest_version\": 2,\n  \"name\": \"Weiktube Original Home video handoff\",\n  \"version\": \"2.0.1\",\n  \"browser_specific_settings\": { \"gecko\": { \"id\": \"original-home-navigation@weiktube.local\" } },\n  \"permissions\": [\"nativeMessaging\", \"nativeMessagingFromContent\", \"geckoViewAddons\"],\n  \"content_scripts\": [{\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/RecentHistoryUi.kt": {
+      "previousSha256": "f27ed27d1385294f4d61e42e09c88c32e1661b685246d93c6cfc63acf7e5bb3f",
+      "changes": []
+    },
+    "app/build.gradle.kts": {
+      "previousSha256": "cfc768582a5ef6774eae39b38797db403e22288e74549bb3a5b462a079f8a313",
+      "changes": [
+        {
+          "current": "        applicationId = \"com.weiktube.app\"\n        minSdk = 26\n        targetSdk = 36\n        versionCode = 29\n        versionName = \"1.3.15\"\n        if (!stableApks) ndk { abiFilters += listOf(\"arm64-v8a\", \"x86_64\") }\n        testInstrumentationRunner = \"androidx.test.runner.AndroidJUnitRunner\"\n    }\n",
+          "previous": "        applicationId = \"com.weiktube.app\"\n        minSdk = 26\n        targetSdk = 36\n        versionCode = 28\n        versionName = \"1.3.14\"\n        if (!stableApks) ndk { abiFilters += listOf(\"arm64-v8a\", \"x86_64\") }\n        testInstrumentationRunner = \"androidx.test.runner.AndroidJUnitRunner\"\n    }\n"
+        }
+      ]
+    }
+  },
+  "addedFiles": {
+    "app/src/main/java/com/weiktube/app/PlaybackProgressStore.kt": "8e223e1400313eac0d4eb531dc273cdd5aec0110be3a723cbddbf263e148cdc4",
+    "app/src/test/java/com/weiktube/app/PlaybackProgressStoreTest.kt": "bab198282bec6e188f934b8bbf761f30e4efd7c142329ebbb35e96a591f51216",
+    "app/src/test/java/com/weiktube/app/PlayerResumeSelectionTest.kt": "fa3f73217729125fce9119502f749f7da4e77d070017516308c494f122f826da"
+  }
+}

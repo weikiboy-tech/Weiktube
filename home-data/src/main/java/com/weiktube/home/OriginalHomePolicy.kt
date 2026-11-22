@@ -83,6 +83,7 @@ object OriginalHomePolicy {
         val name = host(u)
         if (name !in youtubeHosts && name != "youtu.be") return null
         val path = u.rawPath.orEmpty()
+        if (name in youtubeHosts && path in setOf("/shorts", "/shorts/")) return "https://www.youtube.com/shorts/"
         val segments = path.removePrefix("/").split('/')
         val id = when {
             name == "youtu.be" && segments.size == 1 -> segments[0]
@@ -90,6 +91,9 @@ object OriginalHomePolicy {
             name in youtubeHosts && segments.size == 2 && segments[0] in setOf("shorts", "live") -> segments[1]
             else -> null
         }
-        return id?.takeIf(videoId::matches)?.let { "https://www.youtube.com/watch?v=$it" }
+        return id?.takeIf(videoId::matches)?.let {
+            if (segments.size == 2 && segments[0] == "shorts") "https://www.youtube.com/shorts/$it"
+            else "https://www.youtube.com/watch?v=$it"
+        }
     }
 }

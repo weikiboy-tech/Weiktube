@@ -64,6 +64,20 @@ class PlayerController(
     private var videoOnly = false
     private var systemPip = false
     private var lastRecordedTitle = ""
+    private var progressSampleValid = false
+    private var awaitingResumePosition: Double? = null
+    private var historyRevision = 0
+    var resumedAt by mutableDoubleStateOf(0.0); private set
+    private fun saveProgress() {
+        if (progressSampleValid && activity.model.preferencesReady && historyRevision == activity.model.historyRevision)
+            source?.let { activity.model.progress.save(it, position, duration, force = true) }
+    }
+    fun restartFromBeginning() {
+        val url = source ?: return
+        activity.model.progress.remove(url)
+        progressSampleValid = false
+        openSelected(url, userInitiated = true, startAt = 0.0)
+    }
     val pipReady: Boolean
         get() = !destroyed && rendererAlive && !rendererUnresponsive && documentCommitted && source != null && !loading && error == null &&
             (!isYoutube || adHooks[view]?.canPlay == true)
@@ -158,6 +172,7 @@ class PlayerController(
                 if (!alive(web)) return true
                 if (!request.isForMainFrame) return false
                 val url = request.url.toString()
+                if (Links.isShorts(url)) { activity.openVideo(url); return true }
                 if (Links.host(url) == "accounts.google.com") { expanded = false; activity.openAccountScreen(); return true }
                 if (!Links.https(url)) { activity.external(url); return true }
                 if (Links.youtube(url) && Links.videoId(url) == null) { expanded = false; activity.openAccountUrl(url); return true }
@@ -364,6 +379,7 @@ class PlayerController(
         if (!isYoutube || source == null) return
         val id = Links.videoId(url) ?: return
         if (id != Links.videoId(source!!)) {
+            saveProgress(); progressSampleValid = false; awaitingResumePosition = null
             generation++; position = 0.0; duration = 0.0; title = "Video"; lastRecordedTitle = ""
             videoWidth = 0; videoHeight = 0
             adRecoveryVideo = id; adRecoveryAttempts = 0
@@ -372,6 +388,7 @@ class PlayerController(
         activity.model.record(source!!, "")
     }
     fun open(url: String, userInitiated: Boolean = true) {
+        if (Links.isShorts(url)) { activity.openVideo(url); return }
         openSelected(url, userInitiated)
         if (userInitiated && source != null && Links.historyUrl(source!!) == Links.historyUrl(url))
             activity.model.record(source!!, title.takeUnless { it == "Video" || it == "HTTPS-Video" }.orEmpty())
@@ -389,7 +406,7 @@ class PlayerController(
             if (pendingRecovery != null) trace(PlayerDiagnostics.Event.RECOVERY_CANCELLED)
             pendingRecovery = null; automaticRecoveries = 0
         }
-        val requiresLoad = !rendererAlive || error != null || startAt != null ||
+        val requiresLoad = !rendererAlive || error != null || startAt != null || Links.hasStartTime(url) ||
             (source != null && !documentCommitted && !loading)
         if (!ensureRenderer()) return
         resumeLiveView()
@@ -404,6 +421,9 @@ class PlayerController(
             }
             return
         }
+        saveProgress()
+        progressSampleValid = false
+        historyRevision = activity.model.historyRevision
         playbackAllowed = activity.playerMayRun
         explicitStartRequested = userInitiated
         audibleStartRequested = userInitiated && !recovery
@@ -411,7 +431,10 @@ class PlayerController(
         documentCommitted = false
         recoveryDocumentPending = recovery
         isYoutube = id != null; expanded = true; mini = false; error = null
-        position = (startAt ?: Links.startSeconds(url).toDouble()).takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        val remembered = if (startAt == null && !Links.hasStartTime(url)) activity.model.progress.get(url)?.seconds else null
+        position = (startAt ?: remembered ?: Links.startSeconds(url).toDouble()).takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        resumedAt = remembered ?: 0.0
+        awaitingResumePosition = position.takeIf { it > 0 }
         duration = 0.0; playing = false; loading = true; title = "Video"; lastRecordedTitle = ""
         videoWidth = 0; videoHeight = 0
         playbackHooks[view]?.prepare()
@@ -456,7 +479,7 @@ class PlayerController(
         val observationRevision = playbackObservationRevision
         view.evaluateJavascript("""
             (function(){var v=document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');
-              return JSON.stringify({hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
+              return JSON.stringify({mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
               playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,
               duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,
               title:h?h.textContent:(document.title||''),url:location.href});})()
@@ -489,6 +512,15 @@ class PlayerController(
                 if (!isYoutube || adHooks[view]?.blocked != true) {
                     position = value.optDouble("position", position).coerceAtLeast(0.0)
                     duration = value.optDouble("duration", 0.0).coerceAtLeast(0.0)
+                    if (awaitingResumePosition?.let { position >= it - 2 } == true) awaitingResumePosition = null
+                    progressSampleValid = awaitingResumePosition == null && value.optInt("mediaReady") >= 2 && !value.optBoolean("seeking") &&
+                        position.isFinite() && duration.isFinite() && position >= 1 && duration > position &&
+                        (!isYoutube || adHooks[view]?.canPlay == true)
+                    if (activity.model.preferencesReady && historyRevision == activity.model.historyRevision) {
+                        if (value.optBoolean("ended") && (!isYoutube || adHooks[view]?.canPlay == true) && duration > 0 && position >= duration - 1) {
+                            source?.let(activity.model.progress::remove); progressSampleValid = false
+                        } else if (progressSampleValid) source?.let { activity.model.progress.save(it, position, duration) }
+                    }
                 }
                 value.optString("title").removeSuffix(" - YouTube").trim().takeIf { it.isNotBlank() && it != "YouTube" }?.let { title = it.take(300) }
                 if (title != "Video" && title != lastRecordedTitle) { lastRecordedTitle = title; source?.let { activity.model.updateHistoryTitle(it, title) } }
@@ -538,6 +570,7 @@ class PlayerController(
     }
     fun pause() = pauseFor(PlayerDiagnostics.PauseReason.USER)
     internal fun pauseFor(reason: PlayerDiagnostics.PauseReason) {
+        saveProgress()
         PlayerDiagnostics.pause(reason, generation, activity.diagnosticActivityId, diagnosticControllerId, currentViewId)
         pendingRecovery = pendingRecovery?.copy(play = false)
         explicitStartRequested = false
@@ -616,6 +649,7 @@ class PlayerController(
     }
     fun destroy() {
         if (destroyed) return
+        saveProgress()
         destroyed = true; pendingRecovery = null; generation++; playbackObservationRevision++
         rendererAlive = false; playing = false; loading = false
         disposeView(view)

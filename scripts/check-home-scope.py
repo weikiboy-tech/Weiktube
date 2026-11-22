@@ -5,10 +5,46 @@ import json
 
 root = Path(__file__).resolve().parents[1]
 
+
+
+orientation_review = json.loads((root / "scripts/shorts-orientation-reviewed-changes.json").read_text(encoding="utf-8"))
+orientation_originals = {}
+for name, review in orientation_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " shorts/orientation change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed shorts/orientation changes")
+    orientation_originals[name] = content
+for name, expected in orientation_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed orientation helper/test")
+def before_short_orientation(name):
+    return orientation_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
+shorts_review = json.loads((root / "scripts/shorts-resume-reviewed-changes.json").read_text(encoding="utf-8"))
+shorts_originals = {}
+for name, review in shorts_review["files"].items():
+    content = before_short_orientation(name)
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " shorts/resume change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed shorts/resume changes")
+    shorts_originals[name] = content
+for name, expected in shorts_review["addedFiles"].items():
+    if hashlib.sha256(before_short_orientation(name).encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed progress component")
+def before_shorts_resume(name):
+    return shorts_originals.get(name, before_short_orientation(name))
+
 viewport_review = json.loads((root / "scripts/stable-viewport-reviewed-changes.json").read_text(encoding="utf-8"))
 viewport_originals = {}
 for name, review in viewport_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_shorts_resume(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " stable viewport change missing or duplicated")
@@ -17,11 +53,11 @@ for name, review in viewport_review["files"].items():
         raise SystemExit(name + " differs outside reviewed stable viewport changes")
     viewport_originals[name] = content
 for name, expected in viewport_review["addedFiles"].items():
-    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+    if hashlib.sha256(before_shorts_resume(name).encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed viewport helper/test")
 
 def before_viewport(name):
-    return viewport_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    return viewport_originals.get(name, before_shorts_resume(name))
 
 history_audio_review = json.loads((root / "scripts/history-audio-reviewed-changes.json").read_text(encoding="utf-8"))
 history_audio_originals = {}
@@ -35,7 +71,7 @@ for name, review in history_audio_review["files"].items():
         raise SystemExit(name + " differs outside reviewed history/audio changes")
     history_audio_originals[name] = content
 for name, expected in history_audio_review["addedFiles"].items():
-    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+    if hashlib.sha256(before_shorts_resume(name).encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed history component")
 
 def before_history_audio(name):

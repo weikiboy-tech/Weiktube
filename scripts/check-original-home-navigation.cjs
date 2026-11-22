@@ -7,7 +7,7 @@ const { webcrypto } = require('node:crypto');
 const dir = path.join(__dirname, '../home-data/src/main/assets/original-home-navigation');
 const source = fs.readFileSync(process.env.WEIKTUBE_HOME_BRIDGE_SOURCE || path.join(dir, 'bridge.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-assert.equal(manifest.version, '2.0.1');
+assert.equal(manifest.version, '2.0.3');
 assert.equal(manifest.browser_specific_settings.gecko.id, 'original-home-navigation@weiktube.local');
 assert.deepEqual(manifest.content_scripts[0].matches, ['https://www.youtube.com/*', 'https://m.youtube.com/*', 'https://youtube.com/*']);
 assert.equal(manifest.content_scripts[0].run_at, 'document_start');
@@ -92,7 +92,7 @@ function fixture({ url = 'https://m.youtube.com/', subframe = false, exports = t
           assert.ok(['ready', 'enabled', 'openVideo', 'blocked'].includes(value.type));
           assert.match(value.documentId, /^[0-9a-f-]{36}$/);
           if (value.type === 'blocked') assert.ok(reasons.has(value.reason));
-          if (value.type === 'openVideo') assert.match(value.url, /^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/);
+          if (value.type === 'openVideo') assert.match(value.url, /^https:\/\/www\.youtube\.com\/(?:watch\?v=[A-Za-z0-9_-]{11}|shorts\/(?:[A-Za-z0-9_-]{11})?)$/);
           messages.push(value);
         } };
     } } }
@@ -256,9 +256,13 @@ function fixture({ url = 'https://m.youtube.com/', subframe = false, exports = t
   f.disable(); f.enable('generation-2'); f.tap(`/watch?v=${id}`);
   assert.equal(f.opens.length, 2); assert.equal(f.opens[1].generation, 'generation-2');
 
+  for (const root of ['/shorts', '/shorts/']) {
+    f = fixture(); f.enable(); assert.equal(f.tap(root).prevented, true);
+    assert.equal(f.opens[0].url, 'https://www.youtube.com/shorts/');
+  }
   for (const url of [`https://www.youtube.com/watch?v=${id}`, `/shorts/${id}`, `/live/${id}`, `https://youtu.be/${id}?si=PRIVATE`,
     `https://youtube.com/watch?v=${id}`, `https://www.youtube.com:443/watch?v=${id}`]) {
-    f = fixture(); f.enable(); assert.equal(f.tap(url).prevented, true, url); assert.equal(f.opens[0].url, canonical);
+    f = fixture(); f.enable(); assert.equal(f.tap(url).prevented, true, url); assert.equal(f.opens[0].url, url.startsWith('/shorts/') ? `https://www.youtube.com/shorts/${id}` : canonical);
   }
   for (const url of [`/watch?v=${id}&v=${id}`, '/watch', '/watch?v=short', `/watch?v=${id}%0A`, '/%77atch?v=bad',
     `/shorts/${id}/extra`, `https://youtu.be/${id}/extra`, `http://m.youtube.com/watch?v=${id}`, `https://private@youtube.com/watch?v=${id}`,
@@ -280,7 +284,7 @@ function fixture({ url = 'https://m.youtube.com/', subframe = false, exports = t
     { __data: { data: { rendererContext: { commandContext: { onTap: { innertubeCommand: { reelWatchEndpoint: { videoId: id } } } } } } } } ]) {
     f = fixture(); f.enable(); const card = element('YTM-VIDEO-WITH-CONTEXT-RENDERER', {}, data);
     const hit = f.tapPath([element('IMG'), element('DIV'), card]);
-    assert.equal(hit.stopped, true); assert.equal(f.opens[0].url, canonical);
+    assert.equal(hit.stopped, true); assert.equal(f.opens[0].url, JSON.stringify(data).includes("reelWatchEndpoint") ? `https://www.youtube.com/shorts/${id}` : canonical);
     let domChanged = false; if (!hit.stopped) domChanged = true;
     assert.equal(domChanged, false, 'Capture prevents router DOM replacement');
   }

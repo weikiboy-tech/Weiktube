@@ -127,7 +127,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
         a.syncOriginalHomeVisibility()
     }
     Column(Modifier.fillMaxSize().then(if (a.pip || landscapeVideo) Modifier else Modifier.safeDrawingPadding())) {
-        if (!a.pip && !full && !personalHome && !a.browser.searchActive) {
+        if (!a.pip && !full && !personalHome && a.tab != 1 && !a.browser.searchActive) {
             Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.ic_weiktube), "Weiktube Logo", Modifier.size(28.dp))
                 Text("Weiktube", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 6.dp).weight(1f))
@@ -239,6 +239,10 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                     }
                     if (hasPlayer && full && !a.pip && !landscapeVideo) {
                         if (p.loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                        if (p.resumedAt > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("An letzter Stelle fortgesetzt", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+                            TextButton(onClick = p::restartFromBeginning) { Text("Von vorne") }
+                        }
                         p.error?.let { error ->
                             Surface(color = MaterialTheme.colorScheme.errorContainer) {
                                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -337,6 +341,10 @@ private fun HistoryScreen(prefs: Preferences, model: WeiktubeModel, a: MainActiv
                         Icon(Icons.Rounded.PlayCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                         Column(Modifier.padding(start = 12.dp)) {
                             Text(item.title, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                            a.model.progress.get(item.url)?.let { saved ->
+                                Text("Weiter bei ${saved.label}", style = MaterialTheme.typography.labelMedium)
+                                LinearProgressIndicator(progress = { playerProgress(saved.seconds, saved.duration) }, modifier = Modifier.fillMaxWidth())
+                            }
                             Text(DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.time)), style = MaterialTheme.typography.labelMedium)
                         }
                     }

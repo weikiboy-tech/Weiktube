@@ -28,7 +28,7 @@ assert.equal(click('https://m.youtube.com/watch?v=abcdefghijk'),true);
 assert.equal(click('https://www.youtube.com/live/abcdefghijk'),true);
 assert.equal(click('https://youtu.be/abcdefghijk?t=10'),true);
 assert.equal(messages.length,3);
-for(const url of ['https://m.youtube.com/shorts/abcdefghijk','https://m.youtube.com/feed/you','https://youtube.com.evil.org/watch?v=abcdefghijk','javascript:alert(1)','https://user:pass@youtube.com/watch?v=abcdefghijk','https://youtube.com:8443/watch?v=abcdefghijk'])assert.equal(click(url),false,url);
+for(const url of ['https://m.youtube.com/feed/you','https://youtube.com.evil.org/watch?v=abcdefghijk','javascript:alert(1)','https://user:pass@youtube.com/watch?v=abcdefghijk','https://youtube.com:8443/watch?v=abcdefghijk'])assert.equal(click(url),false,url);
 assert.equal(click('https://m.youtube.com/watch?v=abcdefghijk',{trusted:false}),false);
 assert.equal(click('https://m.youtube.com/watch?v=abcdefghijk',{button:1}),false);
 let pauses=0;context.weiktubePausePreview=false;events.play({target:{pause(){pauses++;}}});assert.equal(pauses,0);
@@ -41,3 +41,8 @@ const css=inserted[0].textContent;
 assert.ok(css.includes('ytm-pivot-bar-renderer'));
 assert.ok(!/video\s*\{|iframe\s*\{|advert|ad-showing|filter\s*:/i.test(css),'no hidden/modified playback or ads');
 console.log('PASS browser scripts: trusted public watch navigation, Shorts untouched, no credential/foreign routes, no preview audio overlap, search state, theme shell and idempotence.');
+
+assert.equal(click('https://m.youtube.com/shorts/abcdefghijk'),true);
+assert.equal(messages.at(-1),'https://m.youtube.com/shorts/abcdefghijk');
+context.weiktubeShortsTab=true;
+assert.equal(click('https://m.youtube.com/shorts/abcdefghijk'),false,'Shorts feed keeps its own navigation');

@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WatchNavigationPolicyTest {
+    @Test fun shortsRetainTheirDestinationIncludingTheFeedEntry() {
+        assertEquals("https://m.youtube.com/shorts/abcdefghijk", WatchNavigationScript.allowed("https://www.youtube.com/shorts/abcdefghijk?si=tracking"))
+        assertEquals("https://m.youtube.com/shorts", WatchNavigationScript.allowed("https://www.youtube.com/shorts"))
+        assertNull(Links.browseWatchUrl("https://m.youtube.com/shorts/abcdefghijk"))
+        assertFalse(Links.isShorts("https://m.youtube.com/shortstuff/abcdefghijk"))
+        assertFalse(Links.isShorts("https://m.youtube.com/shorts/invalid"))
+    }
     @Test fun handsOffOnlyPublicNavigationAndGoogleLogin() {
         assertNotNull(WatchNavigationScript.allowed("https://m.youtube.com/watch?v=abcdefghijk"))
         assertNotNull(WatchNavigationScript.allowed("https://m.youtube.com/@creator"))

@@ -1,0 +1,163 @@
+{
+  "reason": "Shorts route preservation and upright three-way video rotation.",
+  "files": {
+    "app/src/main/java/com/weiktube/app/MainActivity.kt": {
+      "previousSha256": "61a2039e37b5f2f7e71a412c0f58429126addcf8acb4faea95f9847e061aea32",
+      "changes": [
+        {
+          "current": "    private var orientationBeforeFullscreen = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED\n    private var orientationBeforePlayer: Int? = null\n    private var manualFullscreenSawLandscape = false\n    private var videoOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT\n    private val fullscreenOrientation by lazy {\n        object : android.view.OrientationEventListener(this) {\n            override fun onOrientationChanged(degrees: Int) {\n                if (!hostResumed || pip || degrees == ORIENTATION_UNKNOWN) return\n                videoOrientation = UprightVideoOrientation.fromSensor(degrees, videoOrientation)\n                if (customView == null) { syncPlayerPresentation(); return }\n                if (degrees in 60..120 || degrees in 240..300) manualFullscreenSawLandscape = true\n                else if (manualFullscreenSawLandscape && UprightVideoOrientation.isUpright(degrees)) {\n                    hideFullscreen()\n",
+          "previous": "    private var orientationBeforeFullscreen = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED\n    private var orientationBeforePlayer: Int? = null\n    private var manualFullscreenSawLandscape = false\n    private val fullscreenOrientation by lazy {\n        object : android.view.OrientationEventListener(this) {\n            override fun onOrientationChanged(degrees: Int) {\n                if (customView == null || !hostResumed || degrees == ORIENTATION_UNKNOWN) return\n                if (degrees in 60..120 || degrees in 240..300) manualFullscreenSawLandscape = true\n                else if (manualFullscreenSawLandscape && (degrees in 0..30 || degrees in 150..210 || degrees in 330..359)) {\n                    hideFullscreen()\n"
+        },
+        {
+          "current": "        }\n        val raw = intent.dataString ?: intent.getStringExtra(Intent.EXTRA_TEXT) ?: return\n        val url = Regex(\"https?://[^\\\\s]+\").find(raw)?.value ?: raw\n        if (Links.videoId(url) != null || Links.isShorts(url)) openVideo(url) else if (Links.youtube(url) && Links.https(url)) openAccountUrl(url)\n    }\n    fun openVideo(url: String) {\n        if (Links.isShorts(url)) {\n            if (fullscreen) hideFullscreen()\n            pendingOriginalHomeVideo = null\n            shortsFromHome = tab == 0\n            selectTab(1)\n            ensureShorts().navigate(Links.videoId(url)?.let { \"https://m.youtube.com/shorts/$it\" } ?: \"https://m.youtube.com/shorts/\")\n            return\n        }\n        pendingOriginalHomeVideo = null\n",
+          "previous": "        }\n        val raw = intent.dataString ?: intent.getStringExtra(Intent.EXTRA_TEXT) ?: return\n        val url = Regex(\"https?://[^\\\\s]+\").find(raw)?.value ?: raw\n        if (Links.videoId(url) != null) openVideo(url) else if (Links.youtube(url) && Links.https(url)) openAccountUrl(url)\n    }\n    fun openVideo(url: String) {\n        if (Links.isShorts(url) && Links.videoId(url) != null) {\n            pendingOriginalHomeVideo = null\n            shortsFromHome = tab == 0\n            selectTab(1)\n            ensureShorts().navigate(\"https://m.youtube.com/shorts/${Links.videoId(url)}\")\n            return\n        }\n        pendingOriginalHomeVideo = null\n"
+        },
+        {
+          "current": "\n    /** API-listed channels/playlists open their normal YouTube pages without transferring tokens. */\n    fun openAccountUrl(url: String) {\n        if (Links.videoId(url) != null || Links.isShorts(url)) { openVideo(url); return }\n        if (!Links.https(url) || !Links.youtube(url)) {\n            message(\"Diese YouTube-Adresse konnte nicht geöffnet werden.\")\n            return\n",
+          "previous": "\n    /** API-listed channels/playlists open their normal YouTube pages without transferring tokens. */\n    fun openAccountUrl(url: String) {\n        if (Links.videoId(url) != null) { openVideo(url); return }\n        if (!Links.https(url) || !Links.youtube(url)) {\n            message(\"Diese YouTube-Adresse konnte nicht geöffnet werden.\")\n            return\n"
+        },
+        {
+          "current": "        traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_RESUME)\n        hostResumed = true\n        reconcileScreenState(PlayerDiagnostics.ScreenSignal.ACTIVITY_RESUME, resumeIfAllowed = false)\n        if (fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()\n        syncPlayerPresentation()\n        if (::updater.isInitialized) updater.onForeground()\n        com.weiktube.filter.YoutubeAdBlock.checkForUpdates()\n",
+          "previous": "        traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_RESUME)\n        hostResumed = true\n        reconcileScreenState(PlayerDiagnostics.ScreenSignal.ACTIVITY_RESUME, resumeIfAllowed = false)\n        if (customView != null && fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()\n        syncPlayerPresentation()\n        if (::updater.isInitialized) updater.onForeground()\n        com.weiktube.filter.YoutubeAdBlock.checkForUpdates()\n"
+        },
+        {
+          "current": "        if (expanded) {\n            if (orientationBeforePlayer == null) orientationBeforePlayer =\n                if (customView == null) requestedOrientation else orientationBeforeFullscreen\n            if (customView == null && requestedOrientation != videoOrientation)\n                requestedOrientation = videoOrientation\n        } else if (customView == null) {\n            orientationBeforePlayer?.let { requestedOrientation = UprightVideoOrientation.safe(it) }\n            orientationBeforePlayer = null\n        }\n        updatePlayerSystemBars()\n",
+          "previous": "        if (expanded) {\n            if (orientationBeforePlayer == null) orientationBeforePlayer =\n                if (customView == null) requestedOrientation else orientationBeforeFullscreen\n            if (customView == null && requestedOrientation != android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR)\n                requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR\n        } else if (customView == null) {\n            orientationBeforePlayer?.let { requestedOrientation = it }\n            orientationBeforePlayer = null\n        }\n        updatePlayerSystemBars()\n"
+        },
+        {
+          "current": "        updatePlayerSystemBars()\n    }\n    fun hideFullscreen() {\n        if (!hostResumed) fullscreenOrientation.disable()\n        manualFullscreenSawLandscape = false\n        val wasFullscreen = fullscreen\n        customView?.let { (window.decorView as FrameLayout).removeView(it) }\n        val callback = customCallback\n        customView = null; customCallback = null; customViewOwner = null; fullscreen = false\n        callback?.onCustomViewHidden()\n        if (wasFullscreen) requestedOrientation = UprightVideoOrientation.safe(orientationBeforeFullscreen)\n        syncPlayerPresentation()\n    }\n    /** A renderer-owned fullscreen surface must not cover the replacement player. */\n",
+          "previous": "        updatePlayerSystemBars()\n    }\n    fun hideFullscreen() {\n        fullscreenOrientation.disable()\n        manualFullscreenSawLandscape = false\n        val wasFullscreen = fullscreen\n        customView?.let { (window.decorView as FrameLayout).removeView(it) }\n        val callback = customCallback\n        customView = null; customCallback = null; customViewOwner = null; fullscreen = false\n        callback?.onCustomViewHidden()\n        if (wasFullscreen) requestedOrientation = orientationBeforeFullscreen\n        syncPlayerPresentation()\n    }\n    /** A renderer-owned fullscreen surface must not cover the replacement player. */\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/Links.kt": {
+      "previousSha256": "a95a9f271cccd273ddc9c9ca4b269c9ef13a3a7ae5785f44806dcd628129e57d",
+      "changes": [
+        {
+          "current": "        if (key.isBlank()) null else key to decode(it.substringAfter('=', \"\"))\n    }.asReversed().toMap()\n\n    fun isShorts(url: String): Boolean = youtube(url) && runCatching { URI(url.trim()).path.matches(Regex(\"/shorts(?:/[A-Za-z0-9_-]{11})?/?\")) }.getOrDefault(false)\n\n    fun videoId(url: String): String? {\n        if (!youtube(url)) return null\n",
+          "previous": "        if (key.isBlank()) null else key to decode(it.substringAfter('=', \"\"))\n    }.asReversed().toMap()\n\n    fun isShorts(url: String): Boolean = youtube(url) && runCatching { URI(url.trim()).path.startsWith(\"/shorts\") }.getOrDefault(false)\n\n    fun videoId(url: String): String? {\n        if (!youtube(url)) return null\n"
+        },
+        {
+          "current": "        val id = videoId(url)\n        if (id != null) {\n            val query = parameters(u.rawQuery)\n            if (isShorts(url)) return \"https://m.youtube.com/shorts/$id\"\n            return buildString {\n                append(\"https://m.youtube.com/watch?v=\").append(id)\n                val seconds = startSeconds(url)\n",
+          "previous": "        val id = videoId(url)\n        if (id != null) {\n            val query = parameters(u.rawQuery)\n            return buildString {\n                append(\"https://m.youtube.com/watch?v=\").append(id)\n                val seconds = startSeconds(url)\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/WatchNavigationScript.kt": {
+      "previousSha256": "d046ffe97d808bbc4ddc220e9dc6e714ecf68e979d21bbceca1fa3df8ed1c1f8",
+      "changes": [
+        {
+          "current": "        if (uri.port !in setOf(-1, 443)) return null\n        if (Links.host(url) == \"accounts.google.com\") return url\n        if (!Links.youtube(url)) return null\n        if (Links.videoId(url) != null || Links.isShorts(url)) return Links.canonicalYoutubeUrl(url)\n        val path = uri.path.orEmpty()\n        val publicPage = path == \"/\" || path == \"/results\" || path in setOf(\"/feed/you\", \"/feed/library\", \"/feed/subscriptions\") ||\n            path.matches(Regex(\"/(?:channel|user|c)/[^/]+/?\")) || path.matches(Regex(\"/@[^/]+/?\")) ||\n",
+          "previous": "        if (uri.port !in setOf(-1, 443)) return null\n        if (Links.host(url) == \"accounts.google.com\") return url\n        if (!Links.youtube(url)) return null\n        if (Links.videoId(url) != null) return Links.canonicalYoutubeUrl(url)\n        val path = uri.path.orEmpty()\n        val publicPage = path == \"/\" || path == \"/results\" || path in setOf(\"/feed/you\", \"/feed/library\", \"/feed/subscriptions\") ||\n            path.matches(Regex(\"/(?:channel|user|c)/[^/]+/?\")) || path.matches(Regex(\"/@[^/]+/?\")) ||\n"
+        },
+        {
+          "current": "            var video=yt&&/^[A-Za-z0-9_-]{11}$/.test(id||'');\n            var channel=yt&&(/^\\/(channel|user|c)\\/[^/]+\\/?$/.test(p)||/^\\/@[^/]+\\/?$/.test(p));\n            var playlist=yt&&p==='/playlist'&&/^[A-Za-z0-9_-]{1,128}$/.test(u.searchParams.get('list')||'');\n            var browse=yt&&['/','/results','/feed/you','/feed/library','/feed/subscriptions','/shorts','/shorts/'].includes(p);\n            if(!(video||channel||playlist||browse||u.hostname==='accounts.google.com'))return;\n            e.preventDefault();e.stopImmediatePropagation();window.WeiktubeWatchNavigation.postMessage(u.href);\n          },true);\n",
+          "previous": "            var video=yt&&/^[A-Za-z0-9_-]{11}$/.test(id||'');\n            var channel=yt&&(/^\\/(channel|user|c)\\/[^/]+\\/?$/.test(p)||/^\\/@[^/]+\\/?$/.test(p));\n            var playlist=yt&&p==='/playlist'&&/^[A-Za-z0-9_-]{1,128}$/.test(u.searchParams.get('list')||'');\n            var browse=yt&&['/','/results','/feed/you','/feed/library','/feed/subscriptions'].includes(p);\n            if(!(video||channel||playlist||browse||u.hostname==='accounts.google.com'))return;\n            e.preventDefault();e.stopImmediatePropagation();window.WeiktubeWatchNavigation.postMessage(u.href);\n          },true);\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/BrowserController.kt": {
+      "previousSha256": "fbf7fcad8a5b197d407978ecc0fd5dde8239a0c5514bd984c0b161744f5a0b63",
+      "changes": [
+        {
+          "current": "    var view: WebView by mutableStateOf(createWebView())\n        private set\n\n    private fun browseDestination(url: String): String? =\n        if (activity.tab != 1 && Links.isShorts(url)) Links.canonicalYoutubeUrl(url) else Links.browseWatchUrl(url)\n\n    private fun alive(web: WebView) = !destroyed && rendererAlive && web === view\n\n    private fun createWebView(): WebView = WebView(activity).apply {\n",
+          "previous": "    var view: WebView by mutableStateOf(createWebView())\n        private set\n\n    private fun alive(web: WebView) = !destroyed && rendererAlive && web === view\n\n    private fun createWebView(): WebView = WebView(activity).apply {\n"
+        },
+        {
+          "current": "                // No arbitrary native action, token, cookie, credential or page data is exposed.\n                if (alive(web) && mainFrame && origin.toString().trimEnd('/') in YOUTUBE_ORIGINS) {\n                    val raw = runCatching { message.data }.getOrNull().orEmpty()\n                    if (raw.length <= 8192) browseDestination(raw)?.let(::dispatchVideo)\n                }\n            }\n        }\n",
+          "previous": "                // No arbitrary native action, token, cookie, credential or page data is exposed.\n                if (alive(web) && mainFrame && origin.toString().trimEnd('/') in YOUTUBE_ORIGINS) {\n                    val raw = runCatching { message.data }.getOrNull().orEmpty()\n                    if (raw.length <= 8192) Links.browseWatchUrl(raw)?.let(::dispatchVideo)\n                }\n            }\n        }\n"
+        },
+        {
+          "current": "            override fun shouldOverrideUrlLoading(web: WebView, request: WebResourceRequest): Boolean {\n                if (!request.isForMainFrame || !alive(web)) return false\n                val url = request.url.toString()\n                browseDestination(url)?.let { dispatchVideo(it); return true }\n                if (!Links.https(url) || Links.host(url) == \"accounts.google.com\") {\n                    val upgraded = Links.canonicalYoutubeUrl(url)\n                    if (upgraded != null && !Links.https(url)) navigate(upgraded)\n",
+          "previous": "            override fun shouldOverrideUrlLoading(web: WebView, request: WebResourceRequest): Boolean {\n                if (!request.isForMainFrame || !alive(web)) return false\n                val url = request.url.toString()\n                Links.browseWatchUrl(url)?.let { dispatchVideo(it); return true }\n                if (!Links.https(url) || Links.host(url) == \"accounts.google.com\") {\n                    val upgraded = Links.canonicalYoutubeUrl(url)\n                    if (upgraded != null && !Links.https(url)) navigate(upgraded)\n"
+        },
+        {
+          "current": "            }\n            override fun doUpdateVisitedHistory(web: WebView, url: String?, isReload: Boolean) {\n                if (!alive(web) || url == null || url == \"about:blank\") return\n                val watch = browseDestination(url)\n                if (watch != null && !rescuingSpa) {\n                    // Fallback for programmatic SPA navigation without a clicked anchor. Return through\n                    // the website's own history, preserving its feed/scroll instead of loading Home.\n",
+          "previous": "            }\n            override fun doUpdateVisitedHistory(web: WebView, url: String?, isReload: Boolean) {\n                if (!alive(web) || url == null || url == \"about:blank\") return\n                val watch = Links.browseWatchUrl(url)\n                if (watch != null && !rescuingSpa) {\n                    // Fallback for programmatic SPA navigation without a clicked anchor. Return through\n                    // the website's own history, preserving its feed/scroll instead of loading Home.\n"
+        },
+        {
+          "current": "                ads.pageStarted(url); adReady = ads.canPlay\n                mediaPlaying = false\n                topLevel = url\n                if (browseDestination(url) == null) currentUrl = url\n                error = null\n                this@BrowserController.progress = 0.1f\n                refreshHistory()\n",
+          "previous": "                ads.pageStarted(url); adReady = ads.canPlay\n                mediaPlaying = false\n                topLevel = url\n                if (Links.browseWatchUrl(url) == null) currentUrl = url\n                error = null\n                this@BrowserController.progress = 0.1f\n                refreshHistory()\n"
+        },
+        {
+          "current": "    @Suppress(\"UNUSED_PARAMETER\")\n    fun navigate(url: String, allowWebPlayback: Boolean = false) {\n        if (destroyed) return\n        browseDestination(url)?.let { dispatchVideo(it); return }\n        val target = if (Links.youtube(url) && !Links.https(url)) Links.canonicalYoutubeUrl(url) ?: url else url.trim()\n        if (!Links.https(target)) { error = \"Nur sichere HTTPS-Adressen werden unterstützt.\"; return }\n        forceSearch = false; searchActive = false\n",
+          "previous": "    @Suppress(\"UNUSED_PARAMETER\")\n    fun navigate(url: String, allowWebPlayback: Boolean = false) {\n        if (destroyed) return\n        Links.browseWatchUrl(url)?.let { dispatchVideo(it); return }\n        val target = if (Links.youtube(url) && !Links.https(url)) Links.canonicalYoutubeUrl(url) ?: url else url.trim()\n        if (!Links.https(target)) { error = \"Nur sichere HTTPS-Adressen werden unterstützt.\"; return }\n        forceSearch = false; searchActive = false\n"
+        },
+        {
+          "current": "    fun recover() {\n        if (destroyed) return\n        if (!rendererAlive) recreate()\n        val target = currentUrl.takeIf { Links.https(it) && browseDestination(it) == null }\n            ?: lastBrowse.takeIf(Links::https) ?: HOME\n        navigate(target)\n    }\n",
+          "previous": "    fun recover() {\n        if (destroyed) return\n        if (!rendererAlive) recreate()\n        val target = currentUrl.takeIf { Links.https(it) && Links.browseWatchUrl(it) == null }\n            ?: lastBrowse.takeIf(Links::https) ?: HOME\n        navigate(target)\n    }\n"
+        },
+        {
+          "current": "        if (!rendererAlive || destroyed || !Links.youtube(currentUrl)) return\n        view.evaluateJavascript(configuredScript(), null)\n    }\n    private fun configuredScript() = \"window.weiktubeShortsTab=${activity.tab == 1};window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible || !adReady};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;\" + BROWSER_SCRIPT\n    private fun refreshDocumentScript() {\n        if (!rendererAlive || destroyed || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return\n        documentScript?.remove()\n",
+          "previous": "        if (!rendererAlive || destroyed || !Links.youtube(currentUrl)) return\n        view.evaluateJavascript(configuredScript(), null)\n    }\n    private fun configuredScript() = \"window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible || !adReady};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;\" + BROWSER_SCRIPT\n    private fun refreshDocumentScript() {\n        if (!rendererAlive || destroyed || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return\n        documentScript?.remove()\n"
+        },
+        {
+          "current": "                if(!anchor||!window.WeiktubeNavigation)return;\n                var u;try{u=new URL(anchor.href,location.href);}catch(ignore){return;}\n                if(!['youtube.com','www.youtube.com','m.youtube.com','youtu.be'].includes(u.hostname)||u.username||u.password||!['https:','http:'].includes(u.protocol)||u.port)return;\n                if(window.weiktubeShortsTab!==true && /^\\/shorts(?:\\/[A-Za-z0-9_-]{11})?\\/?$/.test(u.pathname)){e.preventDefault();e.stopImmediatePropagation();window.WeiktubeNavigation.postMessage(u.href);return;}\n                var pieces=u.pathname.split('/');var id=u.hostname==='youtu.be'?u.pathname.slice(1):u.pathname==='/watch'?u.searchParams.get('v'):(pieces.length===3&&['live','embed'].includes(pieces[1])?pieces[2]:null);\n                if(!/^[A-Za-z0-9_-]{11}$/.test(id||''))return;\n                e.preventDefault();e.stopImmediatePropagation();window.WeiktubeNavigation.postMessage(u.href);\n",
+          "previous": "                if(!anchor||!window.WeiktubeNavigation)return;\n                var u;try{u=new URL(anchor.href,location.href);}catch(ignore){return;}\n                if(!['youtube.com','www.youtube.com','m.youtube.com','youtu.be'].includes(u.hostname)||u.username||u.password||!['https:','http:'].includes(u.protocol)||u.port)return;\n                var pieces=u.pathname.split('/');var id=u.hostname==='youtu.be'?u.pathname.slice(1):u.pathname==='/watch'?u.searchParams.get('v'):(pieces.length===3&&['live','embed'].includes(pieces[1])?pieces[2]:null);\n                if(!/^[A-Za-z0-9_-]{11}$/.test(id||''))return;\n                e.preventDefault();e.stopImmediatePropagation();window.WeiktubeNavigation.postMessage(u.href);\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/PlayerController.kt": {
+      "previousSha256": "05195d10279c6538d57518ab5af0a597643009d7c65e33854ec03a95c92642fe",
+      "changes": [
+        {
+          "current": "                if (!alive(web)) return true\n                if (!request.isForMainFrame) return false\n                val url = request.url.toString()\n                if (Links.isShorts(url)) { activity.openVideo(url); return true }\n                if (Links.host(url) == \"accounts.google.com\") { expanded = false; activity.openAccountScreen(); return true }\n                if (!Links.https(url)) { activity.external(url); return true }\n                if (Links.youtube(url) && Links.videoId(url) == null) { expanded = false; activity.openAccountUrl(url); return true }\n",
+          "previous": "                if (!alive(web)) return true\n                if (!request.isForMainFrame) return false\n                val url = request.url.toString()\n                if (Links.host(url) == \"accounts.google.com\") { expanded = false; activity.openAccountScreen(); return true }\n                if (!Links.https(url)) { activity.external(url); return true }\n                if (Links.youtube(url) && Links.videoId(url) == null) { expanded = false; activity.openAccountUrl(url); return true }\n"
+        },
+        {
+          "current": "        activity.model.record(source!!, \"\")\n    }\n    fun open(url: String, userInitiated: Boolean = true) {\n        if (Links.isShorts(url)) { activity.openVideo(url); return }\n        openSelected(url, userInitiated)\n        if (userInitiated && source != null && Links.historyUrl(source!!) == Links.historyUrl(url))\n            activity.model.record(source!!, title.takeUnless { it == \"Video\" || it == \"HTTPS-Video\" }.orEmpty())\n",
+          "previous": "        activity.model.record(source!!, \"\")\n    }\n    fun open(url: String, userInitiated: Boolean = true) {\n        openSelected(url, userInitiated)\n        if (userInitiated && source != null && Links.historyUrl(source!!) == Links.historyUrl(url))\n            activity.model.record(source!!, title.takeUnless { it == \"Video\" || it == \"HTTPS-Video\" }.orEmpty())\n"
+        }
+      ]
+    },
+    "app/src/main/AndroidManifest.xml": {
+      "previousSha256": "10de6c1d1cb3b0ddc588fdbc7fa9e4d82470b6ad2edb9095d52fa6d727295323",
+      "changes": [
+        {
+          "current": "            <meta-data android:name=\"android.support.FILE_PROVIDER_PATHS\" android:resource=\"@xml/update_paths\" />\n        </provider>\n        <activity android:name=\".MainActivity\" android:exported=\"true\"\n            android:launchMode=\"singleTask\" android:supportsPictureInPicture=\"true\" android:screenOrientation=\"portrait\"\n            android:configChanges=\"orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode\">\n            <intent-filter>\n                <action android:name=\"android.intent.action.MAIN\" />\n",
+          "previous": "            <meta-data android:name=\"android.support.FILE_PROVIDER_PATHS\" android:resource=\"@xml/update_paths\" />\n        </provider>\n        <activity android:name=\".MainActivity\" android:exported=\"true\"\n            android:launchMode=\"singleTask\" android:supportsPictureInPicture=\"true\"\n            android:configChanges=\"orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode\">\n            <intent-filter>\n                <action android:name=\"android.intent.action.MAIN\" />\n"
+        }
+      ]
+    },
+    "home-data/src/main/java/com/weiktube/home/OriginalHomePolicy.kt": {
+      "previousSha256": "79edb5837854f40f0af828015e486cf3be31b9a48e5bcdaf82544488d6e1f919",
+      "changes": [
+        {
+          "current": "        val name = host(u)\n        if (name !in youtubeHosts && name != \"youtu.be\") return null\n        val path = u.rawPath.orEmpty()\n        if (name in youtubeHosts && path in setOf(\"/shorts\", \"/shorts/\")) return \"https://www.youtube.com/shorts/\"\n        val segments = path.removePrefix(\"/\").split('/')\n        val id = when {\n            name == \"youtu.be\" && segments.size == 1 -> segments[0]\n",
+          "previous": "        val name = host(u)\n        if (name !in youtubeHosts && name != \"youtu.be\") return null\n        val path = u.rawPath.orEmpty()\n        val segments = path.removePrefix(\"/\").split('/')\n        val id = when {\n            name == \"youtu.be\" && segments.size == 1 -> segments[0]\n"
+        }
+      ]
+    },
+    "home-data/src/main/assets/original-home-navigation/bridge.js": {
+      "previousSha256": "61083669c5ba94e3340bd810727ab28113a81fd784d66733a5fd27133114872d",
+      "changes": [
+        {
+          "current": "    if (!recognizable) return { kind: 'other' };\n    if (!raw || raw.length > 8192 || /[\\x00-\\x20\\x7f\\\\]/.test(raw) || url.protocol !== 'https:' || url.username || url.password || url.port)\n      return { kind: 'invalid' };\n    if (youtubeHosts.includes(url.hostname) && ['/shorts', '/shorts/'].includes(url.pathname))\n      return { kind: 'video', url: 'https://www.youtube.com/shorts/' };\n    const parts = url.pathname.slice(1).split('/');\n    let id;\n    if (url.hostname === 'youtu.be' && parts.length === 1) id = parts[0];\n",
+          "previous": "    if (!recognizable) return { kind: 'other' };\n    if (!raw || raw.length > 8192 || /[\\x00-\\x20\\x7f\\\\]/.test(raw) || url.protocol !== 'https:' || url.username || url.password || url.port)\n      return { kind: 'invalid' };\n    const parts = url.pathname.slice(1).split('/');\n    let id;\n    if (url.hostname === 'youtu.be' && parts.length === 1) id = parts[0];\n"
+        }
+      ]
+    },
+    "home-data/src/main/assets/original-home-navigation/manifest.json": {
+      "previousSha256": "3626713cfce55fa57185f0819616eaf8df89c6dfbdee9bde12324a43093dd56a",
+      "changes": [
+        {
+          "current": "{\n  \"manifest_version\": 2,\n  \"name\": \"Weiktube Original Home video handoff\",\n  \"version\": \"2.0.3\",\n  \"browser_specific_settings\": { \"gecko\": { \"id\": \"original-home-navigation@weiktube.local\" } },\n  \"permissions\": [\"nativeMessaging\", \"nativeMessagingFromContent\", \"geckoViewAddons\"],\n  \"content_scripts\": [{\n",
+          "previous": "{\n  \"manifest_version\": 2,\n  \"name\": \"Weiktube Original Home video handoff\",\n  \"version\": \"2.0.2\",\n  \"browser_specific_settings\": { \"gecko\": { \"id\": \"original-home-navigation@weiktube.local\" } },\n  \"permissions\": [\"nativeMessaging\", \"nativeMessagingFromContent\", \"geckoViewAddons\"],\n  \"content_scripts\": [{\n"
+        }
+      ]
+    },
+    "app/src/test/java/com/weiktube/app/WatchNavigationPolicyTest.kt": {
+      "previousSha256": "6fc8be02b2ba28f07fb3630e9503bf2538c85e805253c5e107b0a78f3795d180",
+      "changes": [
+        {
+          "current": "package com.weiktube.app\n\nimport org.junit.Assert.*\nimport org.junit.Test\n\nclass WatchNavigationPolicyTest {\n    @Test fun shortsRetainTheirDestinationIncludingTheFeedEntry() {\n        assertEquals(\"https://m.youtube.com/shorts/abcdefghijk\", WatchNavigationScript.allowed(\"https://www.youtube.com/shorts/abcdefghijk?si=tracking\"))\n        assertEquals(\"https://m.youtube.com/shorts\", WatchNavigationScript.allowed(\"https://www.youtube.com/shorts\"))\n        assertNull(Links.browseWatchUrl(\"https://m.youtube.com/shorts/abcdefghijk\"))\n        assertFalse(Links.isShorts(\"https://m.youtube.com/shortstuff/abcdefghijk\"))\n        assertFalse(Links.isShorts(\"https://m.youtube.com/shorts/invalid\"))\n    }\n    @Test fun handsOffOnlyPublicNavigationAndGoogleLogin() {\n        assertNotNull(WatchNavigationScript.allowed(\"https://m.youtube.com/watch?v=abcdefghijk\"))\n        assertNotNull(WatchNavigationScript.allowed(\"https://m.youtube.com/@creator\"))\n        assertNotNull(WatchNavigationScript.allowed(\"https://m.youtube.com/channel/UC_123\"))\n        assertNotNull(WatchNavigationScript.allowed(\"https://m.youtube.com/playlist?list=PL_123\"))\n        assertNotNull(WatchNavigationScript.allowed(\"https://accounts.google.com/ServiceLogin?service=youtube\"))\n    }\n    @Test fun leavesAdvertRedirectsAndExternalDestinationsUntouched() {\n        listOf(\"https://m.youtube.com/redirect?q=advert\", \"https://advert.example.org/\", \"https://youtube.com.evil.org/@creator\",\n            \"https://user:pass@youtube.com/@creator\", \"https://youtube.com:8443/@creator\", \"javascript:alert(1)\",\n            \"https://m.youtube.com/playlist?list=bad%2Fpath\").forEach { assertNull(it, WatchNavigationScript.allowed(it)) }\n    }\n}\n",
+          "previous": "package com.weiktube.app\n\nimport org.junit.Assert.*\nimport org.junit.Test\n\nclass WatchNavigationPolicyTest {\n    @Test fun handsOffOnlyPublicNavigationAndGoogleLogin() {\n        assertNotNull(WatchNavigationScript.allowed(\"https://m.youtube.com/watch?v=abcdefghijk\"))\n        assertNotNull(WatchNavigationScript.allowed(\"https://m.youtube.com/@creator\"))\n        assertNotNull(WatchNavigationScript.allowed(\"https://m.youtube.com/channel/UC_123\"))\n        assertNotNull(WatchNavigationScript.allowed(\"https://m.youtube.com/playlist?list=PL_123\"))\n        assertNotNull(WatchNavigationScript.allowed(\"https://accounts.google.com/ServiceLogin?service=youtube\"))\n    }\n    @Test fun leavesAdvertRedirectsAndExternalDestinationsUntouched() {\n        listOf(\"https://m.youtube.com/redirect?q=advert\", \"https://advert.example.org/\", \"https://youtube.com.evil.org/@creator\",\n            \"https://user:pass@youtube.com/@creator\", \"https://youtube.com:8443/@creator\", \"javascript:alert(1)\",\n            \"https://m.youtube.com/playlist?list=bad%2Fpath\").forEach { assertNull(it, WatchNavigationScript.allowed(it)) }\n    }\n}\n"
+        }
+      ]
+    }
+  },
+  "addedFiles": {
+    "app/src/main/java/com/weiktube/app/UprightVideoOrientation.kt": "847be6a674f47bedca2399e8c7a7967d9d534a5e97324dd032df9cd5d4adb74d",
+    "app/src/test/java/com/weiktube/app/UprightVideoOrientationTest.kt": "75f09477b89f09cfce10bd209687517e2e24c08b1d615413e750ef1b282af02f"
+  }
+}

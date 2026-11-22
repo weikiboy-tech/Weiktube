@@ -10,3 +10,5 @@ for(const url of ['https://m.youtube.com/redirect?q=ad','https://ad.example.org/
 assert.equal(click('https://m.youtube.com/@creator',false),false);
 assert.equal(messages.length,5);
 console.log('PASS watch navigation fixture: trusted anchor handoff preserves document, channel/video/playlist/login routes only; adverts, foreign hosts and scripted clicks untouched.');
+
+for(const u of ['https://m.youtube.com/shorts','https://m.youtube.com/shorts/abcdefghijk']) {assert.equal(click(u),true);assert.equal(messages.at(-1),u);}

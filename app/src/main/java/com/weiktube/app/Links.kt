@@ -20,7 +20,7 @@ object Links {
         if (key.isBlank()) null else key to decode(it.substringAfter('=', ""))
     }.asReversed().toMap()
 
-    fun isShorts(url: String): Boolean = youtube(url) && runCatching { URI(url.trim()).path.startsWith("/shorts") }.getOrDefault(false)
+    fun isShorts(url: String): Boolean = youtube(url) && runCatching { URI(url.trim()).path.matches(Regex("/shorts(?:/[A-Za-z0-9_-]{11})?/?")) }.getOrDefault(false)
 
     fun videoId(url: String): String? {
         if (!youtube(url)) return null
@@ -34,6 +34,11 @@ object Links {
         }
         return id?.takeIf(idPattern::matches)
     }
+
+    fun hasStartTime(url: String): Boolean = uri(url)?.let {
+        val q = parameters(it.rawQuery); val f = parameters(it.rawFragment)
+        "t" in q || "start" in q || "t" in f
+    } ?: false
 
     fun startSeconds(url: String): Int {
         val u = uri(url) ?: return 0
@@ -57,6 +62,7 @@ object Links {
         val id = videoId(url)
         if (id != null) {
             val query = parameters(u.rawQuery)
+            if (isShorts(url)) return "https://m.youtube.com/shorts/$id"
             return buildString {
                 append("https://m.youtube.com/watch?v=").append(id)
                 val seconds = startSeconds(url)

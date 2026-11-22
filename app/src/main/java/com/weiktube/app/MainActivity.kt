@@ -57,12 +57,15 @@ class MainActivity : ComponentActivity() {
     private var orientationBeforeFullscreen = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var orientationBeforePlayer: Int? = null
     private var manualFullscreenSawLandscape = false
+    private var videoOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
     private val fullscreenOrientation by lazy {
         object : android.view.OrientationEventListener(this) {
             override fun onOrientationChanged(degrees: Int) {
-                if (customView == null || !hostResumed || degrees == ORIENTATION_UNKNOWN) return
+                if (!hostResumed || pip || degrees == ORIENTATION_UNKNOWN) return
+                videoOrientation = UprightVideoOrientation.fromSensor(degrees, videoOrientation)
+                if (customView == null) { syncPlayerPresentation(); return }
                 if (degrees in 60..120 || degrees in 240..300) manualFullscreenSawLandscape = true
-                else if (manualFullscreenSawLandscape && (degrees in 0..30 || degrees in 150..210 || degrees in 330..359)) {
+                else if (manualFullscreenSawLandscape && UprightVideoOrientation.isUpright(degrees)) {
                     hideFullscreen()
                 }
             }
@@ -77,6 +80,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var nativePip: NativePipController
     private var pendingOriginalHomeVideo: String? = null
     private var originalHomePlayer = false
+    private var shortsFromHome = false
     // The embedded view uses the same one-time return ticket and existing player entry point.
     private fun acceptOriginalHomeVideo(token: String, raw: String) {
         val url = OriginalHomeReturn.acceptPlayerResult(token, raw)
@@ -177,9 +181,17 @@ class MainActivity : ComponentActivity() {
         }
         val raw = intent.dataString ?: intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
         val url = Regex("https?://[^\\s]+").find(raw)?.value ?: raw
-        if (Links.videoId(url) != null) openVideo(url) else if (Links.youtube(url) && Links.https(url)) openAccountUrl(url)
+        if (Links.videoId(url) != null || Links.isShorts(url)) openVideo(url) else if (Links.youtube(url) && Links.https(url)) openAccountUrl(url)
     }
     fun openVideo(url: String) {
+        if (Links.isShorts(url)) {
+            if (fullscreen) hideFullscreen()
+            pendingOriginalHomeVideo = null
+            shortsFromHome = tab == 0
+            selectTab(1)
+            ensureShorts().navigate(Links.videoId(url)?.let { "https://m.youtube.com/shorts/$it" } ?: "https://m.youtube.com/shorts/")
+            return
+        }
         pendingOriginalHomeVideo = null
         originalHomePlayer = false
         browser.closeSearch()
@@ -199,6 +211,7 @@ class MainActivity : ComponentActivity() {
         if (reselectedHome) originalHome.goHome()
     }
     fun selectTab(value: Int) {
+        if (value != 1) shortsFromHome = false
         browser.closeSearch()
         tab = value
         if (player.source != null) player.expanded = false
@@ -222,7 +235,7 @@ class MainActivity : ComponentActivity() {
 
     /** API-listed channels/playlists open their normal YouTube pages without transferring tokens. */
     fun openAccountUrl(url: String) {
-        if (Links.videoId(url) != null) { openVideo(url); return }
+        if (Links.videoId(url) != null || Links.isShorts(url)) { openVideo(url); return }
         if (!Links.https(url) || !Links.youtube(url)) {
             message("Diese YouTube-Adresse konnte nicht geöffnet werden.")
             return
@@ -335,7 +348,7 @@ class MainActivity : ComponentActivity() {
         traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_RESUME)
         hostResumed = true
         reconcileScreenState(PlayerDiagnostics.ScreenSignal.ACTIVITY_RESUME, resumeIfAllowed = false)
-        if (customView != null && fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()
+        if (fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()
         syncPlayerPresentation()
         if (::updater.isInitialized) updater.onForeground()
         com.weiktube.filter.YoutubeAdBlock.checkForUpdates()
@@ -366,10 +379,10 @@ class MainActivity : ComponentActivity() {
         if (expanded) {
             if (orientationBeforePlayer == null) orientationBeforePlayer =
                 if (customView == null) requestedOrientation else orientationBeforeFullscreen
-            if (customView == null && requestedOrientation != android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR)
-                requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+            if (customView == null && requestedOrientation != videoOrientation)
+                requestedOrientation = videoOrientation
         } else if (customView == null) {
-            orientationBeforePlayer?.let { requestedOrientation = it }
+            orientationBeforePlayer?.let { requestedOrientation = UprightVideoOrientation.safe(it) }
             orientationBeforePlayer = null
         }
         updatePlayerSystemBars()
@@ -408,14 +421,14 @@ class MainActivity : ComponentActivity() {
         updatePlayerSystemBars()
     }
     fun hideFullscreen() {
-        fullscreenOrientation.disable()
+        if (!hostResumed) fullscreenOrientation.disable()
         manualFullscreenSawLandscape = false
         val wasFullscreen = fullscreen
         customView?.let { (window.decorView as FrameLayout).removeView(it) }
         val callback = customCallback
         customView = null; customCallback = null; customViewOwner = null; fullscreen = false
         callback?.onCustomViewHidden()
-        if (wasFullscreen) requestedOrientation = orientationBeforeFullscreen
+        if (wasFullscreen) requestedOrientation = UprightVideoOrientation.safe(orientationBeforeFullscreen)
         syncPlayerPresentation()
     }
     /** A renderer-owned fullscreen surface must not cover the replacement player. */
@@ -426,6 +439,7 @@ class MainActivity : ComponentActivity() {
     }
     fun back(): Boolean = when {
         fullscreen -> { hideFullscreen(); true }
+        tab == 1 && shortsFromHome && !(player.source != null && player.expanded) -> { shortsFromHome = false; openOriginalHome(); true }
         player.source != null && player.expanded -> {
             // Back, the down arrow and the drag gesture minimize the same retained player.
             // Returning to its Home document is not a playback-pause command.

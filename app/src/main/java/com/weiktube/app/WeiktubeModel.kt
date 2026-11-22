@@ -63,11 +63,15 @@ object HistoryCodec {
 }
 
 class WeiktubeModel(application: Application) : AndroidViewModel(application) {
+    val progress = PlaybackProgressStore(application)
     private val store = application.settingsStore
+    var preferencesReady = false; private set
     val error = MutableStateFlow<String?>(null)
     val preferences = store.data.catch { e ->
         if (e is IOException) { error.value = "Einstellungen konnten nicht geladen werden."; emit(emptyPreferences()) } else throw e
     }.map { p ->
+        progress.enabled = p[booleanPreferencesKey("saveHistory")] ?: true
+        preferencesReady = true
         Preferences(p[stringPreferencesKey("theme")] ?: "System", p[booleanPreferencesKey("shield")] ?: true,
             p[booleanPreferencesKey("ads")] ?: true, p[booleanPreferencesKey("trackers")] ?: true,
             p[stringPreferencesKey("domains")] ?: "", p[stringPreferencesKey("exceptions")] ?: "",
@@ -86,7 +90,10 @@ class WeiktubeModel(application: Application) : AndroidViewModel(application) {
     private fun edit(block: (MutablePreferences) -> Unit) { viewModelScope.launch {
         try { store.edit(block) } catch (_: IOException) { error.value = "Speichern fehlgeschlagen. Bitte Speicherplatz prüfen." }
     } }
-    fun boolean(key: String, value: Boolean) = edit { it[booleanPreferencesKey(key)] = value }
+    fun boolean(key: String, value: Boolean) {
+        if (key == "saveHistory") progress.enabled = value
+        edit { it[booleanPreferencesKey(key)] = value }
+    }
     fun string(key: String, value: String) = edit { it[stringPreferencesKey(key)] = value }
     fun saveFilters(domains: String, exceptions: String) {
         ShieldEngine.parse(domains)
@@ -96,7 +103,8 @@ class WeiktubeModel(application: Application) : AndroidViewModel(application) {
             it[stringPreferencesKey("exceptions")] = exceptions
         }
     }
-    fun clearHistory() = string("history", "[]")
+    var historyRevision = 0; private set
+    fun clearHistory() { historyRevision++; progress.clear(); string("history", "[]") }
     fun record(url: String, title: String) = edit { p ->
         if (p[booleanPreferencesKey("saveHistory")] == false) return@edit
         p[stringPreferencesKey("history")] = HistoryCodec.add(p[stringPreferencesKey("history")], url, title, System.currentTimeMillis())
