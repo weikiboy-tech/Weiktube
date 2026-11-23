@@ -1,6 +1,6 @@
 param(
-    [int]$VersionCode = 29,
-    [string]$VersionName = '1.3.15',
+    [int]$VersionCode = 30,
+    [string]$VersionName = '1.3.16',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
     [switch]$Publish,
@@ -12,7 +12,7 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = if ($Preview) { "v$VersionName-preview" } else { "v$VersionName" }
-$expectedMain = '1297ae279a7fac25918d5260bdf806ee93a1315e'
+$expectedMain = '0771448ee6344ba9b297f9fa6fd581ce91996b0f'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
 $channel = if ($Preview) { 'preview' } else { 'stable' }
 $output = Join-Path $project "dist/$channel-$VersionName"
@@ -25,7 +25,7 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Shorts öffnen im Shorts-Tab. Kopfüberhalten löst keinen Ansichtswechsel aus; beide Querformate bleiben möglich. Lokale Wiedergabepositionen mit Weiter-bei-Anzeige und Von-vorne-Aktion. Bestehender Player, PiP und AdBlock beibehalten. Automatisierte Tests bestanden; vollständige Gerätetests dieser Änderungen stehen noch aus.'
+$updateNotes = 'Shorts starten mit Ton, ohne zusätzliche Ton-einschalten-Aktion. Bewusstes Stummschalten bleibt für den Besuch erhalten. Normaler Player, PiP und AdBlock unverändert. Automatisierte Tests durchgeführt; kein Gerätetest für diese Version.'
 if ($Preview) { $updateNotes += ' Dies ist eine Vorabveröffentlichung ohne Änderung des regulären Updatekanals.' }
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or
@@ -171,7 +171,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create source tree.' }
     # A new isolated repository: preserve the reviewed history without replacing
     # any existing working tree or rewriting any local/remote branch.
-    $commit = git commit-tree $tree -p $main -m "Publish Weiktube $VersionName Shorts routing, playback progress and upright rotation update"
+    $commit = git commit-tree $tree -p $main -m "Publish Weiktube $VersionName Shorts audible start fix"
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create release commit.' }
     git update-ref refs/heads/main $commit ('0' * 40)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated main ref.' }
@@ -181,7 +181,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Normal fast-forward push failed; review remote state before retrying.' }
 } finally { Pop-Location }
 
-$releaseName = if ($Preview) { "Weiktube $VersionName – Diagnose-Vorabversion" } else { "Weiktube $VersionName – Shorts, Weiterschauen und Drehung" }
+$releaseName = if ($Preview) { "Weiktube $VersionName – Diagnose-Vorabversion" } else { "Weiktube $VersionName – Shorts mit Ton" }
 $body = @{tag_name=$tag;target_commitish=$commit;name=$releaseName;body=$notes;draft=$true;prerelease=[bool]$Preview;make_latest='false'} | ConvertTo-Json
 $release = Invoke-RestMethod "https://api.github.com/repos/$Repository/releases" -Headers $headers -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body))
 $upload = $release.upload_url -replace '\{.*$', ''

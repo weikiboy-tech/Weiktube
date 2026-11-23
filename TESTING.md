@@ -1,5 +1,9 @@
 # Weiktube – Prüfprotokoll
 
+## Release 1.3.16
+
+Gezielter Tonstart für den bestehenden Shorts-Player. Bewusstes Stummschalten bleibt während des Besuchs erhalten. Normaler Player, PiP und AdBlock unverändert. [Änderungen und tatsächliche Testgrenzen](RELEASE-1.3.16.md).
+
 ## Release 1.3.15
 
 Shorts im Shorts-Tab, gespeicherte Wiedergabepositionen und keine Reaktion auf Kopfüberhalten. [Änderungen und Testgrenzen](RELEASE-1.3.15.md). Die älteren Abschnitte unten dokumentieren frühere Arbeitsstände.

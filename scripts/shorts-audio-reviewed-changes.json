@@ -1,0 +1,50 @@
+{
+  "files": {
+    "app/build.gradle.kts": {
+      "previousSha256": "987c6af27c19b046556648862a8a6efac7341b8cad1b1c3b0fc41db9cd4de5be",
+      "changes": [
+        {
+          "previous": "        applicationId = \"com.weiktube.app\"\n        minSdk = 26\n        targetSdk = 36\n        versionCode = 29\n        versionName = \"1.3.15\"\n        if (!stableApks) ndk { abiFilters += listOf(\"arm64-v8a\", \"x86_64\") }\n        testInstrumentationRunner = \"androidx.test.runner.AndroidJUnitRunner\"\n    }\n",
+          "current": "        applicationId = \"com.weiktube.app\"\n        minSdk = 26\n        targetSdk = 36\n        versionCode = 30\n        versionName = \"1.3.16\"\n        if (!stableApks) ndk { abiFilters += listOf(\"arm64-v8a\", \"x86_64\") }\n        testInstrumentationRunner = \"androidx.test.runner.AndroidJUnitRunner\"\n    }\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/BrowserController.kt": {
+      "previousSha256": "cb0ee5c0edc99d505bbbeb3fb947dc531b4a0e4b38a43a27efebf728b6f1c518",
+      "changes": [
+        {
+          "previous": "\n/** Long-lived feed browser. Public watch URLs are handed to a separate persistent watch surface. */\n@SuppressLint(\"SetJavaScriptEnabled\")\nclass BrowserController(private val activity: MainActivity, private val shield: ShieldEngine, private val onVideo: (String) -> Unit) {\n    var progress by mutableFloatStateOf(0f); private set\n    var error by mutableStateOf<String?>(null); private set\n    var currentUrl by mutableStateOf(HOME); private set\n",
+          "current": "\n/** Long-lived feed browser. Public watch URLs are handed to a separate persistent watch surface. */\n@SuppressLint(\"SetJavaScriptEnabled\")\nclass BrowserController(private val activity: MainActivity, private val shield: ShieldEngine, private val onVideo: (String) -> Unit, private val shortsPlayer: Boolean = false) {\n    var progress by mutableFloatStateOf(0f); private set\n    var error by mutableStateOf<String?>(null); private set\n    var currentUrl by mutableStateOf(HOME); private set\n"
+        },
+        {
+          "previous": "        settings.allowFileAccess = false\n        settings.allowContentAccess = false\n        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW\n        settings.mediaPlaybackRequiresUserGesture = true\n        settings.setSupportMultipleWindows(false)\n        CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)\n        if (WebViewFeature.isFeatureSupported(WebViewFeature.START_SAFE_BROWSING)) WebViewCompat.startSafeBrowsing(activity) {}\n",
+          "current": "        settings.allowFileAccess = false\n        settings.allowContentAccess = false\n        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW\n        settings.mediaPlaybackRequiresUserGesture = !shortsPlayer\n        settings.setSupportMultipleWindows(false)\n        CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)\n        if (WebViewFeature.isFeatureSupported(WebViewFeature.START_SAFE_BROWSING)) WebViewCompat.startSafeBrowsing(activity) {}\n"
+        },
+        {
+          "previous": "        if (!view.canGoBack()) { refreshHistory(); return false }\n        view.goBack(); return true\n    }\n    fun resume() {\n        visible = true\n        if (!rendererAlive || destroyed) return\n",
+          "current": "        if (!view.canGoBack()) { refreshHistory(); return false }\n        view.goBack(); return true\n    }\n    private var shortsSoundRequest = 0L\n    fun requestShortsSound() {\n        if (!shortsPlayer) return\n        shortsSoundRequest++\n        refreshDocumentScript()\n        applyPageSettings()\n    }\n    fun resume() {\n        visible = true\n        if (!rendererAlive || destroyed) return\n"
+        },
+        {
+          "previous": "        if (!rendererAlive || destroyed || !Links.youtube(currentUrl)) return\n        view.evaluateJavascript(configuredScript(), null)\n    }\n    private fun configuredScript() = \"window.weiktubeShortsTab=${activity.tab == 1};window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible || !adReady};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;\" + BROWSER_SCRIPT\n    private fun refreshDocumentScript() {\n        if (!rendererAlive || destroyed || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return\n        documentScript?.remove()\n",
+          "current": "        if (!rendererAlive || destroyed || !Links.youtube(currentUrl)) return\n        view.evaluateJavascript(configuredScript(), null)\n    }\n    private fun configuredScript() = \"window.weiktubeShortsSoundRequest=$shortsSoundRequest;window.weiktubeShortsTab=${shortsPlayer && activity.tab == 1};window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible || !adReady};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;\" + ShortsAudioScript.SCRIPT + BROWSER_SCRIPT\n    private fun refreshDocumentScript() {\n        if (!rendererAlive || destroyed || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return\n        documentScript?.remove()\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/MainActivity.kt": {
+      "previousSha256": "5adea8150bb3254da9065598ecfe85a32094f683a62b1d22abef12f0a2793088",
+      "changes": [
+        {
+          "previous": "        if (reselectedHome) originalHome.goHome()\n    }\n    fun selectTab(value: Int) {\n        if (value != 1) shortsFromHome = false\n        browser.closeSearch()\n        tab = value\n",
+          "current": "        if (reselectedHome) originalHome.goHome()\n    }\n    fun selectTab(value: Int) {\n        val enteringShorts = value == 1 && tab != 1\n        if (value != 1) shortsFromHome = false\n        browser.closeSearch()\n        tab = value\n"
+        },
+        {
+          "previous": "                // Showing the retained Gecko document never navigates or creates a second session.\n                browser.pauseMedia()\n            }\n            1 -> { browser.pauseMedia(); ensureShorts().resume() }\n            else -> { browser.pauseMedia(); shorts?.pauseMedia() }\n        }\n        syncOriginalHomeVisibility()\n    }\n    private fun ensureShorts(): BrowserController = shorts ?: BrowserController(this, shield, ::openVideo).also {\n        shorts = it; it.navigate(\"https://m.youtube.com/shorts/\")\n    }\n    fun openAccountScreen() { selectTab(4) }\n",
+          "current": "                // Showing the retained Gecko document never navigates or creates a second session.\n                browser.pauseMedia()\n            }\n            1 -> {\n                browser.pauseMedia()\n                val target = ensureShorts()\n                if (enteringShorts) target.requestShortsSound()\n                target.resume()\n            }\n            else -> { browser.pauseMedia(); shorts?.pauseMedia() }\n        }\n        syncOriginalHomeVisibility()\n    }\n    private fun ensureShorts(): BrowserController = shorts ?: BrowserController(this, shield, ::openVideo, shortsPlayer = true).also {\n        shorts = it; it.navigate(\"https://m.youtube.com/shorts/\")\n    }\n    fun openAccountScreen() { selectTab(4) }\n"
+        }
+      ]
+    }
+  },
+  "addedFiles": {
+    "app/src/main/java/com/weiktube/app/ShortsAudioScript.kt": "53af555a4023d0b9b600d9293e5e30a15bdc2f912d467ac3a465bca6d2d057d3"
+  }
+}

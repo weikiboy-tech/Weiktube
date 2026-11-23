@@ -211,6 +211,7 @@ class MainActivity : ComponentActivity() {
         if (reselectedHome) originalHome.goHome()
     }
     fun selectTab(value: Int) {
+        val enteringShorts = value == 1 && tab != 1
         if (value != 1) shortsFromHome = false
         browser.closeSearch()
         tab = value
@@ -223,12 +224,17 @@ class MainActivity : ComponentActivity() {
                 // Showing the retained Gecko document never navigates or creates a second session.
                 browser.pauseMedia()
             }
-            1 -> { browser.pauseMedia(); ensureShorts().resume() }
+            1 -> {
+                browser.pauseMedia()
+                val target = ensureShorts()
+                if (enteringShorts) target.requestShortsSound()
+                target.resume()
+            }
             else -> { browser.pauseMedia(); shorts?.pauseMedia() }
         }
         syncOriginalHomeVisibility()
     }
-    private fun ensureShorts(): BrowserController = shorts ?: BrowserController(this, shield, ::openVideo).also {
+    private fun ensureShorts(): BrowserController = shorts ?: BrowserController(this, shield, ::openVideo, shortsPlayer = true).also {
         shorts = it; it.navigate("https://m.youtube.com/shorts/")
     }
     fun openAccountScreen() { selectTab(4) }

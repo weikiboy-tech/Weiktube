@@ -1,4 +1,8 @@
-# Weiktube 1.3.15
+# Weiktube 1.3.16
+
+## Release 1.3.16
+
+Gezielter Tonstart für den bestehenden Shorts-Player. Bewusstes Stummschalten bleibt während des Besuchs erhalten. Normaler Player, PiP und AdBlock unverändert. [Änderungen und tatsächliche Testgrenzen](RELEASE-1.3.16.md).
 
 ## Release 1.3.15
 

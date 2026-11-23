@@ -13,7 +13,7 @@ import java.io.ByteArrayInputStream
 
 /** Long-lived feed browser. Public watch URLs are handed to a separate persistent watch surface. */
 @SuppressLint("SetJavaScriptEnabled")
-class BrowserController(private val activity: MainActivity, private val shield: ShieldEngine, private val onVideo: (String) -> Unit) {
+class BrowserController(private val activity: MainActivity, private val shield: ShieldEngine, private val onVideo: (String) -> Unit, private val shortsPlayer: Boolean = false) {
     var progress by mutableFloatStateOf(0f); private set
     var error by mutableStateOf<String?>(null); private set
     var currentUrl by mutableStateOf(HOME); private set
@@ -61,7 +61,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
         settings.allowFileAccess = false
         settings.allowContentAccess = false
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-        settings.mediaPlaybackRequiresUserGesture = true
+        settings.mediaPlaybackRequiresUserGesture = !shortsPlayer
         settings.setSupportMultipleWindows(false)
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.START_SAFE_BROWSING)) WebViewCompat.startSafeBrowsing(activity) {}
@@ -251,6 +251,13 @@ class BrowserController(private val activity: MainActivity, private val shield: 
         if (!view.canGoBack()) { refreshHistory(); return false }
         view.goBack(); return true
     }
+    private var shortsSoundRequest = 0L
+    fun requestShortsSound() {
+        if (!shortsPlayer) return
+        shortsSoundRequest++
+        refreshDocumentScript()
+        applyPageSettings()
+    }
     fun resume() {
         visible = true
         if (!rendererAlive || destroyed) return
@@ -282,7 +289,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
         if (!rendererAlive || destroyed || !Links.youtube(currentUrl)) return
         view.evaluateJavascript(configuredScript(), null)
     }
-    private fun configuredScript() = "window.weiktubeShortsTab=${activity.tab == 1};window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible || !adReady};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;" + BROWSER_SCRIPT
+    private fun configuredScript() = "window.weiktubeShortsSoundRequest=$shortsSoundRequest;window.weiktubeShortsTab=${shortsPlayer && activity.tab == 1};window.weiktubeChromeEnabled=$nativeChrome;window.weiktubePausePreview=${playbackElsewhere || !visible || !adReady};window.weiktubeDark=$darkTheme;window.weiktubeForceSearch=$forceSearch;" + ShortsAudioScript.SCRIPT + BROWSER_SCRIPT
     private fun refreshDocumentScript() {
         if (!rendererAlive || destroyed || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
         documentScript?.remove()

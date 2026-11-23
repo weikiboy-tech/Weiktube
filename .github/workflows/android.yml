@@ -35,6 +35,7 @@ jobs:
           node scripts/check-native-pip-integration.cjs
           node scripts/check-playback-observer.cjs
           node scripts/check-playback-diagnostics.cjs
+          node scripts/check-shorts-audio.cjs
           node scripts/check-browser-scripts.cjs
           node scripts/check-home-bridge.cjs
           node scripts/check-original-home-navigation.cjs
