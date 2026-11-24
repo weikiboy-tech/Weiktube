@@ -234,6 +234,8 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                 it.configure(enabled = full && portrait && !a.fullscreen && !a.pip,
                                     youtube = p.isYoutube, onDrag = { distance -> dragPixels = distance },
                                     onMinimize = a::minimizeWebVideo)
+                                it.configureZoom(full && !expandingPlayer && !a.pip && playerVisible,
+                                    landscapeVideo, "${p.source}:${p.zoomRevision}", p::setVideoZoom)
                                 p.setPresentation(mini || expandingPlayer, dark, landscapeVideo || a.pip, systemPip = a.pip)
                             })
                     }

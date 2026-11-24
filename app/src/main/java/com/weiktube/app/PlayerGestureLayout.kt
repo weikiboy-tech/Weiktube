@@ -2,6 +2,7 @@ package com.weiktube.app
 
 import android.content.Context
 import android.content.res.Configuration
+import android.view.ScaleGestureDetector
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.ViewConfiguration
@@ -33,6 +34,55 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     private var logicalHeight = 0
     private var mediaWidth = 0
     private var mediaHeight = 0
+
+    private var zoomEnabled = false
+    private var zoomFullVideo = false
+    private var zoomKey: String? = null
+    private var zoomCandidate = false
+    private var pinchOwned = false
+    private var pinchCancelled = false
+    private var videoZoom = 1f
+    private var onZoom: (Float, Float, Float) -> Unit = { _, _, _ -> }
+    private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScaleBegin(detector: ScaleGestureDetector) = pinchOwned && zoomEnabled && !pinchCancelled
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            if (!zoomEnabled || pinchCancelled) return false
+            val factor = detector.scaleFactor
+            if (!factor.isFinite() || factor <= 0f || width <= 0 || height <= 0) return false
+            videoZoom = (videoZoom * factor).coerceIn(1f, 8f)
+            onZoom(videoZoom, (detector.focusX / width).coerceIn(0f, 1f),
+                (detector.focusY / height).coerceIn(0f, 1f))
+            return true
+        }
+    }).apply { isQuickScaleEnabled = false; isStylusScaleEnabled = false }
+
+    internal fun configureZoom(enabled: Boolean, fullVideo: Boolean, key: String?,
+                               onZoom: (Float, Float, Float) -> Unit) {
+        this.onZoom = onZoom
+        if (zoomEnabled != enabled || zoomFullVideo != fullVideo || zoomKey != key) resetVideoZoom()
+        zoomEnabled = enabled
+        zoomFullVideo = fullVideo
+        zoomKey = key
+    }
+
+    private fun resetVideoZoom() {
+        videoZoom = 1f
+        if (pinchOwned) pinchCancelled = true
+        onZoom(1f, .5f, .5f)
+        zoomCandidate = false
+        // An owned sequence stays consumed until UP; never give a leftover finger to drag.
+    }
+
+    private fun insideZoomVideo(x: Float, y: Float): Boolean {
+        if (width <= 0 || height <= 0 || x < 0 || x >= width) return false
+        val h = if (zoomFullVideo || !youtubeVideo) height.toFloat() else minOf(width * 9f / 16f, height.toFloat())
+        return y >= 0f && y < h
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w != oldw || h != oldh) resetVideoZoom()
+    }
 
     /** The fallback is the measured full app content area, never the compact card's size. */
     internal fun setViewportPresentation(compact: Boolean, source: String?, videoWidth: Int, videoHeight: Int,
@@ -154,8 +204,33 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        if (event.actionMasked == MotionEvent.ACTION_DOWN) reset()
-        else track(event)
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            reset()
+            pinchOwned = false
+            pinchCancelled = false
+            zoomCandidate = zoomEnabled && insideZoomVideo(event.x, event.y)
+            if (zoomCandidate) scaleDetector.onTouchEvent(event)
+        }
+        if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN && !pinchOwned && zoomCandidate && zoomEnabled &&
+            (0 until event.pointerCount).all { insideZoomVideo(event.getX(it), event.getY(it)) }) {
+            reset()
+            pinchOwned = true
+            val cancel = MotionEvent.obtain(event)
+            cancel.action = MotionEvent.ACTION_CANCEL
+            super.dispatchTouchEvent(cancel)
+            cancel.recycle()
+            parent?.requestDisallowInterceptTouchEvent(true)
+        }
+        if (pinchOwned) {
+            scaleDetector.onTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                pinchOwned = false; zoomCandidate = false
+                reset()
+            }
+            return true
+        }
+        if (zoomCandidate && event.actionMasked != MotionEvent.ACTION_DOWN) scaleDetector.onTouchEvent(event)
+        if (event.actionMasked != MotionEvent.ACTION_DOWN) track(event)
         val handled = super.dispatchTouchEvent(event)
         // A rejected gesture may have yielded interception to WebView, so its UP can
         // bypass onInterceptTouchEvent. Still release our observer for every sequence.

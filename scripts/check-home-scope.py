@@ -5,10 +5,28 @@ import json
 
 root = Path(__file__).resolve().parents[1]
 
+zoom_review = json.loads((root / "scripts/video-zoom-reviewed-changes.json").read_text(encoding="utf-8"))
+zoom_originals = {}
+for name, review in zoom_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " video zoom change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed video zoom changes")
+    zoom_originals[name] = content
+for name, expected in zoom_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed video zoom helper/test")
+def before_video_zoom(name):
+    return zoom_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
+
 audio_review = json.loads((root / "scripts/shorts-audio-reviewed-changes.json").read_text(encoding="utf-8"))
 audio_originals = {}
 for name, review in audio_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_video_zoom(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " shorts audio change missing or duplicated")
@@ -17,10 +35,10 @@ for name, review in audio_review["files"].items():
         raise SystemExit(name + " differs outside reviewed shorts audio changes")
     audio_originals[name] = content
 for name, expected in audio_review["addedFiles"].items():
-    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+    if hashlib.sha256(before_video_zoom(name).encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed shorts audio helper")
 def before_shorts_audio(name):
-    return audio_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    return audio_originals.get(name, before_video_zoom(name))
 
 
 

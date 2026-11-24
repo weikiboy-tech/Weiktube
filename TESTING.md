@@ -1,5 +1,9 @@
 # Weiktube – Prüfprotokoll
 
+## Release 1.3.17
+
+Zwei-Finger-Videozoom im bestehenden Player. [Release und Testgrenzen](RELEASE-1.3.17.md).
+
 ## Release 1.3.16
 
 Gezielter Tonstart für den bestehenden Shorts-Player. Bewusstes Stummschalten bleibt während des Besuchs erhalten. Normaler Player, PiP und AdBlock unverändert. [Änderungen und tatsächliche Testgrenzen](RELEASE-1.3.16.md).

@@ -26,6 +26,8 @@ jobs:
         run: |
           npm install --no-save --prefix "$RUNNER_TEMP/weiktube-layout" playwright-core@1.61.0
           WEIKTUBE_PLAYWRIGHT_MODULE="$RUNNER_TEMP/weiktube-layout/node_modules/playwright-core" WEIKTUBE_CHROME_PATH="$(command -v google-chrome)" node scripts/check-player-layout.cjs
+      - name: Verify video-only zoom in Chromium
+        run: WEIKTUBE_PLAYWRIGHT_MODULE="$RUNNER_TEMP/weiktube-layout/node_modules/playwright-core" WEIKTUBE_CHROME_PATH="$(command -v google-chrome)" node scripts/check-video-zoom-layout.cjs
       - name: Verify filtering and existing navigation scripts
         run: |
           node scripts/vendor-adblock.mjs --check
@@ -35,6 +37,7 @@ jobs:
           node scripts/check-native-pip-integration.cjs
           node scripts/check-playback-observer.cjs
           node scripts/check-playback-diagnostics.cjs
+          node scripts/check-video-zoom.cjs
           node scripts/check-shorts-audio.cjs
           node scripts/check-browser-scripts.cjs
           node scripts/check-home-bridge.cjs

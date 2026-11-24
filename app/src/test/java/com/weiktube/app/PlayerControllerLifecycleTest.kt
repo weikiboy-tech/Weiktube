@@ -55,6 +55,29 @@ class PlayerControllerLifecycleTest {
         idle()
     }
 
+    @Test fun zoomAndCompactTransitionsNeverReplaceOrNavigateTheWebView() {
+        player.open(VIDEO_A)
+        val web = player.view
+        client(web).onPageCommitVisible(web, WATCH_A)
+        val url = shadowOf(web).lastLoadedUrl
+        val initialRevision = player.zoomRevision
+        repeat(10) {
+            player.setVideoZoom(3f, .3f, .4f)
+            player.setPresentation(true, true)
+            player.setPresentation(false, true, videoOnly = true, systemPip = true)
+            player.setPresentation(false, true)
+            idle()
+            assertSame(web, player.view)
+            assertEquals(url, shadowOf(web).lastLoadedUrl)
+            assertEquals(VIDEO_A, player.source)
+        }
+        assertTrue(player.zoomRevision > initialRevision)
+        val beforeSelection = player.zoomRevision
+        player.open(VIDEO_B)
+        assertTrue(player.zoomRevision > beforeSelection)
+        assertSame(web, player.view)
+    }
+
     @Test fun selectingAnotherVideoBeforeRecoveryNeverLoadsTheDeadWebView() {
         player.open(VIDEO_A)
         val retired = player.view

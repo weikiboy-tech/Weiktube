@@ -58,6 +58,34 @@ class PlayerController(
     private var pendingRecovery: Recovery? = null
     private var automaticRecoveries = 0
     private var recoveryDocumentPending = false
+    // Visual-only state; no media commands and no new WebView. One update per display frame.
+    var zoomRevision by mutableIntStateOf(0); private set
+    private var zoomScriptInstalled = false
+    private var pendingZoom: Triple<Float, Float, Float>? = null
+    private val zoomFrame = Runnable {
+        val value = pendingZoom
+        pendingZoom = null
+        if (value != null && !destroyed && rendererAlive && documentCommitted && source != null) {
+            val bootstrap = if (zoomScriptInstalled) "" else VideoZoomScript.SCRIPT
+            zoomScriptInstalled = true
+            view.evaluateJavascript(bootstrap + ";if(window.weiktubeVideoZoom)window.weiktubeVideoZoom(${value.first},${value.second},${value.third});", null)
+        }
+    }
+    internal fun setVideoZoom(scale: Float, x: Float, y: Float) {
+        if (destroyed || !rendererAlive || !scale.isFinite() || !x.isFinite() || !y.isFinite()) return
+        val target = if (mini || systemPip) 1f else scale.coerceIn(1f, 8f)
+        pendingZoom = Triple(target, x.coerceIn(0f, 1f), y.coerceIn(0f, 1f))
+        view.removeCallbacks(zoomFrame)
+        view.postOnAnimation(zoomFrame)
+    }
+    private fun clearVideoZoom() {
+        view.removeCallbacks(zoomFrame)
+        pendingZoom = null
+        if (!destroyed && rendererAlive && zoomScriptInstalled)
+            view.evaluateJavascript("if(window.weiktubeVideoZoom)window.weiktubeVideoZoom(1,.5,.5);", null)
+        zoomScriptInstalled = false
+        zoomRevision++
+    }
     var view: WebView by mutableStateOf(createView()); private set
     private var mini = false
     private var dark = true
@@ -183,6 +211,7 @@ class PlayerController(
                 return false
             }
             override fun onPageStarted(web: WebView, url: String, favicon: Bitmap?) {
+                if (alive(web)) { zoomScriptInstalled = false; zoomRevision++; pendingZoom = null; web.removeCallbacks(zoomFrame) }
                 if (!acceptsDocument(web, url)) return
                 generation++; playbackObservationRevision++
                 documentCommitted = false
@@ -279,6 +308,8 @@ class PlayerController(
     }
 
     private fun disposeView(web: WebView, force: Boolean = false) {
+        web.removeCallbacks(zoomFrame)
+        pendingZoom = null; zoomScriptInstalled = false; zoomRevision++
         val nav = navigationHooks.remove(web)
         val ads = adHooks.remove(web)
         val playback = playbackHooks.remove(web)
@@ -399,6 +430,7 @@ class PlayerController(
         expanded = false
     }
     private fun openSelected(url: String, userInitiated: Boolean, recovery: Boolean = false, startAt: Double? = null) {
+        clearVideoZoom()
         if (destroyed) return
         val id = Links.videoId(url)
         if (id == null && !Links.directVideoAllowed(url)) { error = "Keine unterstützte Video-Adresse."; return }
@@ -460,6 +492,7 @@ class PlayerController(
     fun setPresentation(minimized: Boolean, darkTheme: Boolean, videoOnly: Boolean = false, systemPip: Boolean = false) {
         if (destroyed) return
         if (mini == minimized && dark == darkTheme && this.videoOnly == videoOnly && this.systemPip == systemPip) return
+        if (mini != minimized || this.videoOnly != videoOnly || this.systemPip != systemPip) clearVideoZoom()
         mini = minimized; dark = darkTheme; this.videoOnly = videoOnly; this.systemPip = systemPip; applyPresentation()
         trace(if (systemPip) PlayerDiagnostics.Event.PRESENTATION_PIP else if (mini) PlayerDiagnostics.Event.PRESENTATION_MINI else PlayerDiagnostics.Event.PRESENTATION_NORMAL)
         if (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) android.util.Log.d("WeiktubePlayback", "presentation session=$generation mini=$mini")

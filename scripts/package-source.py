@@ -26,6 +26,8 @@ OPTIONAL_FILES.add("docs/PLAYBACK-DIAGNOSTICS.md")
 OPTIONAL_FILES.update({"RELEASE-1.3.15.md", "docs/SHORTS-RESUME.md", "docs/SHORTS-ORIENTATION.md"})
 OPTIONAL_FILES.add("ADBLOCK-1.3.5.md")
 OPTIONAL_FILES.add("RELEASE-1.3.16.md")
+OPTIONAL_FILES.add("RELEASE-1.3.17.md")
+OPTIONAL_FILES.add("docs/VIDEO-ZOOM.md")
 PRIVATE_PARTS = {
     "build", ".gradle", ".kotlin", ".git", "__pycache__", "validation", "screenshots",
     "signing", "keys", "private", "credentials", ".aws", ".codex", ".agents", "node_modules",

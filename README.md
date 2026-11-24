@@ -1,4 +1,8 @@
-# Weiktube 1.3.16
+# Weiktube 1.3.17
+
+## Release 1.3.17
+
+Zwei-Finger-Videozoom im bestehenden Player. [Release und Testgrenzen](RELEASE-1.3.17.md).
 
 ## Release 1.3.16
 
