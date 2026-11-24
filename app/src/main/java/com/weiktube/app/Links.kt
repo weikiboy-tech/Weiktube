@@ -74,6 +74,39 @@ object Links {
         if (host(url.trim()) == "youtu.be") return null
         return "https://m.youtube.com" + u.rawPath.orEmpty().ifEmpty { "/" } + (u.rawQuery?.let { "?$it" } ?: "")
     }
+    /** Strict external-entry boundary; internal navigation keeps its existing compatibility. */
+    fun externalYoutubeUrl(raw: String): String? {
+        val value = raw.trim()
+        if (value.length !in 1..8192 || value.any { it.code < 32 || it.code == 127 }) return null
+        val u = uri(value) ?: return null
+        if (!u.scheme.equals("https", true) || u.host.lowercase() !in youtubeHosts ||
+            u.port !in setOf(-1, 443) || u.rawUserInfo != null) return null
+        val path = u.path.orEmpty()
+        if (Regex("%(?:2f|5c|0[0-9a-f]|1[0-9a-f]|7f)", RegexOption.IGNORE_CASE).containsMatchIn(u.rawPath.orEmpty()) ||
+            path.contains('\\') || path.split('/').any { it == "." || it == ".." } || path.startsWith("//")) return null
+        val id = videoId(value)
+        if (id != null) {
+            val target = canonicalYoutubeUrl(value) ?: return null
+            return if (!isShorts(value) && hasStartTime(value) && !target.contains("&t=")) "$target&t=0" else target
+        }
+        if (u.host.equals("youtu.be", true)) return null
+        if (isShorts(value)) return "https://m.youtube.com/shorts/"
+        val query = parameters(u.rawQuery)
+        if (path == "/playlist") {
+            val list = query["list"]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,128}")) } ?: return null
+            return "https://m.youtube.com/playlist?list=$list"
+        }
+        if (path == "/results") {
+            val search = query["search_query"]?.takeIf { it.isNotBlank() } ?: return null
+            return "https://m.youtube.com/results?search_query=" + java.net.URLEncoder.encode(search, "UTF-8")
+        }
+        val channel = Regex("/(?:@[^/]+|(?:channel|c|user)/[^/]+)(?:/(?:videos|shorts|streams|live|playlists|community|about|featured))?/?").matches(path)
+        if (channel || path in setOf("", "/", "/feed/you", "/feed/subscriptions", "/feed/history", "/feed/trending"))
+            return "https://m.youtube.com" + u.rawPath.orEmpty().ifEmpty { "/" }
+        // Redirect/attribution wrappers, malformed watch IDs and foreign destinations are not followed.
+        return null
+    }
+
     /** Feed navigation sends watch/live/embed links to the watch surface; Shorts stay in the feed. */
     fun browseWatchUrl(url: String): String? = if (isShorts(url) || videoId(url) == null) null else canonicalYoutubeUrl(url)
     fun https(url: String): Boolean = uri(url)?.scheme?.equals("https", ignoreCase = true) == true

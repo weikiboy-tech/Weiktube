@@ -1,4 +1,8 @@
-# Weiktube 1.3.18
+# Weiktube 1.3.19
+
+## Release 1.3.19
+
+YouTube-Links aus anderen Apps und Einstieg in Androids Standard-Link-Einstellungen. [Einrichtung und Testgrenzen](RELEASE-1.3.19.md).
 
 ## Release 1.3.18
 

@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
     private var pipUiBlocked = false
     private lateinit var nativePip: NativePipController
     private var pendingOriginalHomeVideo: String? = null
+    private var lastExternalUrl: String? = null
     private var originalHomePlayer = false
     private var shortsFromHome = false
     // The embedded view uses the same one-time return ticket and existing player entry point.
@@ -158,7 +159,8 @@ class MainActivity : ComponentActivity() {
             screenUnlocked = { reconcileScreenState(PlayerDiagnostics.ScreenSignal.USER_PRESENT) },
             screenOn = { reconcileScreenState(PlayerDiagnostics.ScreenSignal.SCREEN_ON) })
         setContent { WeiktubeApp(this, model) }
-        if (savedInstanceState != null) {
+        lastExternalUrl = savedInstanceState?.getString(ExternalYoutubeIntent.STATE_KEY)
+        if (savedInstanceState != null && !ExternalYoutubeIntent.isFreshLaunch(intent, lastExternalUrl)) {
             if (savedInstanceState.containsKey("orientation_before_player"))
                 orientationBeforePlayer = savedInstanceState.getInt("orientation_before_player")
             // A new Activity starts on the original Home. The persistent Gecko profile retains login.
@@ -179,9 +181,12 @@ class MainActivity : ComponentActivity() {
         if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
             openOriginalHome(); return
         }
-        val raw = intent.dataString ?: intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
-        val url = Regex("https?://[^\\s]+").find(raw)?.value ?: raw
-        if (Links.videoId(url) != null || Links.isShorts(url)) openVideo(url) else if (Links.youtube(url) && Links.https(url)) openAccountUrl(url)
+        val url = ExternalYoutubeIntent.url(intent) ?: return
+        lastExternalUrl = url
+        pendingOriginalHomeVideo = null
+        originalHomePlayer = false
+        if (fullscreen) hideFullscreen()
+        ExternalYoutubeIntent.route(url, ::openVideo, ::openAccountUrl)
     }
     fun openVideo(url: String) {
         if (Links.isShorts(url)) {
@@ -407,6 +412,7 @@ class MainActivity : ComponentActivity() {
         outState.putString(PlayerDiagnostics.PROCESS_MARKER_STATE_KEY, PlayerDiagnostics.processMarker)
         traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_SAVE_STATE)
         orientationBeforePlayer?.let { outState.putInt("orientation_before_player", it) }
+        outState.putString(ExternalYoutubeIntent.STATE_KEY, lastExternalUrl)
         outState.putString("browse", browser.currentUrl)
         outState.putInt("tab", tab)
         val url = player.source

@@ -401,6 +401,17 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
             OutlinedButton(onClick = { a.shield.blocked.set(0); a.blockedCount = 0; YoutubeAdBlock.resetCounters() }) { Text("Sitzungszähler zurücksetzen") }
             }
             if (!shieldsOnly) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("YouTube-Links", style = MaterialTheme.typography.titleLarge)
+                    Text("Aktiviere unter Standardmäßig öffnen die unterstützten Links für Weiktube und wähle youtube.com, www.youtube.com, m.youtube.com und youtu.be aus. Die Bezeichnungen können je nach Handy abweichen.")
+                    OutlinedButton(onClick = {
+                        if (!YoutubeLinkSettings.open(a)) a.message("Öffne Android-Einstellungen → Apps → Weiktube → Standardmäßig öffnen.")
+                    }) { Text("YouTube-Links standardmäßig mit Weiktube öffnen") }
+                    Text("Öffnet sich weiterhin YouTube? Deaktiviere dort unter App-Info → Standardmäßig öffnen die unterstützten Links oder lösche die Standardzuordnung. Bei Android 8–11 gegebenenfalls Weiktube und Immer auswählen. Manche Apps nutzen einen eigenen Browser; dort In anderer App öffnen oder Teilen → Weiktube verwenden.", style = MaterialTheme.typography.bodySmall)
+                    Text("Weiktube kann die Zuordnung nicht automatisch setzen oder YouTubes Domains verifizieren.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
             UpdateSettings(a.updater)
             HorizontalDivider()
             Text("Darstellung", style = MaterialTheme.typography.titleLarge)

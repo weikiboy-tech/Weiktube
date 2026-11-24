@@ -5,10 +5,28 @@ import json
 
 root = Path(__file__).resolve().parents[1]
 
+links_review = json.loads((root / "scripts/external-links-reviewed-changes.json").read_text(encoding="utf-8"))
+links_originals = {}
+for name, review in links_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " external links change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed external links changes")
+    links_originals[name] = content
+for name, expected in links_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed external links helper")
+def before_external_links(name):
+    return links_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
+
 controls_review = json.loads((root / "scripts/shorts-controls-reviewed-changes.json").read_text(encoding="utf-8"))
 controls_originals = {}
 for name, review in controls_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_external_links(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " shorts controls change missing or duplicated")
@@ -17,7 +35,7 @@ for name, review in controls_review["files"].items():
         raise SystemExit(name + " differs outside reviewed shorts controls changes")
     controls_originals[name] = content
 def before_shorts_controls(name):
-    return controls_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    return controls_originals.get(name, before_external_links(name))
 
 
 zoom_review = json.loads((root / "scripts/video-zoom-reviewed-changes.json").read_text(encoding="utf-8"))

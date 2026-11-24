@@ -1,5 +1,9 @@
 # Weiktube – Prüfprotokoll
 
+## Release 1.3.19
+
+YouTube-Links aus anderen Apps und Einstieg in Androids Standard-Link-Einstellungen. [Einrichtung und Testgrenzen](RELEASE-1.3.19.md).
+
 ## Release 1.3.18
 
 Shorts mit bestätigter Tonfreigabe und interaktiver Zeitleiste. [Details und Testgrenzen](RELEASE-1.3.18.md).
