@@ -236,6 +236,8 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                     onMinimize = a::minimizeWebVideo)
                                 it.configureZoom(full && !expandingPlayer && !a.pip && playerVisible,
                                     landscapeVideo, "${p.source}:${p.zoomRevision}", p::setVideoZoom)
+                                it.configureAdvanced(landscapeVideo && full && !expandingPlayer && !a.pip && playerVisible,
+                                    "${p.source}:${p.zoomRevision}", p, prefs.player)
                                 p.setPresentation(mini || expandingPlayer, dark, landscapeVideo || a.pip, systemPip = a.pip)
                             })
                     }
@@ -272,6 +274,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                         }
                     }
                 }
+                if (full && !a.pip) PlayerGestureHud(p.gestureFeedback, Modifier.align(Alignment.Center))
                 if (mini && playerVisible) {
                     val miniPlaying = p.playing
                     // Native controls cover only the small video. The surrounding feed stays touchable.
@@ -412,6 +415,7 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
                     Text("Weiktube kann die Zuordnung nicht automatisch setzen oder YouTubes Domains verifizieren.", style = MaterialTheme.typography.bodySmall)
                 }
             }
+            PlayerSettings(model, prefs.player, a)
             UpdateSettings(a.updater)
             HorizontalDivider()
             Text("Darstellung", style = MaterialTheme.typography.titleLarge)

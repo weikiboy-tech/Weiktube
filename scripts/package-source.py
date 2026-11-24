@@ -30,6 +30,7 @@ OPTIONAL_FILES.add("RELEASE-1.3.17.md")
 OPTIONAL_FILES.update({"RELEASE-1.3.19.md", "docs/EXTERNAL-LINKS.md"})
 OPTIONAL_FILES.update({"RELEASE-1.3.18.md", "docs/SHORTS-CONTROLS.md"})
 OPTIONAL_FILES.add("docs/VIDEO-ZOOM.md")
+OPTIONAL_FILES.update({"RELEASE-1.3.20.md", "RELEASE-1.3.20-rc1.md", "docs/ADVANCED-PLAYER.md", "PRIVACY.md"})
 PRIVATE_PARTS = {
     "build", ".gradle", ".kotlin", ".git", "__pycache__", "validation", "screenshots",
     "signing", "keys", "private", "credentials", ".aws", ".codex", ".agents", "node_modules",

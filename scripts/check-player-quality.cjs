@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const script=fs.readFileSync('app/src/main/java/com/weiktube/app/PlayerQuality.kt','utf8').split('"""')[1];
+function fixture(){let calls=[],current='medium';let click;const p={getAvailableQualityLevels:()=>['medium','hd720','hd1080'],setPlaybackQualityRange:(a,b)=>calls.push([a,b]),getPlaybackQuality:()=>current};const c={URL,location:{href:'https://m.youtube.com/watch?v=abcdefghijk'},document:{getElementById:()=>p,addEventListener:(n,f)=>click=f}};c.window=c;vm.createContext(c);vm.runInContext(script,c);return{p,c,calls,setCurrent:v=>current=v,manual:()=>click({isTrusted:true,target:{closest:()=>({})}}),q:(pref,t=100)=>c.weiktubeQuality('abcdefghijk',pref,t)}}
+let n=0;function test(name,f){f();n++;console.log('PASS '+name)}
+test('nearest lower only and one request, including network changes',()=>{let f=fixture();assert.equal(f.q(900).target,720);assert.deepEqual(f.calls,[['hd720','hd720']]);f.setCurrent('hd720');assert.equal(f.q(900).status,'confirmed');for(let i=0;i<50;i++)f.q(1080);assert.equal(f.calls.length,1)});
+test('no lower resolution uses automatic, not a higher stream',()=>{const f=fixture();assert.equal(f.q(144).status,'automatic');assert.equal(f.calls.length,0)});
+test('no-op quality setters are reported unconfirmed without retries',()=>{const f=fixture();f.q(1080);assert.equal(f.q(1080,6000).status,'unconfirmed');for(let i=0;i<50;i++)f.q(1080,8000);assert.equal(f.calls.length,1)});
+test('manual selection is never overridden',()=>{const f=fixture();f.q(1080);f.manual();assert.equal(f.q(720).status,'manual');assert.equal(f.calls.length,1)});
+test('new video resets preference; unsupported levels and APIs fail safely',()=>{const f=fixture();f.q(1080);f.c.location.href='https://m.youtube.com/watch?v=zzzzzzzzzzz';f.c.weiktubeQuality('zzzzzzzzzzz',720,100);assert.equal(f.calls.length,2);f.p.getAvailableQualityLevels=()=>[];for(let i=0;i<13;i++)f.c.weiktubeQuality('abcdefghijk',1080,100);assert.equal(f.calls.length,2)});
+console.log(`${n} quality capability simulations passed.`);

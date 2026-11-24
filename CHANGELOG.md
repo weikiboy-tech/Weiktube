@@ -1,5 +1,16 @@
 # Änderungsverlauf
 
+## Release 1.3.20
+
+Veröffentlichung des geprüften Advanced-Player-Kandidaten mit Versionscode 35. Keine neuen Funktionsänderungen seit rc1. [Release und Grenzen](RELEASE-1.3.20.md).
+
+## Lokal: 1.3.20-rc1 – Advanced Player und RYD
+
+Vollbild-Lautstärke/Helligkeit, konfigurierbares Doppeltipp-Spulen, temporäre Geschwindigkeit,
+fähigkeitsabhängige Qualitätspräferenz und optionale Dislike-Anzeige. Kein öffentlicher Release;
+Geräteabnahme offen. [Details, Tests und Grenzen](docs/ADVANCED-PLAYER.md).
+
+
 ## Release 1.3.19
 
 YouTube-Links aus anderen Apps und Einstieg in Androids Standard-Link-Einstellungen. [Einrichtung und Testgrenzen](RELEASE-1.3.19.md).

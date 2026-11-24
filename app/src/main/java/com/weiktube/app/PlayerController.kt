@@ -10,6 +10,7 @@ import androidx.webkit.WebViewRenderProcess
 import androidx.webkit.WebViewRenderProcessClient
 import org.json.JSONObject
 import org.json.JSONTokener
+import kotlinx.coroutines.*
 
 /** One watch document owns playback throughout expansion, minimization and navigation. */
 @SuppressLint("SetJavaScriptEnabled")
@@ -96,6 +97,110 @@ class PlayerController(
     private var awaitingResumePosition: Double? = null
     private var historyRevision = 0
     var resumedAt by mutableDoubleStateOf(0.0); private set
+    var gestureFeedback by mutableStateOf<PlayerGestureFeedback?>(null); private set
+    var supportedHoldRates by mutableStateOf<List<Float>>(emptyList()); private set
+    private var heldRequest = 0
+    private var seekTotal = 0.0
+    private var lastSeekFeedback = 0L
+    private val clearFeedback = Runnable { gestureFeedback = null }
+    internal fun feedback(kind: String, text: String, percent: Int? = null) {
+        mainHandler.removeCallbacks(clearFeedback)
+        gestureFeedback = PlayerGestureFeedback(kind, text, percent)
+        if (kind == "seek") mainHandler.postDelayed(clearFeedback, 900)
+    }
+    internal fun finishGesture() { mainHandler.removeCallbacks(clearFeedback); mainHandler.postDelayed(clearFeedback, 600) }
+    private fun advanced(command: String, result: (String) -> Unit = {}) {
+        if (destroyed || !rendererAlive || !documentCommitted || source == null ||
+            (isYoutube && adHooks[view]?.canPlay != true)) { result("null"); return }
+        val epoch = generation; val web = view
+        web.evaluateJavascript(AdvancedPlayerScript.SCRIPT + ";" + command) { raw ->
+            if (epoch == generation && alive(web) && selectedDocument(web.url)) result(raw)
+        }
+    }
+    internal fun gestureHit(x: Float, y: Float, result: (Boolean) -> Unit) {
+        if (!x.isFinite() || !y.isFinite()) { result(false); return }
+        advanced("window.weiktubeAdvanced.hit($x,$y)") { result(it == "true") }
+    }
+    internal fun seekGesture(seconds: Int) {
+        if (kotlin.math.abs(seconds) !in PlayerPreferences.steps) return
+        advanced("window.weiktubeAdvanced.seek($seconds)") { raw ->
+            val actual = raw.toDoubleOrNull()?.takeIf { it.isFinite() } ?: return@advanced
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - lastSeekFeedback > 700 || actual * seekTotal < 0) seekTotal = 0.0
+            seekTotal += actual; lastSeekFeedback = now
+            val count = kotlin.math.abs(seekTotal).toInt()
+            feedback("seek", "${if (seekTotal < 0) "−" else "+"}$count s")
+        }
+    }
+    internal fun holdGesture(active: Boolean) {
+        val request = ++heldRequest
+        if (!active) {
+            if (!destroyed && rendererAlive) view.evaluateJavascript("window.weiktubeAdvanced&&window.weiktubeAdvanced.release();", null)
+            finishGesture(); return
+        }
+        val speed = activity.model.preferences.value.player.holdSpeed
+        advanced("window.weiktubeAdvanced.hold($speed)") { raw ->
+            if (heldRequest == request && raw == "true") feedback("speed", "${speed.toString().replace('.', ',')}×")
+        }
+    }
+    var supportedQualities by mutableStateOf<List<Int>>(emptyList()); private set
+    var qualityStatus by mutableStateOf("Noch kein Video geprüft"); private set
+    private fun pollEnhancements() {
+        if (isYoutube && adHooks[view]?.canPlay != true) return
+        advanced("JSON.stringify(window.weiktubeAdvanced.rates())") { raw ->
+            runCatching {
+                val json = org.json.JSONArray(JSONTokener(raw).nextValue() as String)
+                supportedHoldRates = (0 until json.length()).map { json.getDouble(it).toFloat() }
+                    .filter { it in PlayerPreferences.speeds }.distinct()
+            }
+        }
+        if (!isYoutube) return
+        val id = source?.let(Links::videoId) ?: return
+        val preference = PlayerQuality.preferred(PlayerQuality.network(activity), activity.model.preferences.value.player)
+        val epoch = generation; val web = view
+        web.evaluateJavascript(PlayerQuality.SCRIPT + ";JSON.stringify(window.weiktubeQuality(${JSONObject.quote(id)},$preference,Date.now()));") { raw ->
+            if (epoch != generation || !alive(web)) return@evaluateJavascript
+            runCatching {
+                val data = JSONObject(JSONTokener(raw).nextValue() as String)
+                val levels = data.optJSONArray("levels") ?: org.json.JSONArray()
+                supportedQualities = (0 until levels.length()).map { levels.getInt(it) }.filter { it in PlayerPreferences.qualities }.distinct().sorted()
+                qualityStatus = when(data.optString("status")) {
+                    "confirmed" -> "Vom Player bestätigt: ${data.optInt("target")}p"
+                    "manual" -> "Manuelle Auswahl bleibt erhalten"
+                    "requested" -> "Qualität angefordert; Bestätigung ausstehend"
+                    "waiting" -> "Qualitätssteuerung wird geprüft"
+                    "automatic" -> "Automatische Qualität"
+                    else -> "Automatische Qualität – programmatische Auswahl nicht bestätigt"
+                }
+            }
+        }
+    }
+    private val enhancementScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val dislikeRepository by lazy { ReturnDislikeRepository(activity.applicationContext) }
+    private var dislikeJob: Job? = null
+    private var dislikeId: String? = null
+    private var dislikeLabel: String? = null
+    private var dislikeEpoch = -1L
+    var dislikeStatus by mutableStateOf("Ausgeschaltet"); private set
+    private fun pollDislikes() {
+        val enabled = activity.model.preferences.value.player.dislikes
+        val id = if (enabled && isYoutube) source?.let(Links::videoId) else null
+        if (id != dislikeId || dislikeEpoch != generation) {
+            dislikeJob?.cancel(); dislikeId = id; dislikeLabel = null; dislikeEpoch = generation
+            dislikeStatus = if (id == null) "Ausgeschaltet" else "Daten werden abgefragt"
+            if (id != null) {
+                val epoch = generation; val web = view
+                dislikeJob = enhancementScope.launch {
+                    val count = dislikeRepository.get(id)
+                    if (epoch != generation || !alive(web) || dislikeId != id || !activity.model.preferences.value.player.dislikes) return@launch
+                    dislikeLabel = count?.let { java.text.NumberFormat.getIntegerInstance(java.util.Locale.GERMANY).format(it) }
+                    dislikeStatus = if (count == null) "Keine Dislike-Daten verfügbar" else "RYD-Daten verfügbar (teilweise geschätzt)"
+                }
+            }
+        }
+        val label = dislikeLabel
+        view.evaluateJavascript(ReturnDislikeScript.SCRIPT + ";window.weiktubeDislikes(${JSONObject.quote(id.orEmpty())},${label?.let(JSONObject::quote) ?: "null"});", null)
+    }
     private fun saveProgress() {
         if (progressSampleValid && activity.model.preferencesReady && historyRevision == activity.model.historyRevision)
             source?.let { activity.model.progress.save(it, position, duration, force = true) }
@@ -410,6 +515,7 @@ class PlayerController(
         if (!isYoutube || source == null) return
         val id = Links.videoId(url) ?: return
         if (id != Links.videoId(source!!)) {
+            holdGesture(false); supportedHoldRates = emptyList(); supportedQualities = emptyList()
             saveProgress(); progressSampleValid = false; awaitingResumePosition = null
             generation++; position = 0.0; duration = 0.0; title = "Video"; lastRecordedTitle = ""
             videoWidth = 0; videoHeight = 0
@@ -430,6 +536,7 @@ class PlayerController(
         expanded = false
     }
     private fun openSelected(url: String, userInitiated: Boolean, recovery: Boolean = false, startAt: Double? = null) {
+        holdGesture(false)
         clearVideoZoom()
         if (destroyed) return
         val id = Links.videoId(url)
@@ -459,6 +566,7 @@ class PlayerController(
         playbackAllowed = activity.playerMayRun
         explicitStartRequested = userInitiated
         audibleStartRequested = userInitiated && !recovery
+        supportedHoldRates = emptyList(); supportedQualities = emptyList(); qualityStatus = "Noch kein Video geprüft"
         generation++; source = if (id != null) "https://www.youtube.com/watch?v=$id" else url
         documentCommitted = false
         recoveryDocumentPending = recovery
@@ -492,7 +600,7 @@ class PlayerController(
     fun setPresentation(minimized: Boolean, darkTheme: Boolean, videoOnly: Boolean = false, systemPip: Boolean = false) {
         if (destroyed) return
         if (mini == minimized && dark == darkTheme && this.videoOnly == videoOnly && this.systemPip == systemPip) return
-        if (mini != minimized || this.videoOnly != videoOnly || this.systemPip != systemPip) clearVideoZoom()
+        if (mini != minimized || this.videoOnly != videoOnly || this.systemPip != systemPip) { holdGesture(false); clearVideoZoom() }
         mini = minimized; dark = darkTheme; this.videoOnly = videoOnly; this.systemPip = systemPip; applyPresentation()
         trace(if (systemPip) PlayerDiagnostics.Event.PRESENTATION_PIP else if (mini) PlayerDiagnostics.Event.PRESENTATION_MINI else PlayerDiagnostics.Event.PRESENTATION_NORMAL)
         if (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) android.util.Log.d("WeiktubePlayback", "presentation session=$generation mini=$mini")
@@ -507,6 +615,8 @@ class PlayerController(
     }
     fun poll() {
         if (destroyed || !rendererAlive || source == null || !documentCommitted) return
+        pollEnhancements()
+        pollDislikes()
         val polledView = view
         val requestGeneration = generation
         val observationRevision = playbackObservationRevision
@@ -635,6 +745,7 @@ class PlayerController(
     }
     internal fun pauseView(reason: PlayerDiagnostics.PauseReason = PlayerDiagnostics.PauseReason.HOST_STOP) {
         if (destroyed) return
+        holdGesture(false)
         pauseFor(reason)
         if (rendererAlive && !viewPaused) {
             view.onPause(); viewPaused = true
@@ -672,6 +783,7 @@ class PlayerController(
     }
     fun close() {
         if (destroyed) return
+        holdGesture(false)
         pendingRecovery = null
         pauseFor(PlayerDiagnostics.PauseReason.CLOSE); generation++; source = null; error = null; loading = false; position = 0.0; duration = 0.0
         videoWidth = 0; videoHeight = 0
@@ -682,6 +794,9 @@ class PlayerController(
     }
     fun destroy() {
         if (destroyed) return
+        holdGesture(false)
+        mainHandler.removeCallbacks(clearFeedback)
+        enhancementScope.cancel()
         saveProgress()
         destroyed = true; pendingRecovery = null; generation++; playbackObservationRevision++
         rendererAlive = false; playing = false; loading = false

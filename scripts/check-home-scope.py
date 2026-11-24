@@ -5,10 +5,27 @@ import json
 
 root = Path(__file__).resolve().parents[1]
 
+advanced_review = json.loads((root / "scripts/advanced-player-reviewed-changes.json").read_text(encoding="utf-8"))
+advanced_originals = {}
+for name, review in advanced_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " advanced player change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed advanced player changes")
+    advanced_originals[name] = content
+for name, expected in advanced_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed advanced player helper/test")
+def before_advanced_player(name):
+    return advanced_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
 links_review = json.loads((root / "scripts/external-links-reviewed-changes.json").read_text(encoding="utf-8"))
 links_originals = {}
 for name, review in links_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_advanced_player(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " external links change missing or duplicated")
@@ -20,7 +37,7 @@ for name, expected in links_review["addedFiles"].items():
     if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed external links helper")
 def before_external_links(name):
-    return links_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    return links_originals.get(name, before_advanced_player(name))
 
 
 controls_review = json.loads((root / "scripts/shorts-controls-reviewed-changes.json").read_text(encoding="utf-8"))
@@ -451,4 +468,4 @@ for name, expected in baseline.items():
         failures.append(name + " differs outside reviewed hooks and copy")
 if failures:
     raise SystemExit("FAIL original app scope:\n" + "\n".join(failures))
-print(f"PASS {len(baseline)} original source files preserved; only reviewed Home, resume, miniplayer, rotation, portrait insets, adblock and native PiP changes allowed.")
+print(f"PASS {len(baseline)} original source files preserved; only reviewed Home, resume, miniplayer, rotation, portrait insets, adblock, native PiP and advanced player changes allowed.")

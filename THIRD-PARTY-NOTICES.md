@@ -36,3 +36,12 @@ not relicensed by this repository. No third-party trademark ownership is claimed
 
 Private APK/filter signing keys, cookies, account data and local device captures
 are never part of the source distribution. Public verification keys are included.
+
+## Return YouTube Dislike (optional public data service)
+
+Dislike estimates are provided by [Return YouTube Dislike](https://returnyoutubedislike.com/).
+[Upstream project](https://github.com/Anarios/return-youtube-dislike),
+[usage rights](https://www.returnyoutubedislike.com/docs/usage-rights).
+This integration reads public counts only, with user opt-in, cache and rate-limit backoff.
+No extension source or voting implementation is bundled. Counts may be estimated and are
+not guaranteed official YouTube figures.

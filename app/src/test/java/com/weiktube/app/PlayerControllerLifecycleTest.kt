@@ -55,6 +55,28 @@ class PlayerControllerLifecycleTest {
         idle()
     }
 
+    @Test fun advancedCommandsAndModeCancellationKeepTheOriginalWebViewAndSource() {
+        player.open(VIDEO_A)
+        val web = player.view
+        client(web).onPageCommitVisible(web, WATCH_A)
+        val loaded = shadowOf(web).lastLoadedUrl
+        repeat(10) {
+            player.seekGesture(10)
+            player.holdGesture(true)
+            player.setPresentation(true, true)
+            player.setPresentation(false, true, videoOnly = true, systemPip = true)
+            player.holdGesture(false)
+            player.setPresentation(false, true)
+            assertSame(web, player.view)
+            assertEquals(loaded, shadowOf(web).lastLoadedUrl)
+            assertEquals(VIDEO_A, player.source)
+        }
+        // This tests native command wiring and identity only, not Chromium media playback.
+        player.open(VIDEO_B)
+        assertSame(web, player.view)
+        assertEquals(VIDEO_B, player.source)
+    }
+
     @Test fun zoomAndCompactTransitionsNeverReplaceOrNavigateTheWebView() {
         player.open(VIDEO_A)
         val web = player.view

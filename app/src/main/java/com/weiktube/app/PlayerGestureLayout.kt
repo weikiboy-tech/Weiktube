@@ -35,6 +35,37 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     private var mediaWidth = 0
     private var mediaHeight = 0
 
+    private var advancedEnabled = false
+    private var advancedKey: String? = null
+    private var advancedPlayer: PlayerController? = null
+    private var advanced: AdvancedPlayerGesture? = null
+    private var windowControls: PlayerWindowControls? = null
+    internal fun configureAdvanced(enabled: Boolean, key: String?, player: PlayerController, options: PlayerPreferences) {
+        if (advanced == null) {
+            var ctx = context
+            while (ctx is android.content.ContextWrapper && ctx !is android.app.Activity) ctx = ctx.baseContext
+            val activity = ctx as? android.app.Activity
+            if (activity != null) windowControls = PlayerWindowControls(activity)
+            advanced = AdvancedPlayerGesture(ViewConfiguration.get(context).scaledTouchSlop.toFloat(),
+                send = { super.dispatchTouchEvent(it) },
+                hitTest = { x, y, callback -> advancedPlayer?.gestureHit(x, y, callback) ?: callback(false) },
+                startLevel = { windowControls?.begin(it) },
+                level = { left, delta -> windowControls?.change(delta)?.let { value ->
+                    advancedPlayer?.feedback(if (left) "brightness" else "volume", "$value %", value)
+                } }, seek = { advancedPlayer?.seekGesture(it) },
+                hold = { advancedPlayer?.holdGesture(it) }, finish = { advancedPlayer?.finishGesture() })
+        }
+        if (advancedEnabled != enabled || advancedKey != key || advancedPlayer !== player || advanced?.options != options) {
+            advanced?.cancel()
+            if (!enabled || advancedKey != key) windowControls?.restore()
+        }
+        advancedEnabled = enabled; advancedKey = key; advancedPlayer = player; advanced?.options = options
+    }
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (!hasWindowFocus) { advanced?.cancel(); windowControls?.restore() }
+    }
+
     private var zoomEnabled = false
     private var zoomFullVideo = false
     private var zoomKey: String? = null
@@ -81,7 +112,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        if (w != oldw || h != oldh) resetVideoZoom()
+        if (w != oldw || h != oldh) { advanced?.cancel(); resetVideoZoom() }
     }
 
     /** The fallback is the measured full app content area, never the compact card's size. */
@@ -214,6 +245,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
         if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN && !pinchOwned && zoomCandidate && zoomEnabled &&
             (0 until event.pointerCount).all { insideZoomVideo(event.getX(it), event.getY(it)) }) {
             reset()
+            advanced?.cancel()
             pinchOwned = true
             val cancel = MotionEvent.obtain(event)
             cancel.action = MotionEvent.ACTION_CANCEL
@@ -229,6 +261,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
             }
             return true
         }
+        if (advancedEnabled && advanced?.event(event, width, height) == true) return true
         if (zoomCandidate && event.actionMasked != MotionEvent.ACTION_DOWN) scaleDetector.onTouchEvent(event)
         if (event.actionMasked != MotionEvent.ACTION_DOWN) track(event)
         val handled = super.dispatchTouchEvent(event)
@@ -313,6 +346,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     }
 
     override fun onDetachedFromWindow() {
+        advanced?.cancel(); windowControls?.restore()
         removeCallbacks(replayInsets)
         reset()
         super.onDetachedFromWindow()

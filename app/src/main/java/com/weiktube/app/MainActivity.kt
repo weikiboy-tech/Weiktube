@@ -309,6 +309,7 @@ class MainActivity : ComponentActivity() {
         if (::nativePip.isInitialized) nativePip.modeChanged(pip)
     }
     override fun onPause() {
+        player.holdGesture(false)
         traceLifecycle(PlayerDiagnostics.Event.ACTIVITY_PAUSE)
         fullscreenOrientation.disable()
         hostResumed = false

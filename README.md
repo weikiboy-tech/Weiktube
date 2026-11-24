@@ -1,4 +1,7 @@
-# Weiktube 1.3.19
+# Weiktube 1.3.20
+
+> **1.3.20:** Erweiterte Vollbildgesten und optionale [Return-YouTube-Dislike-Anzeige](https://returnyoutubedislike.com/). [Release und Testgrenzen](RELEASE-1.3.20.md).
+
 
 ## Release 1.3.19
 
