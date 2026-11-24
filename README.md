@@ -1,4 +1,8 @@
-# Weiktube 1.3.17
+# Weiktube 1.3.18
+
+## Release 1.3.18
+
+Shorts mit bestätigter Tonfreigabe und interaktiver Zeitleiste. [Details und Testgrenzen](RELEASE-1.3.18.md).
 
 ## Release 1.3.17
 

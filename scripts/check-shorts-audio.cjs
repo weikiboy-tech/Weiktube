@@ -1,31 +1,34 @@
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const source = fs.readFileSync('app/src/main/java/com/weiktube/app/ShortsAudioScript.kt','utf8').split('"""')[1];
-let cases=0;
-function fixture(options={}) {
-  const events={}, videos=[]; let unmutes=0,writes=0;
-  const document={hidden:false,addEventListener(n,f){(events[n]??=[]).push(f)},querySelectorAll(){return videos},getElementById(){return {unMute(){unmutes++}}}};
-  const c={document,location:{hostname:'m.youtube.com',pathname:'/shorts/abcdefghijk'},innerHeight:800,innerWidth:400,Date,WeakMap,
-    weiktubeShortsTab:true,weiktubePausePreview:false,weiktubeShortsSoundRequest:1};
-  c.window=c;c.top=c;Object.assign(c,options);vm.createContext(c);
-  function video(extra={}) {let muted=true;const v={tagName:'VIDEO',isConnected:true,paused:false,ended:false,readyState:4,getBoundingClientRect(){return {width:400,height:700,top:0,left:0,bottom:700,right:400}},closest(){return null},play(){throw Error('unexpected play')},pause(){throw Error('unexpected pause')},...extra};Object.defineProperty(v,'muted',{get(){return muted},set(x){writes++;muted=x}});videos.push(v);return v}
-  return {c,document,events,video,run(){vm.runInContext(source,c)},emit(n,v,extra={}){for(const f of events[n]||[])f({target:v,...extra})},get unmutes(){return unmutes},get writes(){return writes}};
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const script=fs.readFileSync('app/src/main/java/com/weiktube/app/ShortsAudioScript.kt','utf8').split('"""')[1];
+function fixture(){
+ const elements=[],events={},winEvents={},queue=[],storage=new Map();let attempts=0,seeks=0,playing=false,muted=true,volume=0,time=10;
+ function el(tag='div') {const ev={},attrs={};const x={tagName:tag.toUpperCase(),style:{},isConnected:true,children:[],textContent:'',tabIndex:0,appendChild(y){this.children.push(y)},setAttribute(k,v){attrs[k]=v},getAttribute(k){return attrs[k]??null},addEventListener(k,f){(ev[k]??=[]).push(f)},querySelector(){return null},querySelectorAll(){return []},closest(){return null},getBoundingClientRect(){return {left:0,top:0,right:400,bottom:700,width:400,height:32}},setPointerCapture(){},emit(k,e={}){for(const f of ev[k]||[])f({isTrusted:true,isPrimary:true,button:0,pointerId:1,preventDefault(){},stopPropagation(){},...e})}};elements.push(x);return x}
+ const v=el('video');Object.assign(v,{readyState:4,ended:false,currentSrc:'clip-a',duration:100,seekable:{length:1,start:()=>0,end:()=>100},parentElement:el(),play(){playing=true;return Promise.resolve()}});
+ Object.defineProperties(v,{paused:{get:()=>!playing},muted:{get:()=>muted,set:x=>{attempts++;muted=x}},volume:{get:()=>volume,set:x=>volume=x},currentTime:{get:()=>time,set:x=>{seeks++;time=x}}});
+ const c={location:{hostname:'m.youtube.com',pathname:'/shorts/abcdefghijk'},innerWidth:400,innerHeight:700,weiktubeShortsTab:true,weiktubePausePreview:false,weiktubeShortsSoundRequest:1,
+ sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},WeakMap,Number,Math,JSON,
+ requestAnimationFrame:f=>{queue.push(f);return queue.length},MutationObserver:class{observe(){}},
+ addEventListener(k,f){(winEvents[k]??=[]).push(f)},document:{hidden:false,body:el(),createElement:el,querySelectorAll:()=>[v],addEventListener(k,f){(events[k]??=[]).push(f)}}};c.window=c;c.top=c;vm.createContext(c);vm.runInContext(script,c);
+ function flush(){let n=0;while(queue.length){assert.ok(n++<20,'no scheduling loop');queue.shift()()}}
+ function update(){c.weiktubeUpdateShortsSound();flush()}
+ return {v,c,update,flush,elements,events,winEvents,start(){playing=true;update()},mute(x){muted=x},volume(x){volume=x},pause(){playing=false},emit(k,target=v){for(const f of events[k]||[])f({target,isTrusted:true});flush()},get attempts(){return attempts},get seeks(){return seeks},bar(){return elements.find(x=>x.id==='weiktube-shorts-seek')},sound(){return elements.find(x=>x.id==='weiktube-shorts-sound')},button(label){const b=el('button');b.setAttribute('aria-label',label);b.closest=()=>b;return b}};
 }
-function test(name,fn){fn();cases++;console.log('PASS '+name)}
-test('audible once and idempotent listeners',()=>{const f=fixture(),v=f.video();f.run();assert.equal(v.muted,false);assert.equal(f.unmutes,1);f.run();f.emit('playing',v);assert.equal(f.unmutes,1);assert.equal(f.events.playing.length,1)});
-test('reused media and new media on later Shorts',()=>{const f=fixture(),v=f.video();f.run();f.c.location.pathname='/shorts/12345678901';f.emit('playing',v);assert.equal(f.unmutes,2);const w=f.video();f.emit('playing',w);assert.equal(f.unmutes,3)});
-test('explicit user mute survives events and next Short',()=>{const f=fixture(),v=f.video();f.run();f.emit('click',{closest(){return {}}},{isTrusted:true});v.muted=true;f.emit('volumechange',v);f.emit('playing',v);f.c.location.pathname='/shorts/12345678901';f.emit('playing',v);assert.equal(v.muted,true);assert.equal(f.unmutes,1);f.c.weiktubeShortsSoundRequest=2;f.run();assert.equal(v.muted,false)});
-for(const [name,configure] of Object.entries({background:f=>f.document.hidden=true,filter:f=>f.c.weiktubePausePreview=true,paused:(f,v)=>v.paused=true,unready:(f,v)=>v.readyState=0,offscreen:(f,v)=>v.getBoundingClientRect=()=>({width:400,height:700,top:900,left:0,bottom:1600,right:400}),normal:f=>f.c.location.pathname='/watch',search:f=>f.c.location.pathname='/results',foreign:f=>f.c.location.hostname='example.com',iframe:f=>f.c.top={},otherTab:f=>f.c.weiktubeShortsTab=false}))test('does not unmute '+name,()=>{const f=fixture(),v=f.video();configure(f,v);f.run();f.emit('playing',v);assert.equal(f.unmutes,0);assert.equal(f.writes,0)});
-test('filter readiness handles initial and later Short without replay',()=>{const f=fixture({weiktubePausePreview:true}),v=f.video();f.run();f.emit('playing',v);f.c.weiktubePausePreview=false;f.run();assert.equal(f.unmutes,1);f.c.location.pathname='/shorts/12345678901';f.c.weiktubePausePreview=true;f.emit('playing',v);f.c.weiktubePausePreview=false;f.run();assert.equal(f.unmutes,2)});
-test('paused media waits for actual playing event',()=>{const f=fixture(),v=f.video({paused:true});f.run();assert.equal(f.unmutes,0);v.paused=false;f.emit('playing',v);assert.equal(f.unmutes,1)});
-test('native wiring scopes audible autoplay to dedicated Shorts and explicit entry',()=>{
-  const browser=fs.readFileSync('app/src/main/java/com/weiktube/app/BrowserController.kt','utf8');
-  const activity=fs.readFileSync('app/src/main/java/com/weiktube/app/MainActivity.kt','utf8');
-  assert.ok(browser.includes('settings.mediaPlaybackRequiresUserGesture = !shortsPlayer'));
-  assert.ok(browser.includes('shortsPlayer: Boolean = false'));
-  assert.ok(browser.includes('ShortsAudioScript.SCRIPT + BROWSER_SCRIPT'));
-  assert.ok(activity.includes('BrowserController(this, shield, ::openVideo, shortsPlayer = true)'));
-  assert.ok(activity.includes('if (enteringShorts) target.requestShortsSound()'));
-});
-console.log(`${cases} Shorts sound fixtures passed (not device playback tests).`);
+let n=0;function test(name,fn){fn();n++;console.log('PASS '+name)}
+test('first running Short requests audible media including volume zero',()=>{const f=fixture();f.start();assert.equal(f.v.muted,false);assert.equal(f.v.volume,1);assert.equal(f.attempts,1);assert.equal(f.sound().style.display,'none')});
+test('late page root and delayed filter/media readiness',()=>{const f=fixture();f.c.location.pathname='/shorts/';f.c.weiktubePausePreview=true;f.start();assert.equal(f.attempts,0);f.c.weiktubePausePreview=false;f.v.readyState=0;f.update();assert.equal(f.attempts,0);f.v.readyState=4;f.emit('loadedmetadata');assert.equal(f.attempts,1)});
+test('SPA reused video requests sound for new content without a playing event',()=>{const f=fixture();f.start();f.c.location.pathname='/shorts/12345678901';f.v.currentSrc='clip-b';f.mute(true);f.emit('timeupdate');assert.equal(f.attempts,2);assert.equal(f.v.muted,false)});
+test('later YouTube remute is blocked state, never an automatic unmute loop',()=>{const f=fixture();f.start();f.mute(true);for(let i=0;i<20;i++)f.emit('volumechange');assert.equal(f.attempts,1);assert.equal(f.sound().style.display,'block');f.sound().emit('click');f.flush();assert.equal(f.v.muted,false);assert.equal(f.attempts,2)});
+test('synthetic sound clicks do not request playback',()=>{const f=fixture();f.start();f.mute(true);f.emit('volumechange');f.sound().emit('click',{isTrusted:false});f.flush();assert.equal(f.attempts,1)});
+test('intentional mute survives next Short until a new tab visit',()=>{const f=fixture();f.start();f.emit('click',f.button('Stummschalten'));f.mute(true);f.emit('volumechange');f.v.currentSrc='clip-b';f.update();assert.equal(f.attempts,1);assert.equal(f.sound().style.display,'none');f.c.weiktubeShortsSoundRequest=2;f.update();assert.equal(f.attempts,2)});
+for(const percent of [25,50,75])test('seek tap '+percent+'%',()=>{const f=fixture();f.start();f.bar().emit('pointerdown',{clientX:percent*4,clientY:10});f.bar().emit('pointerup',{clientX:percent*4,clientY:10});assert.equal(f.v.currentTime,percent);assert.equal(f.v.paused,false);assert.equal(f.seeks,1)});
+test('horizontal drag paints locally, commits once in either direction',()=>{const f=fixture();f.start();for(const [a,b] of [[.2,.8],[.8,.2]]){const before=f.seeks;f.bar().emit('pointerdown',{clientX:a*400,clientY:10});f.bar().emit('pointermove',{clientX:b*400,clientY:11});assert.equal(f.seeks,before);assert.equal(f.bar().children[0].children[0].style.width,(b*100)+'%');f.bar().emit('pointerup',{clientX:b*400,clientY:11});assert.equal(f.v.currentTime,b*100)}});
+test('paused video stays paused after seeking',()=>{const f=fixture();f.start();f.pause();f.bar().emit('pointerdown',{clientX:200,clientY:10});f.bar().emit('pointerup',{clientX:200,clientY:10});assert.equal(f.v.paused,true);assert.equal(f.v.currentTime,50)});
+test('source switch rejects an in-flight seek',()=>{const f=fixture();f.start();f.bar().emit('pointerdown',{clientX:100,clientY:10});f.v.currentSrc='new';f.bar().emit('pointerup',{clientX:300,clientY:10});assert.equal(f.seeks,0)});
+test('vertical movement and cancel never seek',()=>{const f=fixture();f.start();f.bar().emit('pointerdown',{clientX:100,clientY:10});f.bar().emit('pointermove',{clientX:102,clientY:40});f.bar().emit('pointerup',{clientX:300,clientY:40});assert.equal(f.seeks,0);f.bar().emit('pointerdown',{clientX:100,clientY:10});f.bar().emit('pointercancel');f.bar().emit('pointerup',{clientX:300,clientY:10});assert.equal(f.seeks,0)});
+test('unknown duration and unavailable ranges disable seeking',()=>{const f=fixture();f.start();f.v.duration=Infinity;f.update();assert.equal(f.bar().getAttribute('aria-disabled'),'true');f.bar().emit('pointerdown',{clientX:100,clientY:10});f.bar().emit('pointerup',{clientX:300,clientY:10});assert.equal(f.seeks,0)});
+test('seek gaps and end are clamped to actual seekable ranges',()=>{const f=fixture();f.start();f.v.seekable={length:2,start:i=>i?70:10,end:i=>i?90:30};f.bar().emit('pointerdown',{clientX:200,clientY:10});f.bar().emit('pointerup',{clientX:200,clientY:10});assert.ok(f.v.currentTime===70||f.v.currentTime<30);f.bar().emit('keydown',{key:'End'});assert.equal(f.v.currentTime,89.95)});
+test('tab exit and rotation cancel current gesture',()=>{const f=fixture();f.start();f.bar().emit('pointerdown',{clientX:100,clientY:10});f.c.weiktubePausePreview=true;f.update();f.bar().emit('pointerup',{clientX:300,clientY:10});assert.equal(f.seeks,0);assert.equal(f.bar().style.display,'none')});
+test('reinjection never duplicates UI or listeners',()=>{const f=fixture();f.start();const count=f.elements.length;vm.runInContext(script,f.c);f.flush();assert.equal(f.elements.length,count);assert.equal(f.events.playing.length,1)});
+test('hidden/prefetched media is not treated as active',()=>{const f=fixture();f.v.checkVisibility=()=>false;f.start();assert.equal(f.attempts,0);assert.equal(f.bar().style.display,'none')});
+test('rotation cancels an active scrub without seeking',()=>{const f=fixture();f.start();f.bar().emit('pointerdown',{clientX:100,clientY:10});for(const fn of f.winEvents.resize)fn();f.flush();f.bar().emit('pointerup',{clientX:300,clientY:10});assert.equal(f.seeks,0)});
+console.log(`${n} Shorts state/seek simulations passed. Not a device or audible-output test.`);

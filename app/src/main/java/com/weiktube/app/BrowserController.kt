@@ -254,7 +254,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
     private var shortsSoundRequest = 0L
     fun requestShortsSound() {
         if (!shortsPlayer) return
-        shortsSoundRequest++
+        shortsSoundRequest = maxOf(shortsSoundRequest + 1, System.currentTimeMillis())
         refreshDocumentScript()
         applyPageSettings()
     }

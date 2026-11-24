@@ -5,10 +5,25 @@ import json
 
 root = Path(__file__).resolve().parents[1]
 
+controls_review = json.loads((root / "scripts/shorts-controls-reviewed-changes.json").read_text(encoding="utf-8"))
+controls_originals = {}
+for name, review in controls_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " shorts controls change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed shorts controls changes")
+    controls_originals[name] = content
+def before_shorts_controls(name):
+    return controls_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
+
 zoom_review = json.loads((root / "scripts/video-zoom-reviewed-changes.json").read_text(encoding="utf-8"))
 zoom_originals = {}
 for name, review in zoom_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_shorts_controls(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " video zoom change missing or duplicated")
@@ -17,10 +32,10 @@ for name, review in zoom_review["files"].items():
         raise SystemExit(name + " differs outside reviewed video zoom changes")
     zoom_originals[name] = content
 for name, expected in zoom_review["addedFiles"].items():
-    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+    if hashlib.sha256(before_shorts_controls(name).encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed video zoom helper/test")
 def before_video_zoom(name):
-    return zoom_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    return zoom_originals.get(name, before_shorts_controls(name))
 
 
 audio_review = json.loads((root / "scripts/shorts-audio-reviewed-changes.json").read_text(encoding="utf-8"))

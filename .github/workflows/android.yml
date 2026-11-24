@@ -28,6 +28,11 @@ jobs:
           WEIKTUBE_PLAYWRIGHT_MODULE="$RUNNER_TEMP/weiktube-layout/node_modules/playwright-core" WEIKTUBE_CHROME_PATH="$(command -v google-chrome)" node scripts/check-player-layout.cjs
       - name: Verify video-only zoom in Chromium
         run: WEIKTUBE_PLAYWRIGHT_MODULE="$RUNNER_TEMP/weiktube-layout/node_modules/playwright-core" WEIKTUBE_CHROME_PATH="$(command -v google-chrome)" node scripts/check-video-zoom-layout.cjs
+      - name: Verify Shorts audio and seeking with actual offline media
+        run: |
+          command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+          WEIKTUBE_PLAYWRIGHT_MODULE="$RUNNER_TEMP/weiktube-layout/node_modules/playwright-core" WEIKTUBE_CHROME_PATH="$(command -v google-chrome)" node scripts/check-shorts-controls-layout.cjs
+          WEIKTUBE_STRICT_AUTOPLAY=1 WEIKTUBE_PLAYWRIGHT_MODULE="$RUNNER_TEMP/weiktube-layout/node_modules/playwright-core" WEIKTUBE_CHROME_PATH="$(command -v google-chrome)" node scripts/check-shorts-controls-layout.cjs
       - name: Verify filtering and existing navigation scripts
         run: |
           node scripts/vendor-adblock.mjs --check
