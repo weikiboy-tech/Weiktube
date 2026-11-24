@@ -1,4 +1,6 @@
-# Weiktube 1.3.20
+# Weiktube 1.3.21
+
+Weiktube 1.3.21 ergänzt optionales SponsorBlock mit acht Kategorien, farbigen Markierungen und Rückgängig. Aktivierung unter Einstellungen → SponsorBlock. 403 JVM-Tests und 21 JavaScript-/Browser-Prüfprogramme bestanden. Die Geräteprüfung auf dem OnePlus steht aus.
 
 > **1.3.20:** Erweiterte Vollbildgesten und optionale [Return-YouTube-Dislike-Anzeige](https://returnyoutubedislike.com/). [Release und Testgrenzen](RELEASE-1.3.20.md).
 
@@ -401,6 +403,7 @@ Die App benötigt INTERNET und REQUEST_INSTALL_PACKAGES für diese Funktion sowi
 Technische Referenzen: [Google-Autorisierung unter Android](https://developer.android.com/identity/authorization), [YouTube Data API](https://developers.google.com/youtube/v3), [YouTube-Playeranforderungen](https://developers.google.com/youtube/terms/required-minimum-functionality), [Android Picture-in-Picture](https://developer.android.com/develop/ui/views/picture-in-picture), [YouTube-Nutzungsbedingungen](https://www.youtube.com/t/terms), [Google-Datenschutz](https://policies.google.com/privacy).
 
 Weiktube ist nicht mit YouTube, Google oder Brave verbunden. Die APK ist ein Debug-Build, keine Veröffentlichung im Play Store. Technische und kontoabhängige Einschränkungen sind kein Nachweis einer 1:1-Funktionsgleichheit mit der offiziellen YouTube-App.
+
 
 
 

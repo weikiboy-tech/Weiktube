@@ -20,7 +20,8 @@ data class Preferences(
     val theme: String = "System", val shield: Boolean = true, val ads: Boolean = true,
     val trackers: Boolean = true, val domains: String = "", val exceptions: String = "",
     val saveHistory: Boolean = true, val history: List<HistoryEntry> = emptyList(),
-    val player: PlayerPreferences = PlayerPreferences()
+    val player: PlayerPreferences = PlayerPreferences(),
+    val sponsor: SponsorBlockPreferences = SponsorBlockPreferences()
 )
 
 /** Shared tolerant codec: malformed individual legacy entries never poison the next write. */
@@ -76,7 +77,7 @@ class WeiktubeModel(application: Application) : AndroidViewModel(application) {
         Preferences(p[stringPreferencesKey("theme")] ?: "System", p[booleanPreferencesKey("shield")] ?: true,
             p[booleanPreferencesKey("ads")] ?: true, p[booleanPreferencesKey("trackers")] ?: true,
             p[stringPreferencesKey("domains")] ?: "", p[stringPreferencesKey("exceptions")] ?: "",
-            p[booleanPreferencesKey("saveHistory")] ?: true, HistoryCodec.decode(p[stringPreferencesKey("history")]), PlayerPreferences.read(p))
+            p[booleanPreferencesKey("saveHistory")] ?: true, HistoryCodec.decode(p[stringPreferencesKey("history")]), PlayerPreferences.read(p), SponsorBlockPreferences.read(p))
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Preferences())
 
     private data class FilterPreferences(val enabled: Boolean, val ads: Boolean, val trackers: Boolean, val domains: String, val exceptions: String)

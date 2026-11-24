@@ -11,6 +11,7 @@ REQUIRED_FILES = {
 }
 OPTIONAL_FILES = {"UPDATES.md", "AUDIT.md", "CHANGELOG.md", "PRIVACY.md", "RESTORATION.md", "HOME-CONNECTION-TEST.md", "ORIGINAL-HOME-TEST.md", "WEBSITE-FIRST-TEST.md", "PLAYER-HANDOFF-TEST.md", "PLAYER-RETURN-TEST.md", "GECKO-RETURN-TEST.md", "HOME-TAB-TEST.md", "WEBSITE-LOGIN-TEST.md", "home-data/build.gradle.kts"}
 SOURCE_DIRECTORIES = {"gradle", "scripts", ".github", "app/src", "home-data/src", "content-filter/src", "content-filter/vendor"}
+OPTIONAL_FILES.add("RELEASE-1.3.21.md")
 OPTIONAL_FILES.add("RELEASE-1.3.2.md")
 OPTIONAL_FILES.add("RELEASE-1.3.5.md")
 OPTIONAL_FILES.add("RELEASE-1.3.6.md")
@@ -31,6 +32,7 @@ OPTIONAL_FILES.update({"RELEASE-1.3.19.md", "docs/EXTERNAL-LINKS.md"})
 OPTIONAL_FILES.update({"RELEASE-1.3.18.md", "docs/SHORTS-CONTROLS.md"})
 OPTIONAL_FILES.add("docs/VIDEO-ZOOM.md")
 OPTIONAL_FILES.update({"RELEASE-1.3.20.md", "RELEASE-1.3.20-rc1.md", "docs/ADVANCED-PLAYER.md", "PRIVACY.md"})
+OPTIONAL_FILES.update({"RELEASE-1.3.21-rc1.md", "docs/SPONSORBLOCK.md"})
 PRIVATE_PARTS = {
     "build", ".gradle", ".kotlin", ".git", "__pycache__", "validation", "screenshots",
     "signing", "keys", "private", "credentials", ".aws", ".codex", ".agents", "node_modules",

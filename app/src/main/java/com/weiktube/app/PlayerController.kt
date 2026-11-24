@@ -87,6 +87,7 @@ class PlayerController(
         zoomScriptInstalled = false
         zoomRevision++
     }
+    internal val sponsorBlock by lazy { SponsorBlockController(activity.applicationContext) }
     var view: WebView by mutableStateOf(createView()); private set
     private var mini = false
     private var dark = true
@@ -200,6 +201,13 @@ class PlayerController(
         }
         val label = dislikeLabel
         view.evaluateJavascript(ReturnDislikeScript.SCRIPT + ";window.weiktubeDislikes(${JSONObject.quote(id.orEmpty())},${label?.let(JSONObject::quote) ?: "null"});", null)
+    }
+    internal fun refreshSponsorBlock() {
+        if (destroyed) return
+        if (!rendererAlive || !documentCommitted || source == null) { sponsorBlock.reset(rendererAlive); return }
+        sponsorBlock.sync(view, generation, if (isYoutube) source?.let(Links::videoId) else null,
+            activity.playerMayRun && (!isYoutube || adHooks[view]?.canPlay == true),
+            activity.model.preferences.value.sponsor)
     }
     private fun saveProgress() {
         if (progressSampleValid && activity.model.preferencesReady && historyRevision == activity.model.historyRevision)
@@ -318,6 +326,7 @@ class PlayerController(
             override fun onPageStarted(web: WebView, url: String, favicon: Bitmap?) {
                 if (alive(web)) { zoomScriptInstalled = false; zoomRevision++; pendingZoom = null; web.removeCallbacks(zoomFrame) }
                 if (!acceptsDocument(web, url)) return
+                sponsorBlock.reset()
                 generation++; playbackObservationRevision++
                 documentCommitted = false
                 ads.pageStarted(url)
@@ -413,6 +422,7 @@ class PlayerController(
     }
 
     private fun disposeView(web: WebView, force: Boolean = false) {
+        sponsorBlock.retire(web)
         web.removeCallbacks(zoomFrame)
         pendingZoom = null; zoomScriptInstalled = false; zoomRevision++
         val nav = navigationHooks.remove(web)
@@ -515,6 +525,7 @@ class PlayerController(
         if (!isYoutube || source == null) return
         val id = Links.videoId(url) ?: return
         if (id != Links.videoId(source!!)) {
+            sponsorBlock.reset()
             holdGesture(false); supportedHoldRates = emptyList(); supportedQualities = emptyList()
             saveProgress(); progressSampleValid = false; awaitingResumePosition = null
             generation++; position = 0.0; duration = 0.0; title = "Video"; lastRecordedTitle = ""
@@ -560,6 +571,7 @@ class PlayerController(
             }
             return
         }
+        sponsorBlock.reset()
         saveProgress()
         progressSampleValid = false
         historyRevision = activity.model.historyRevision
@@ -615,6 +627,7 @@ class PlayerController(
     }
     fun poll() {
         if (destroyed || !rendererAlive || source == null || !documentCommitted) return
+        refreshSponsorBlock()
         pollEnhancements()
         pollDislikes()
         val polledView = view
@@ -705,6 +718,7 @@ class PlayerController(
                 else -> PlayerDiagnostics.Event.GATE_FILTER_BLOCKED
             })
         }
+        sponsorBlock.gate(allowed)
         val requestSound = allowed && start && audibleStartRequested
         if (requestSound) audibleStartRequested = false
         view.evaluateJavascript(MEDIA_GUARD +
@@ -713,6 +727,7 @@ class PlayerController(
     }
     fun pause() = pauseFor(PlayerDiagnostics.PauseReason.USER)
     internal fun pauseFor(reason: PlayerDiagnostics.PauseReason) {
+        sponsorBlock.gate(false)
         saveProgress()
         PlayerDiagnostics.pause(reason, generation, activity.diagnosticActivityId, diagnosticControllerId, currentViewId)
         pendingRecovery = pendingRecovery?.copy(play = false)
@@ -783,6 +798,7 @@ class PlayerController(
     }
     fun close() {
         if (destroyed) return
+        sponsorBlock.reset()
         holdGesture(false)
         pendingRecovery = null
         pauseFor(PlayerDiagnostics.PauseReason.CLOSE); generation++; source = null; error = null; loading = false; position = 0.0; duration = 0.0
@@ -797,6 +813,7 @@ class PlayerController(
         holdGesture(false)
         mainHandler.removeCallbacks(clearFeedback)
         enhancementScope.cancel()
+        sponsorBlock.close()
         saveProgress()
         destroyed = true; pendingRecovery = null; generation++; playbackObservationRevision++
         rendererAlive = false; playing = false; loading = false

@@ -495,3 +495,7 @@ JVM-Tests, Scriptlet-/Gecko-Fixtures und den APK-Build. Keine Gerätetests für
 diese Version. Historische Aussagen weiter oben, wonach YouTube vom Filter
 ausgenommen ist, beschreiben den damaligen Stand vor 1.3.5.
 
+
+## SponsorBlock 1.3.21-rc1
+
+Reproduzierbare Fixtures: `node scripts/check-sponsorblock.cjs`, `node scripts/check-sponsorblock-dom.cjs` (Playwright/Chrome, ffmpeg), JVM `SponsorBlock*Test`. Die Browserprüfung nutzt generierte lokale Medien. Ergebnisse, Geräteprüfliste und bekannte Grenzen stehen in [docs/SPONSORBLOCK.md](docs/SPONSORBLOCK.md). Keine Android-Geräteabnahme behauptet.

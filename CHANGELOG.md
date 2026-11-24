@@ -1,3 +1,15 @@
+# 1.3.21 – SponsorBlock
+
+Weiktube 1.3.21 ergänzt optionales SponsorBlock mit acht Kategorien, farbigen Markierungen und Rückgängig. Aktivierung unter Einstellungen → SponsorBlock. 403 JVM-Tests und 21 JavaScript-/Browser-Prüfprogramme bestanden. Die Geräteprüfung auf dem OnePlus steht aus.
+
+# 1.3.21-rc1 – SponsorBlock (lokal, nicht veröffentlicht)
+
+- Optionaler Hash-Präfix-Abruf, acht konfigurierbare Skip-Kategorien, Cache/Backoff.
+- Automatische und manuelle Sprünge, Rückgängig, Schutz bewusster Rücksprünge, lokale bestätigte Statistik.
+- Farbige Markierungen in unterstützten vorhandenen Zeitleisten; Consent/Attribution.
+- Gleicher Player, keine Shorts-/AdBlock-Änderung. Geräteabnahme ausstehend.
+- [Details und Tests](docs/SPONSORBLOCK.md).
+
 # Änderungsverlauf
 
 ## Release 1.3.20

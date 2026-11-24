@@ -1,0 +1,101 @@
+{
+  "base": "96432f7f458acfdb9e51d4beaa46b430fc77d25e",
+  "files": {
+    "app/build.gradle.kts": {
+      "previousSha256": "27c23750e5ea7e03f358a51972b8434b022dba18c228865f56552568d16dec5c",
+      "changes": [
+        {
+          "previous": "    defaultConfig {\n        applicationId = \"com.weiktube.app\"\n        minSdk = 26\n        targetSdk = 36\n        versionCode = 35\n        versionName = \"1.3.20\"\n        if (!stableApks) ndk { abiFilters += listOf(\"arm64-v8a\", \"x86_64\") }\n        testInstrumentationRunner = \"androidx.test.runner.AndroidJUnitRunner\"\n    }\n    buildFeatures { compose = true; buildConfig = true }\n",
+          "current": "    defaultConfig {\n        applicationId = \"com.weiktube.app\"\n        minSdk = 26\n        targetSdk = 36\n        versionCode = 37\n        versionName = \"1.3.21\"\n        if (!stableApks) ndk { abiFilters += listOf(\"arm64-v8a\", \"x86_64\") }\n        testInstrumentationRunner = \"androidx.test.runner.AndroidJUnitRunner\"\n    }\n    buildFeatures { compose = true; buildConfig = true }\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/PlayerController.kt": {
+      "previousSha256": "6d65117dc3af2b6cc154679b1d897f3990d09441f0e5e6693919157e1f2d96a8",
+      "changes": [
+        {
+          "previous": "            view.evaluateJavascript(\"if(window.weiktubeVideoZoom)window.weiktubeVideoZoom(1,.5,.5);\", null)\n        zoomScriptInstalled = false\n        zoomRevision++\n    }\n    var view: WebView by mutableStateOf(createView()); private set\n    private var mini = false\n    private var dark = true\n    private var videoOnly = false\n",
+          "current": "            view.evaluateJavascript(\"if(window.weiktubeVideoZoom)window.weiktubeVideoZoom(1,.5,.5);\", null)\n        zoomScriptInstalled = false\n        zoomRevision++\n    }\n    internal val sponsorBlock by lazy { SponsorBlockController(activity.applicationContext) }\n    var view: WebView by mutableStateOf(createView()); private set\n    private var mini = false\n    private var dark = true\n    private var videoOnly = false\n"
+        },
+        {
+          "previous": "            }\n        }\n        val label = dislikeLabel\n        view.evaluateJavascript(ReturnDislikeScript.SCRIPT + \";window.weiktubeDislikes(${JSONObject.quote(id.orEmpty())},${label?.let(JSONObject::quote) ?: \"null\"});\", null)\n    }\n    private fun saveProgress() {\n        if (progressSampleValid && activity.model.preferencesReady && historyRevision == activity.model.historyRevision)\n            source?.let { activity.model.progress.save(it, position, duration, force = true) }\n",
+          "current": "            }\n        }\n        val label = dislikeLabel\n        view.evaluateJavascript(ReturnDislikeScript.SCRIPT + \";window.weiktubeDislikes(${JSONObject.quote(id.orEmpty())},${label?.let(JSONObject::quote) ?: \"null\"});\", null)\n    }\n    internal fun refreshSponsorBlock() {\n        if (destroyed) return\n        if (!rendererAlive || !documentCommitted || source == null) { sponsorBlock.reset(rendererAlive); return }\n        sponsorBlock.sync(view, generation, if (isYoutube) source?.let(Links::videoId) else null,\n            activity.playerMayRun && (!isYoutube || adHooks[view]?.canPlay == true),\n            activity.model.preferences.value.sponsor)\n    }\n    private fun saveProgress() {\n        if (progressSampleValid && activity.model.preferencesReady && historyRevision == activity.model.historyRevision)\n            source?.let { activity.model.progress.save(it, position, duration, force = true) }\n"
+        },
+        {
+          "previous": "            }\n            override fun onPageStarted(web: WebView, url: String, favicon: Bitmap?) {\n                if (alive(web)) { zoomScriptInstalled = false; zoomRevision++; pendingZoom = null; web.removeCallbacks(zoomFrame) }\n                if (!acceptsDocument(web, url)) return\n                generation++; playbackObservationRevision++\n                documentCommitted = false\n                ads.pageStarted(url)\n                loading = true; error = null\n",
+          "current": "            }\n            override fun onPageStarted(web: WebView, url: String, favicon: Bitmap?) {\n                if (alive(web)) { zoomScriptInstalled = false; zoomRevision++; pendingZoom = null; web.removeCallbacks(zoomFrame) }\n                if (!acceptsDocument(web, url)) return\n                sponsorBlock.reset()\n                generation++; playbackObservationRevision++\n                documentCommitted = false\n                ads.pageStarted(url)\n                loading = true; error = null\n"
+        },
+        {
+          "previous": "        }\n    }\n\n    private fun disposeView(web: WebView, force: Boolean = false) {\n        web.removeCallbacks(zoomFrame)\n        pendingZoom = null; zoomScriptInstalled = false; zoomRevision++\n        val nav = navigationHooks.remove(web)\n        val ads = adHooks.remove(web)\n",
+          "current": "        }\n    }\n\n    private fun disposeView(web: WebView, force: Boolean = false) {\n        sponsorBlock.retire(web)\n        web.removeCallbacks(zoomFrame)\n        pendingZoom = null; zoomScriptInstalled = false; zoomRevision++\n        val nav = navigationHooks.remove(web)\n        val ads = adHooks.remove(web)\n"
+        },
+        {
+          "previous": "    private fun updateVideoIdentity(url: String) {\n        if (!isYoutube || source == null) return\n        val id = Links.videoId(url) ?: return\n        if (id != Links.videoId(source!!)) {\n            holdGesture(false); supportedHoldRates = emptyList(); supportedQualities = emptyList()\n            saveProgress(); progressSampleValid = false; awaitingResumePosition = null\n            generation++; position = 0.0; duration = 0.0; title = \"Video\"; lastRecordedTitle = \"\"\n            videoWidth = 0; videoHeight = 0\n",
+          "current": "    private fun updateVideoIdentity(url: String) {\n        if (!isYoutube || source == null) return\n        val id = Links.videoId(url) ?: return\n        if (id != Links.videoId(source!!)) {\n            sponsorBlock.reset()\n            holdGesture(false); supportedHoldRates = emptyList(); supportedQualities = emptyList()\n            saveProgress(); progressSampleValid = false; awaitingResumePosition = null\n            generation++; position = 0.0; duration = 0.0; title = \"Video\"; lastRecordedTitle = \"\"\n            videoWidth = 0; videoHeight = 0\n"
+        },
+        {
+          "previous": "                applyPlayback(true)\n            }\n            return\n        }\n        saveProgress()\n        progressSampleValid = false\n        historyRevision = activity.model.historyRevision\n        playbackAllowed = activity.playerMayRun\n",
+          "current": "                applyPlayback(true)\n            }\n            return\n        }\n        sponsorBlock.reset()\n        saveProgress()\n        progressSampleValid = false\n        historyRevision = activity.model.historyRevision\n        playbackAllowed = activity.playerMayRun\n"
+        },
+        {
+          "previous": "        view.evaluateJavascript(WATCH_CHROME + \";window.weiktubeWatchPresentation($mini,$dark,$videoOnly,$systemPip);\", null)\n    }\n    fun poll() {\n        if (destroyed || !rendererAlive || source == null || !documentCommitted) return\n        pollEnhancements()\n        pollDislikes()\n        val polledView = view\n        val requestGeneration = generation\n",
+          "current": "        view.evaluateJavascript(WATCH_CHROME + \";window.weiktubeWatchPresentation($mini,$dark,$videoOnly,$systemPip);\", null)\n    }\n    fun poll() {\n        if (destroyed || !rendererAlive || source == null || !documentCommitted) return\n        refreshSponsorBlock()\n        pollEnhancements()\n        pollDislikes()\n        val polledView = view\n        val requestGeneration = generation\n"
+        },
+        {
+          "previous": "                !playbackAllowed -> PlayerDiagnostics.Event.GATE_POLICY_BLOCKED\n                else -> PlayerDiagnostics.Event.GATE_FILTER_BLOCKED\n            })\n        }\n        val requestSound = allowed && start && audibleStartRequested\n        if (requestSound) audibleStartRequested = false\n        view.evaluateJavascript(MEDIA_GUARD +\n            (if (requestSound) \";window.weiktubeRequestAudibleStart();\" else \"\") +\n            \";window.weiktubeSetPlayback($allowed,${start && allowed});\", null)\n    }\n    fun pause() = pauseFor(PlayerDiagnostics.PauseReason.USER)\n    internal fun pauseFor(reason: PlayerDiagnostics.PauseReason) {\n        saveProgress()\n        PlayerDiagnostics.pause(reason, generation, activity.diagnosticActivityId, diagnosticControllerId, currentViewId)\n        pendingRecovery = pendingRecovery?.copy(play = false)\n        explicitStartRequested = false\n",
+          "current": "                !playbackAllowed -> PlayerDiagnostics.Event.GATE_POLICY_BLOCKED\n                else -> PlayerDiagnostics.Event.GATE_FILTER_BLOCKED\n            })\n        }\n        sponsorBlock.gate(allowed)\n        val requestSound = allowed && start && audibleStartRequested\n        if (requestSound) audibleStartRequested = false\n        view.evaluateJavascript(MEDIA_GUARD +\n            (if (requestSound) \";window.weiktubeRequestAudibleStart();\" else \"\") +\n            \";window.weiktubeSetPlayback($allowed,${start && allowed});\", null)\n    }\n    fun pause() = pauseFor(PlayerDiagnostics.PauseReason.USER)\n    internal fun pauseFor(reason: PlayerDiagnostics.PauseReason) {\n        sponsorBlock.gate(false)\n        saveProgress()\n        PlayerDiagnostics.pause(reason, generation, activity.diagnosticActivityId, diagnosticControllerId, currentViewId)\n        pendingRecovery = pendingRecovery?.copy(play = false)\n        explicitStartRequested = false\n"
+        },
+        {
+          "previous": "        open(if (isYoutube) \"$url&t=$seconds\" else url); expanded = wasExpanded\n    }\n    fun close() {\n        if (destroyed) return\n        holdGesture(false)\n        pendingRecovery = null\n        pauseFor(PlayerDiagnostics.PauseReason.CLOSE); generation++; source = null; error = null; loading = false; position = 0.0; duration = 0.0\n        videoWidth = 0; videoHeight = 0\n",
+          "current": "        open(if (isYoutube) \"$url&t=$seconds\" else url); expanded = wasExpanded\n    }\n    fun close() {\n        if (destroyed) return\n        sponsorBlock.reset()\n        holdGesture(false)\n        pendingRecovery = null\n        pauseFor(PlayerDiagnostics.PauseReason.CLOSE); generation++; source = null; error = null; loading = false; position = 0.0; duration = 0.0\n        videoWidth = 0; videoHeight = 0\n"
+        },
+        {
+          "previous": "        if (destroyed) return\n        holdGesture(false)\n        mainHandler.removeCallbacks(clearFeedback)\n        enhancementScope.cancel()\n        saveProgress()\n        destroyed = true; pendingRecovery = null; generation++; playbackObservationRevision++\n        rendererAlive = false; playing = false; loading = false\n        disposeView(view)\n",
+          "current": "        if (destroyed) return\n        holdGesture(false)\n        mainHandler.removeCallbacks(clearFeedback)\n        enhancementScope.cancel()\n        sponsorBlock.close()\n        saveProgress()\n        destroyed = true; pendingRecovery = null; generation++; playbackObservationRevision++\n        rendererAlive = false; playing = false; loading = false\n        disposeView(view)\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/WeiktubeModel.kt": {
+      "previousSha256": "858b754086c269da9cfdf95d26be16beea124b262b3f0af3972c65edc60d13e7",
+      "changes": [
+        {
+          "previous": "data class Preferences(\n    val theme: String = \"System\", val shield: Boolean = true, val ads: Boolean = true,\n    val trackers: Boolean = true, val domains: String = \"\", val exceptions: String = \"\",\n    val saveHistory: Boolean = true, val history: List<HistoryEntry> = emptyList(),\n    val player: PlayerPreferences = PlayerPreferences()\n)\n\n/** Shared tolerant codec: malformed individual legacy entries never poison the next write. */\nobject HistoryCodec {\n",
+          "current": "data class Preferences(\n    val theme: String = \"System\", val shield: Boolean = true, val ads: Boolean = true,\n    val trackers: Boolean = true, val domains: String = \"\", val exceptions: String = \"\",\n    val saveHistory: Boolean = true, val history: List<HistoryEntry> = emptyList(),\n    val player: PlayerPreferences = PlayerPreferences(),\n    val sponsor: SponsorBlockPreferences = SponsorBlockPreferences()\n)\n\n/** Shared tolerant codec: malformed individual legacy entries never poison the next write. */\nobject HistoryCodec {\n"
+        },
+        {
+          "previous": "        preferencesReady = true\n        Preferences(p[stringPreferencesKey(\"theme\")] ?: \"System\", p[booleanPreferencesKey(\"shield\")] ?: true,\n            p[booleanPreferencesKey(\"ads\")] ?: true, p[booleanPreferencesKey(\"trackers\")] ?: true,\n            p[stringPreferencesKey(\"domains\")] ?: \"\", p[stringPreferencesKey(\"exceptions\")] ?: \"\",\n            p[booleanPreferencesKey(\"saveHistory\")] ?: true, HistoryCodec.decode(p[stringPreferencesKey(\"history\")]), PlayerPreferences.read(p))\n    }.stateIn(viewModelScope, SharingStarted.Eagerly, Preferences())\n\n    private data class FilterPreferences(val enabled: Boolean, val ads: Boolean, val trackers: Boolean, val domains: String, val exceptions: String)\n    // History updates do not reparse filter lists, and large user lists do not block the UI thread.\n",
+          "current": "        preferencesReady = true\n        Preferences(p[stringPreferencesKey(\"theme\")] ?: \"System\", p[booleanPreferencesKey(\"shield\")] ?: true,\n            p[booleanPreferencesKey(\"ads\")] ?: true, p[booleanPreferencesKey(\"trackers\")] ?: true,\n            p[stringPreferencesKey(\"domains\")] ?: \"\", p[stringPreferencesKey(\"exceptions\")] ?: \"\",\n            p[booleanPreferencesKey(\"saveHistory\")] ?: true, HistoryCodec.decode(p[stringPreferencesKey(\"history\")]), PlayerPreferences.read(p), SponsorBlockPreferences.read(p))\n    }.stateIn(viewModelScope, SharingStarted.Eagerly, Preferences())\n\n    private data class FilterPreferences(val enabled: Boolean, val ads: Boolean, val trackers: Boolean, val domains: String, val exceptions: String)\n    // History updates do not reparse filter lists, and large user lists do not block the UI thread.\n"
+        }
+      ]
+    },
+    "app/src/main/java/com/weiktube/app/WeiktubeUi.kt": {
+      "previousSha256": "e15ca85e6aaf9758a47f530c9c44a8a05cda9396bc4d86eb8b635a45caa2fc8a",
+      "changes": [
+        {
+          "previous": "            activity.keepAwake(activity.player.playing || (activity.isWebTab && activity.activeBrowser.mediaPlaying))\n            delay(1000)\n        }\n    }\n    LaunchedEffect(storageError) { storageError?.let(activity::message) }\n    BackHandler(enabled = activity.canHandleBack) { activity.back() }\n    MaterialTheme(colorScheme = colors) {\n        Surface(Modifier.fillMaxSize()) {\n",
+          "current": "            activity.keepAwake(activity.player.playing || (activity.isWebTab && activity.activeBrowser.mediaPlaying))\n            delay(1000)\n        }\n    }\n    LaunchedEffect(prefs.sponsor) { activity.player.refreshSponsorBlock() }\n    LaunchedEffect(storageError) { storageError?.let(activity::message) }\n    BackHandler(enabled = activity.canHandleBack) { activity.back() }\n    MaterialTheme(colorScheme = colors) {\n        Surface(Modifier.fillMaxSize()) {\n"
+        },
+        {
+          "previous": "                            }\n                        }\n                    }\n                }\n                if (full && !a.pip) PlayerGestureHud(p.gestureFeedback, Modifier.align(Alignment.Center))\n                if (mini && playerVisible) {\n                    val miniPlaying = p.playing\n                    // Native controls cover only the small video. The surrounding feed stays touchable.\n",
+          "current": "                            }\n                        }\n                    }\n                }\n                if (full && !a.pip && playerVisible) SponsorBlockOverlay(p.sponsorBlock, Modifier.align(Alignment.TopEnd).padding(12.dp))\n                if (full && !a.pip) PlayerGestureHud(p.gestureFeedback, Modifier.align(Alignment.Center))\n                if (mini && playerVisible) {\n                    val miniPlaying = p.playing\n                    // Native controls cover only the small video. The surrounding feed stays touchable.\n"
+        },
+        {
+          "previous": "                    Text(\"Weiktube kann die Zuordnung nicht automatisch setzen oder YouTubes Domains verifizieren.\", style = MaterialTheme.typography.bodySmall)\n                }\n            }\n            PlayerSettings(model, prefs.player, a)\n            UpdateSettings(a.updater)\n            HorizontalDivider()\n            Text(\"Darstellung\", style = MaterialTheme.typography.titleLarge)\n            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n",
+          "current": "                    Text(\"Weiktube kann die Zuordnung nicht automatisch setzen oder YouTubes Domains verifizieren.\", style = MaterialTheme.typography.bodySmall)\n                }\n            }\n            PlayerSettings(model, prefs.player, a)\n            SponsorBlockSettings(model, prefs.sponsor, a)\n            UpdateSettings(a.updater)\n            HorizontalDivider()\n            Text(\"Darstellung\", style = MaterialTheme.typography.titleLarge)\n            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n"
+        }
+      ]
+    }
+  },
+  "addedFiles": {
+    "app/src/main/java/com/weiktube/app/SponsorBlockClient.kt": "0e012dcc973fda308d0fa54d8d5e67adeb35e01aed1f431246a594e6bce60f3e",
+    "app/src/main/java/com/weiktube/app/SponsorBlockController.kt": "722c2e1842fed75782045b5cdad4f489e52bc80b709236cddd1225dceb23bcfc",
+    "app/src/main/java/com/weiktube/app/SponsorBlockPreferences.kt": "db659230daf76990f50f70187aa75ebd3acba662fcb4b375e73e9044367d687f",
+    "app/src/main/java/com/weiktube/app/SponsorBlockScript.kt": "4ae62b6b3bfe3f3d1036153f5b276ae13214378f71a31addab2d898484632ff5",
+    "app/src/main/java/com/weiktube/app/SponsorBlockSegment.kt": "2fb427f7606891f2ce67d25b0175806313142d722a8a793aa9a81d7a5dae2f17",
+    "app/src/main/java/com/weiktube/app/SponsorBlockStatistics.kt": "a5dcee3199b8ecbea078e8bd035687764077e250ba5460a1cbd9ac4b28031664",
+    "app/src/main/java/com/weiktube/app/SponsorBlockUi.kt": "2c8510faddf3e4628cfc133ec21136e6548e36424d6f735a48fc18e9a76676ff",
+    "app/src/test/java/com/weiktube/app/SponsorBlockClientTest.kt": "6fe6960795905555edea635d48b01986b635fa1ea4b65f2b7362b3890323d10b",
+    "app/src/test/java/com/weiktube/app/SponsorBlockControllerTest.kt": "b75bc97fb25b5b18ae850170a3a8b2054a7eac0cce8f8d8612262921a6104646",
+    "app/src/test/java/com/weiktube/app/SponsorBlockStatisticsTest.kt": "7713ed7c72eb71742be79ca7c79dc3e515d36c8007268f07d1d03dceb608a582"
+  }
+}

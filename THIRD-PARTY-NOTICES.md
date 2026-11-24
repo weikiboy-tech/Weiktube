@@ -45,3 +45,7 @@ Dislike estimates are provided by [Return YouTube Dislike](https://returnyoutube
 This integration reads public counts only, with user opt-in, cache and rate-limit backoff.
 No extension source or voting implementation is bundled. Counts may be estimated and are
 not guaranteed official YouTube figures.
+
+## SponsorBlock Community-Daten
+
+Verwendet SponsorBlock-Daten von https://sponsor.ajay.app/ unter [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). Weiktube filtert und validiert diese Daten lokal und visualisiert die Zeitabschnitte. Nichtkommerzialität, Attribution und ShareAlike der Datenlizenz beachten. Kein Code der SponsorBlock-Browser-Extension übernommen. [API-/Datenlizenz](https://github.com/ajayyy/SponsorBlock/wiki/Database-and-API-License), [Implementierungsbericht](docs/SPONSORBLOCK.md).

@@ -85,6 +85,7 @@ fun WeiktubeApp(activity: MainActivity, model: WeiktubeModel) {
             delay(1000)
         }
     }
+    LaunchedEffect(prefs.sponsor) { activity.player.refreshSponsorBlock() }
     LaunchedEffect(storageError) { storageError?.let(activity::message) }
     BackHandler(enabled = activity.canHandleBack) { activity.back() }
     MaterialTheme(colorScheme = colors) {
@@ -274,6 +275,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                         }
                     }
                 }
+                if (full && !a.pip && playerVisible) SponsorBlockOverlay(p.sponsorBlock, Modifier.align(Alignment.TopEnd).padding(12.dp))
                 if (full && !a.pip) PlayerGestureHud(p.gestureFeedback, Modifier.align(Alignment.Center))
                 if (mini && playerVisible) {
                     val miniPlaying = p.playing
@@ -416,6 +418,7 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
                 }
             }
             PlayerSettings(model, prefs.player, a)
+            SponsorBlockSettings(model, prefs.sponsor, a)
             UpdateSettings(a.updater)
             HorizontalDivider()
             Text("Darstellung", style = MaterialTheme.typography.titleLarge)
