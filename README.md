@@ -1,4 +1,6 @@
-# Weiktube 1.3.21
+# Weiktube 1.3.22
+
+Weiktube 1.3.22 verbessert den Videostart, Minimieren und Schließen im Querformat sowie den Übergang zum Miniplayer. Die visuelle Prüfung auf dem OnePlus steht aus.
 
 Weiktube 1.3.21 ergänzt optionales SponsorBlock mit acht Kategorien, farbigen Markierungen und Rückgängig. Aktivierung unter Einstellungen → SponsorBlock. 403 JVM-Tests und 21 JavaScript-/Browser-Prüfprogramme bestanden. Die Geräteprüfung auf dem OnePlus steht aus.
 

@@ -5,10 +5,28 @@ import json
 
 root = Path(__file__).resolve().parents[1]
 
+stability_review = json.loads((root / "scripts/stability-reviewed-changes.json").read_text(encoding="utf-8"))
+stability_originals = {}
+for name, review in stability_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " stability change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed stability changes")
+    stability_originals[name] = content
+for name, expected in stability_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed stability helper/test")
+
+def before_stability(name):
+    return stability_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
 sponsor_review = json.loads((root / "scripts/sponsorblock-reviewed-changes.json").read_text(encoding="utf-8"))
 sponsor_originals = {}
 for name, review in sponsor_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_stability(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " SponsorBlock change missing or duplicated")
@@ -17,11 +35,11 @@ for name, review in sponsor_review["files"].items():
         raise SystemExit(name + " differs outside reviewed SponsorBlock changes")
     sponsor_originals[name] = content
 for name, expected in sponsor_review["addedFiles"].items():
-    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+    if hashlib.sha256(before_stability(name).encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed SponsorBlock helper/test")
 
 def before_sponsorblock(name):
-    return sponsor_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    return sponsor_originals.get(name, before_stability(name))
 
 advanced_review = json.loads((root / "scripts/advanced-player-reviewed-changes.json").read_text(encoding="utf-8"))
 advanced_originals = {}

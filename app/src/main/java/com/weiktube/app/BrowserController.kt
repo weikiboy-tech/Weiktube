@@ -191,7 +191,7 @@ class BrowserController(private val activity: MainActivity, private val shield: 
                 if (alive(browserWeb)) activity.showFullscreen(webView, callback, browserWeb)
                 else runCatching { callback.onCustomViewHidden() }
             }
-            override fun onHideCustomView() { if (alive(browserWeb)) activity.hideFullscreen() }
+            override fun onHideCustomView() { if (alive(browserWeb)) activity.hidePlayerFullscreen(browserWeb) }
         }
     }
 

@@ -55,6 +55,33 @@ class PlayerControllerLifecycleTest {
         idle()
     }
 
+    @Test fun closeAndReopenFiftyTimesInEachOrientation() {
+        val retained = player.view
+        for (landscape in listOf(false, true)) {
+            val posture = if (landscape) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            org.robolectric.util.ReflectionHelpers.setField(activity, "videoOrientation", posture)
+            repeat(50) { cycle ->
+                player.open(if (cycle % 2 == 0) VIDEO_A else VIDEO_B)
+                activity.syncPlayerPresentation()
+                assertEquals(posture, activity.requestedOrientation)
+                val surface = android.view.View(activity)
+                if (landscape) activity.showFullscreen(surface, WebChromeClient.CustomViewCallback {}, retained)
+                activity.minimizeWebVideo()
+                repeat(3) { activity.syncPlayerPresentation() }
+                activity.showFullscreen(surface, WebChromeClient.CustomViewCallback {}, retained)
+                assertFalse(activity.fullscreen)
+                assertFalse(player.expanded)
+                assertNull(surface.parent)
+                activity.closeVideo()
+                activity.closeVideo()
+                assertNull(player.source)
+                assertFalse(player.playing)
+                assertSame(retained, player.view)
+            }
+        }
+    }
+
     @Test fun advancedCommandsAndModeCancellationKeepTheOriginalWebViewAndSource() {
         player.open(VIDEO_A)
         val web = player.view

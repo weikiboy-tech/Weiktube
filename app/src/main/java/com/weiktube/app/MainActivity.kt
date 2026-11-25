@@ -62,8 +62,12 @@ class MainActivity : ComponentActivity() {
         object : android.view.OrientationEventListener(this) {
             override fun onOrientationChanged(degrees: Int) {
                 if (!hostResumed || pip || degrees == ORIENTATION_UNKNOWN) return
-                videoOrientation = UprightVideoOrientation.fromSensor(degrees, videoOrientation)
-                if (customView == null) { syncPlayerPresentation(); return }
+                val previous = videoOrientation
+                videoOrientation = UprightVideoOrientation.fromSensor(degrees, previous)
+                if (customView == null) {
+                    if (previous != videoOrientation) syncPlayerPresentation()
+                    return
+                }
                 if (degrees in 60..120 || degrees in 240..300) manualFullscreenSawLandscape = true
                 else if (manualFullscreenSawLandscape && UprightVideoOrientation.isUpright(degrees)) {
                     hideFullscreen()
@@ -126,8 +130,10 @@ class MainActivity : ComponentActivity() {
         originalHomePlayer = OriginalHomeReturn.resumeToken() != null
     }
     fun closeVideo() {
+        if (player.source == null) return
         val returnHome = originalHomePlayer && OriginalHomeReturn.resumeToken() != null
         player.close()
+        hidePlayerFullscreen(player.view)
         syncPlayerPresentation()
         originalHomePlayer = false
         if (returnHome) openOriginalHome()
@@ -207,6 +213,7 @@ class MainActivity : ComponentActivity() {
     }
     fun minimizeWebVideo() {
         player.expanded = false
+        hidePlayerFullscreen(player.view)
         syncPlayerPresentation()
         syncOriginalHomeVisibility()
     }
@@ -424,7 +431,11 @@ class MainActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
     }
     fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback, owner: android.webkit.WebView? = null) {
-        if (customView != null) { callback.onCustomViewHidden(); return }
+        val playerCannotEnter = owner === player.view && (player.source == null || !player.expanded || pip)
+        if (customView != null || playerCannotEnter) {
+            callback.onCustomViewHidden()
+            return
+        }
         customView = view; customCallback = callback; customViewOwner = owner; fullscreen = true
         orientationBeforeFullscreen = requestedOrientation
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -443,6 +454,9 @@ class MainActivity : ComponentActivity() {
         callback?.onCustomViewHidden()
         if (wasFullscreen) requestedOrientation = UprightVideoOrientation.safe(orientationBeforeFullscreen)
         syncPlayerPresentation()
+    }
+    internal fun hidePlayerFullscreen(owner: android.webkit.WebView) {
+        if (customViewOwner === owner) hideFullscreen()
     }
     /** A renderer-owned fullscreen surface must not cover the replacement player. */
     internal fun releasePlayerFullscreen(owner: android.webkit.WebView) {

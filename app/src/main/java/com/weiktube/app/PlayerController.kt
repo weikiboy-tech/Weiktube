@@ -248,6 +248,20 @@ class PlayerController(
         if (viewSnapshots.put(web, snapshot) != snapshot) trace(PlayerDiagnostics.Event.VIEW_HOST_UPDATE, web)
     }
 
+    private fun bindFullscreenCallbacks(web: WebView) {
+        // The browser view survives video changes. A callback object belongs to one selection.
+        val callbacks = object : WebChromeClient() {
+            private fun current() = alive(web) && web.webChromeClient === this && source != null
+            override fun onShowCustomView(surface: android.view.View, callback: CustomViewCallback) {
+                if (current()) activity.showFullscreen(surface, callback, web)
+                else runCatching { callback.onCustomViewHidden() }
+            }
+            override fun onHideCustomView() {
+                if (current()) activity.hidePlayerFullscreen(web)
+            }
+        }
+        web.webChromeClient = callbacks
+    }
     private fun createView(): WebView {
         val candidate = webViewFactory(activity)
         viewIds[candidate] = PlayerDiagnostics.nextViewId()
@@ -388,13 +402,6 @@ class PlayerController(
                 rendererGone(web, detail.didCrash())
                 return true
             }
-        }
-        webChromeClient = object : WebChromeClient() {
-            override fun onShowCustomView(web: android.view.View, callback: CustomViewCallback) {
-                if (alive(playerWeb)) activity.showFullscreen(web, callback, playerWeb)
-                else runCatching { callback.onCustomViewHidden() }
-            }
-            override fun onHideCustomView() { if (alive(playerWeb)) activity.hideFullscreen() }
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_VIEW_RENDERER_CLIENT_BASIC_USAGE)) {
             WebViewCompat.setWebViewRenderProcessClient(this, object : WebViewRenderProcessClient() {
@@ -579,6 +586,8 @@ class PlayerController(
         explicitStartRequested = userInitiated
         audibleStartRequested = userInitiated && !recovery
         supportedHoldRates = emptyList(); supportedQualities = emptyList(); qualityStatus = "Noch kein Video geprüft"
+        activity.hidePlayerFullscreen(view)
+        bindFullscreenCallbacks(view)
         generation++; source = if (id != null) "https://www.youtube.com/watch?v=$id" else url
         documentCommitted = false
         recoveryDocumentPending = recovery
@@ -797,7 +806,18 @@ class PlayerController(
         open(if (isYoutube) "$url&t=$seconds" else url); expanded = wasExpanded
     }
     fun close() {
-        if (destroyed) return
+        if (destroyed || source == null) return
+        clearVideoZoom()
+        mainHandler.removeCallbacks(clearFeedback)
+        gestureFeedback = null
+        dislikeJob?.cancel()
+        dislikeId = null
+        dislikeLabel = null
+        expanded = false
+        playing = false
+        mini = false
+        videoOnly = false
+        systemPip = false
         sponsorBlock.reset()
         holdGesture(false)
         pendingRecovery = null
