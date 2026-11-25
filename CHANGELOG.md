@@ -1,3 +1,7 @@
+# 1.3.23 – Miniplayer, System-PiP und Vollbildknopf
+
+1.3.23 korrigiert die Startfläche der Miniplayer-Bewegung, den Android-PiP-Bildausschnitt und die Bedienung des Vollbildknopfs bei automatischer Rotation. Die visuelle Abnahme auf dem OnePlus 15R steht aus. [Testumfang und OnePlus-Anleitung](RELEASE-1.3.23.md)
+
 # 1.3.22 – Player-Stabilität
 
 Der Player startet mit seiner vorgesehenen Größe. Beim Minimieren und Vergrößern teilen sich Videofenster, Rundung und Navigationsabstand einen unterbrechbaren Animationsfortschritt. In der Querformatansicht steht oben links der Minimieren-Pfeil zur Verfügung. Minimieren und Schließen geben die Vollbildfläche frei. Späte Vollbildanforderungen eines geschlossenen oder minimierten Players werden abgewiesen.

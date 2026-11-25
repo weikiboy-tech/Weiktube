@@ -1,4 +1,6 @@
-# Weiktube 1.3.22
+# Weiktube 1.3.23
+
+1.3.23 korrigiert die Startfläche der Miniplayer-Bewegung, den Android-PiP-Bildausschnitt und die Bedienung des Vollbildknopfs bei automatischer Rotation. Die visuelle Abnahme auf dem OnePlus 15R steht aus.
 
 Weiktube 1.3.22 verbessert den Videostart, Minimieren und Schließen im Querformat sowie den Übergang zum Miniplayer. Die visuelle Prüfung auf dem OnePlus steht aus.
 

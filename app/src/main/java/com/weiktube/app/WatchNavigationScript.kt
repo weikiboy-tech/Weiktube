@@ -24,13 +24,16 @@ object WatchNavigationScript {
         return if (publicPage) Links.canonicalYoutubeUrl(url) else null
     }
 
-    fun install(webView: WebView, onUrl: (String) -> Unit): Hooks {
+    fun install(webView: WebView, toggleFullscreen: (String) -> Unit = {}, onUrl: (String) -> Unit): Hooks {
         val bridgeSupported = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
         if (!bridgeSupported) return Hooks(webView, null, false)
         WebViewCompat.addWebMessageListener(webView, "WeiktubeWatchNavigation", origins) { _, message, origin, mainFrame, _ ->
             if (mainFrame && origin.toString().trimEnd('/') in origins) {
                 val raw = runCatching { message.data }.getOrNull() ?: return@addWebMessageListener
-                allowed(raw)?.let(onUrl)
+                if (raw.startsWith("fullscreen:")) {
+                    val id = raw.removePrefix("fullscreen:")
+                    if (id.matches(Regex("[A-Za-z0-9_-]{11}"))) toggleFullscreen(id)
+                } else allowed(raw)?.let(onUrl)
             }
         }
         val handler = if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
@@ -57,6 +60,17 @@ object WatchNavigationScript {
           window.weiktubeWatchNavigationInstalled=true;
           document.addEventListener('click',function(e){
             if(!e.isTrusted||e.defaultPrevented||e.button>0||e.ctrlKey||e.metaKey||e.altKey||e.shiftKey)return;
+            var button=e.target&&e.target.closest&&e.target.closest('button,[role="button"]');
+            if(button&&window.WeiktubeWatchNavigation&&location.pathname==='/watch'&&
+                (button.matches('.ytp-fullscreen-button,.fullscreen-icon,.fullscreen-button')||
+                 button.querySelector('.fullscreen-icon')||
+                 /fullscreen|vollbild|plein écran/i.test(button.getAttribute('aria-label')||''))){
+              var watchId=new URL(location.href).searchParams.get('v');
+              if(/^[A-Za-z0-9_-]{11}$/.test(watchId||'')){
+                e.preventDefault();e.stopImmediatePropagation();
+                window.WeiktubeWatchNavigation.postMessage('fullscreen:'+watchId);return;
+              }
+            }
             var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;
             if(!a||!window.WeiktubeWatchNavigation)return;
             var u;try{u=new URL(a.href,location.href);}catch(ignore){return;}

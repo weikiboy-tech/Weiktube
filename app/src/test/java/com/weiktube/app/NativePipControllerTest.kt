@@ -389,6 +389,18 @@ class NativePipControllerTest {
         assertTrue(bounds(activity.latest).isEmpty)
     }
 
+    @Test fun floatingWindowDoesNotReplaceTheWindowSpaceReturnHint() {
+        val initial = Rect(40, 130, 940, 590)
+        state = state.copy(bounds = initial)
+        controller.sync()
+        state = state.copy(bounds = Rect(0, 0, 196, 110))
+        changeMode(true)
+        assertEquals(initial, bounds(activity.latest))
+        state = state.copy(bounds = Rect(10, 20, 500, 350))
+        changeMode(false)
+        assertEquals(state.bounds, bounds(activity.latest))
+    }
+
     private fun changeMode(inPip: Boolean) {
         activity.inPip = inPip
         controller.modeChanged(inPip)

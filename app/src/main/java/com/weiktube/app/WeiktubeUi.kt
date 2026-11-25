@@ -122,7 +122,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
     val tabStates = rememberSaveableStateHolder()
     LaunchedEffect(p.source) { actions = false }
     LaunchedEffect(p.source, p.playing, p.error, p.loading, p.expanded, a.tab, a.fullscreen,
-        a.pip, p.videoWidth, p.videoHeight, playerBounds, actions, menu, showLinkDialog) {
+        a.pip, p.videoWidth, p.videoHeight, p.watchSlot, playerBounds, actions, menu, showLinkDialog) {
         a.syncPipState(blockedByUi = actions || menu || showLinkDialog)
     }
     LaunchedEffect(dark) { a.browser.setTheme(dark); a.shorts?.setTheme(dark) }
@@ -137,7 +137,11 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
     }
     val mini = hasPlayer && !full && !a.pip
     val compactFraction = compactPlayerFraction(p.source, a.pip, orientation, mini)
-    Column(Modifier.fillMaxSize().then(if (a.pip || landscapeVideo) Modifier else Modifier.safeDrawingPadding())) {
+    val settledMini = mini && compactFraction == 1f
+    LaunchedEffect(settledMini) { if (settledMini) a.cardSettled() }
+    val landscapeMotion = orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE &&
+        hasPlayer && compactFraction < 1f
+    Column(Modifier.fillMaxSize().then(if (a.pip || landscapeMotion) Modifier else Modifier.safeDrawingPadding())) {
         if (!a.pip && !full && !personalHome && a.tab != 1 && !a.browser.searchActive) {
             Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.ic_weiktube), "Weiktube Logo", Modifier.size(28.dp))
@@ -204,10 +208,24 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
             }
             val playerVisible = hasPlayer && (a.tab != 1 || full || a.pip)
             val compactWidth = minOf(196.dp, (maxWidth - 24.dp).coerceAtLeast(1.dp))
-            val playerWidth = androidx.compose.ui.unit.lerp(maxWidth, compactWidth, compactFraction)
-            val playerHeight = if (playerVisible) androidx.compose.ui.unit.lerp(
-                availableHeight, compactWidth * 9f / 16f, compactFraction) else 0.dp
+            val movingCard = !a.pip && (mini || compactFraction > 0f)
+            val landscape = orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val documentHeight = (availableHeight - if (landscape) 0.dp else 44.dp).coerceAtLeast(1.dp)
+            val slot = p.mediaSlot(landscape)
+            val slotWidth = maxWidth * (slot?.width() ?: 1f)
+            val slotHeight = slot?.let { documentHeight * it.height() } ?:
+                if (landscape || !p.isYoutube) documentHeight else minOf(documentHeight, maxWidth * 9f / 16f)
+            val aspect = if (p.videoWidth > 0 && p.videoHeight > 0) p.videoWidth.toFloat() / p.videoHeight else 16f / 9f
+            val imageWidth = minOf(slotWidth, slotHeight * aspect)
+            val imageHeight = imageWidth / aspect
+            val imageRight = maxWidth * (slot?.left ?: 0f) + (slotWidth + imageWidth) / 2
+            val imageBottom = documentHeight * (slot?.top ?: 0f) + (slotHeight + imageHeight) / 2
+            val playerWidth = if (movingCard) androidx.compose.ui.unit.lerp(imageWidth, compactWidth, compactFraction) else maxWidth
+            val playerHeight = if (!playerVisible) 0.dp else if (movingCard)
+                androidx.compose.ui.unit.lerp(imageHeight, compactWidth * 9f / 16f, compactFraction) else availableHeight
             val playerInset = 12.dp * compactFraction
+            val endInset = if (movingCard) androidx.compose.ui.unit.lerp((maxWidth - imageRight).coerceAtLeast(0.dp), 12.dp, compactFraction) else 0.dp
+            val bottomInset = if (movingCard) androidx.compose.ui.unit.lerp((availableHeight - imageBottom).coerceAtLeast(0.dp), 12.dp, compactFraction) else 0.dp
             val corner = playerInset
             val portrait = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
             val density = LocalDensity.current
@@ -226,11 +244,11 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
             LaunchedEffect(full, p.source, a.pip) { dragPixels = 0f }
             val shape = RoundedCornerShape(if (a.pip) 0.dp else corner)
             // PiP uses the retained view immediately, without a compact-card animation frame.
-            val inset = if (a.pip) 0.dp else playerInset
-            Box(Modifier.align(Alignment.BottomEnd).padding(end = inset, bottom = inset)
+            
+            Box(Modifier.align(Alignment.BottomEnd).padding(end = endInset, bottom = bottomInset)
                 .width(if (a.pip) maxWidth else playerWidth).height(if (a.pip) availableHeight else playerHeight)
                 .onGloballyPositioned { playerBounds = it.boundsInWindow() }
-                .graphicsLayer { translationY = if (full && !a.pip) dragVisual.coerceAtMost(size.height * .3f) * .6f else 0f }
+                .graphicsLayer { translationY = if (!a.pip) dragVisual * (1f - compactFraction) else 0f }
                 .shadow(if (mini) 8.dp else 0.dp, shape).clip(shape).background(Color.Black)) {
                 Column(Modifier.fillMaxSize()) {
                     key(p.view) {
@@ -251,7 +269,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                 p.setPresentation(mini || expandingPlayer, dark, landscapeVideo || a.pip, systemPip = a.pip)
                             })
                     }
-                    if (hasPlayer && full && !a.pip && !landscapeVideo) {
+                    if (hasPlayer && full && !movingCard && !a.pip && !landscapeVideo) {
                         if (p.loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
                         if (p.resumedAt > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("An letzter Stelle fortgesetzt", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)

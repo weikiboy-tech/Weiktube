@@ -1,6 +1,6 @@
 param(
-    [int]$VersionCode = 39,
-    [string]$VersionName = '1.3.22',
+    [int]$VersionCode = 40,
+    [string]$VersionName = '1.3.23',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
     [switch]$Publish,
@@ -12,7 +12,7 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = if ($Preview) { "v$VersionName-preview" } else { "v$VersionName" }
-$expectedMain = '3bdef94f5d111a467eb80caa096cc02e29267b99'
+$expectedMain = '01e4164e163d0b3de52f112e6abcfba4a9790cf5'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
 $channel = if ($Preview) { 'preview' } else { 'stable' }
 $output = Join-Path $project "dist/$channel-$VersionName"
@@ -25,7 +25,7 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Weiktube 1.3.22 verbessert den Videostart, Minimieren und Schließen im Querformat sowie den Übergang zum Miniplayer. Die visuelle Prüfung auf dem OnePlus steht aus.'
+$updateNotes = '1.3.23 korrigiert die Startfläche der Miniplayer-Bewegung, den Android-PiP-Bildausschnitt und die Bedienung des Vollbildknopfs bei automatischer Rotation. Die visuelle Abnahme auf dem OnePlus 15R steht aus.'
 if ($Preview) { $updateNotes += ' Dies ist eine Vorabveröffentlichung ohne Änderung des regulären Updatekanals.' }
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or

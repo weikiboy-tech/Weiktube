@@ -5,10 +5,28 @@ import json
 
 root = Path(__file__).resolve().parents[1]
 
+motion_review = json.loads((root / "scripts/player-motion-reviewed-changes.json").read_text(encoding="utf-8"))
+motion_originals = {}
+for name, review in motion_review["files"].items():
+    content = (root / name).read_text(encoding="utf-8")
+    for change in review["changes"]:
+        if content.count(change["current"]) != 1:
+            raise SystemExit(name + " stability change missing or duplicated")
+        content = content.replace(change["current"], change["previous"], 1)
+    if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+        raise SystemExit(name + " differs outside reviewed stability changes")
+    motion_originals[name] = content
+for name, expected in motion_review["addedFiles"].items():
+    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+        raise SystemExit(name + " differs from reviewed stability helper/test")
+
+def before_motion(name):
+    return motion_originals.get(name, (root / name).read_text(encoding="utf-8"))
+
 stability_review = json.loads((root / "scripts/stability-reviewed-changes.json").read_text(encoding="utf-8"))
 stability_originals = {}
 for name, review in stability_review["files"].items():
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_motion(name)
     for change in review["changes"]:
         if content.count(change["current"]) != 1:
             raise SystemExit(name + " stability change missing or duplicated")
@@ -17,11 +35,11 @@ for name, review in stability_review["files"].items():
         raise SystemExit(name + " differs outside reviewed stability changes")
     stability_originals[name] = content
 for name, expected in stability_review["addedFiles"].items():
-    if hashlib.sha256((root / name).read_text(encoding="utf-8").encode()).hexdigest() != expected:
+    if hashlib.sha256(before_motion(name).encode()).hexdigest() != expected:
         raise SystemExit(name + " differs from reviewed stability helper/test")
 
 def before_stability(name):
-    return stability_originals.get(name, (root / name).read_text(encoding="utf-8"))
+    return stability_originals.get(name, before_motion(name))
 
 sponsor_review = json.loads((root / "scripts/sponsorblock-reviewed-changes.json").read_text(encoding="utf-8"))
 sponsor_originals = {}

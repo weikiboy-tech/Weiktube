@@ -28,6 +28,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     private var ownsTouch = false
     private var childDisallowed = false
     private var systemInsetsHandledByHost = true
+    internal val compactViewport get() = stableCompact
     private var stableCompact = false
     private var viewportSource: String? = null
     private var logicalWidth = 0

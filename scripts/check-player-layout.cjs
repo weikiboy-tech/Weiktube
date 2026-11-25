@@ -149,6 +149,24 @@ video{position:absolute;left:0;top:0;width:384px;height:216px;object-fit:cover}
     await page.setViewportSize({width:800,height:450});
     await page.evaluate(()=>window.weiktubeWatchPresentation(false,true,true,false));
     assert.equal((await bounds()).drawerDisplay,'block','landscape keeps regular YouTube drawer behavior');
+    const navigationSource = fs.readFileSync(path.join(__dirname,'../app/src/main/java/com/weiktube/app/WatchNavigationScript.kt'),'utf8').split('"""')[1];
+    await page.evaluate(() => {
+      history.replaceState({}, '', '/watch?v=abcdefghijk');
+      window.fullscreenMessages=[];
+      window.WeiktubeWatchNavigation={postMessage:m=>fullscreenMessages.push(m)};
+      const b=document.createElement('button'); b.className='ytp-fullscreen-button';
+      b.innerHTML='<svg></svg>'; b.style.cssText='position:fixed;right:0;bottom:0;width:48px;height:48px;z-index:99999';
+      document.body.appendChild(b);
+    });
+    await page.evaluate(navigationSource);
+    for(const landscape of [true,false,true]){
+      await page.evaluate(flag=>weiktubeWatchPresentation(false,true,flag,false),landscape);
+      const control=page.locator('.ytp-fullscreen-button').last();
+      assert.equal(await control.locator('svg').evaluate(e=>getComputedStyle(e).visibility), landscape?'hidden':'visible');
+      await control.click();
+      assert.equal(await page.evaluate(()=>fullscreenMessages.at(-1)),'fullscreen:abcdefghijk');
+    }
+    await page.evaluate(()=>document.querySelector('button.ytp-fullscreen-button:last-child').remove());
     await paintedVideo(800,450,'landscape');
     await page.evaluate(() => {cancelAnimationFrame(window.fixtureFrame); window.fixtureStream.getTracks().forEach(track => track.stop());});
     console.log('PASS real Chromium player layout: negative controls reproduce 53px/292px offsets and 164px/40px opaque drawer overhang; 10 mini/PiP/restore cycles retain video/source/time/pause/scroll, full visible bounds and actual red/blue video pixels. Drawer suppression excludes portrait/landscape. Offline fixture, not Android or live YouTube playback verification.');

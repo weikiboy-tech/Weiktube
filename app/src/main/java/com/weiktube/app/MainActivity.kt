@@ -57,6 +57,19 @@ class MainActivity : ComponentActivity() {
     private var orientationBeforeFullscreen = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var orientationBeforePlayer: Int? = null
     private var manualFullscreenSawLandscape = false
+    private var orientationChoice: Int? = null
+    private var orientationChoiceSource: String? = null
+
+    internal fun toggleWatchFullscreen() {
+        if (!player.expanded || player.source == null || pip || !hostResumed) return
+        val exit = fullscreen || resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        orientationChoiceSource = player.source
+        orientationChoice = if (exit) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        if (fullscreen) hideFullscreen()
+        syncPlayerPresentation()
+    }
+
     private var videoOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
     private val fullscreenOrientation by lazy {
         object : android.view.OrientationEventListener(this) {
@@ -64,6 +77,8 @@ class MainActivity : ComponentActivity() {
                 if (!hostResumed || pip || degrees == ORIENTATION_UNKNOWN) return
                 val previous = videoOrientation
                 videoOrientation = UprightVideoOrientation.fromSensor(degrees, previous)
+                if ((previous == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) !=
+                    (videoOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)) orientationChoice = null
                 if (customView == null) {
                     if (previous != videoOrientation) syncPlayerPresentation()
                     return
@@ -211,7 +226,13 @@ class MainActivity : ComponentActivity() {
         player.resumeView()
         syncOriginalHomeVisibility()
     }
+    private var settlingCardSource: String? = null
+    internal fun cardSettled() {
+        settlingCardSource = null
+        syncPlayerPresentation()
+    }
     fun minimizeWebVideo() {
+        if (player.expanded && !pip) settlingCardSource = player.source
         player.expanded = false
         hidePlayerFullscreen(player.view)
         syncPlayerPresentation()
@@ -282,19 +303,35 @@ class MainActivity : ComponentActivity() {
     }
     private fun pipSnapshot(): NativePipController.Snapshot {
         val rect = android.graphics.Rect()
-        val target = customView ?: player.view
+        // The compact WebView retains its large logical size. Its clipped host is the
+        // source window; only the contained video pixels belong in the system hint.
+        val target = customView ?: (player.view.parent as? PlayerGestureLayout ?: player.view)
         val visible = target.isShown && target.getGlobalVisibleRect(rect)
         if (visible) {
-            // getGlobalVisibleRect is in root coordinates; PiP expects window coordinates.
             val origin = IntArray(2)
             target.rootView.getLocationInWindow(origin)
             rect.offset(origin[0], origin[1])
-            if (customView == null && player.isYoutube && player.expanded && !pip &&
-                resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE) {
-                // The portrait watch document also contains recommendations. Only its top video
-                // slot (same 16:9 slot as WATCH_CHROME) is a useful transition hint.
-                rect.bottom = minOf(rect.bottom, rect.top + rect.width() * 9 / 16)
+            val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+            val normal = customView == null && player.expanded && !pip &&
+                (target as? PlayerGestureLayout)?.compactViewport != true
+            val slot = if (normal) player.mediaSlot(landscape) else null
+            val area = android.graphics.RectF(rect)
+            if (slot != null) {
+                val location = IntArray(2)
+                target.getLocationInWindow(location)
+                area.set(location[0] + target.width * slot.left, location[1] + target.height * slot.top,
+                    location[0] + target.width * slot.right, location[1] + target.height * slot.bottom)
+            } else if (normal && player.isYoutube && !landscape) {
+                area.bottom = minOf(area.bottom, area.top + area.width() * 9 / 16)
             }
+            val aspect = if (player.videoWidth > 0 && player.videoHeight > 0)
+                player.videoWidth.toFloat() / player.videoHeight else 16f / 9f
+            val w = minOf(area.width(), area.height() * aspect)
+            val h = w / aspect
+            val media = android.graphics.Rect()
+            android.graphics.RectF(area.centerX()-w/2, area.centerY()-h/2,
+                area.centerX()+w/2, area.centerY()+h/2).round(media)
+            if (!rect.intersect(media)) rect.setEmpty()
         }
         return NativePipController.Snapshot(player.source, player.pipReady, player.playing,
             playerMayRun && visible, hostResumed, pipUiBlocked || (tab == 1 && !player.expanded),
@@ -394,13 +431,16 @@ class MainActivity : ComponentActivity() {
     /** Rotation changes only the presentation of the retained player, never its document. */
     fun syncPlayerPresentation() {
         if (!::player.isInitialized) return
+        if (player.expanded || pip || settlingCardSource != player.source) settlingCardSource = null
+        if (orientationChoiceSource != player.source || !player.expanded) orientationChoice = null
+        val desiredOrientation = orientationChoice ?: videoOrientation
         val expanded = player.source != null && player.expanded && !pip && !isFinishing && !isDestroyed
         if (expanded) {
             if (orientationBeforePlayer == null) orientationBeforePlayer =
                 if (customView == null) requestedOrientation else orientationBeforeFullscreen
-            if (customView == null && requestedOrientation != videoOrientation)
-                requestedOrientation = videoOrientation
-        } else if (customView == null) {
+            if (customView == null && requestedOrientation != desiredOrientation)
+                requestedOrientation = desiredOrientation
+        } else if (customView == null && settlingCardSource == null) {
             orientationBeforePlayer?.let { requestedOrientation = UprightVideoOrientation.safe(it) }
             orientationBeforePlayer = null
         }

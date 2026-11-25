@@ -26,6 +26,11 @@ class PlayerController(
     var duration by mutableDoubleStateOf(0.0); private set
     var videoWidth by mutableIntStateOf(0); private set
     var videoHeight by mutableIntStateOf(0); private set
+    // CSS viewport fractions sampled only from the expanded document before isolation.
+    internal var watchSlot by mutableStateOf<android.graphics.RectF?>(null)
+        private set
+    private var sampledLandscape = false
+    internal fun mediaSlot(landscape: Boolean) = watchSlot.takeIf { sampledLandscape == landscape }
     var loading by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null); private set
     var title by mutableStateOf("Video"); private set
@@ -315,7 +320,10 @@ class PlayerController(
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(this, MEDIA_GUARD + WATCH_CHROME, setOf("https://m.youtube.com", "https://www.youtube.com", "https://youtube.com"))
         }
-        navigationHooks[this] = WatchNavigationScript.install(this) { url ->
+        navigationHooks[this] = WatchNavigationScript.install(this, toggleFullscreen = { id ->
+            if (alive(playerWeb) && documentCommitted && source?.let(Links::videoId) == id)
+                activity.toggleWatchFullscreen()
+        }) { url ->
             if (!alive(playerWeb)) return@install
             if (Links.host(url) == "accounts.google.com") { pauseFor(PlayerDiagnostics.PauseReason.ACCOUNT_ACTION); expanded = false; activity.openAccountScreen() }
             else activity.openAccountUrl(url)
@@ -588,6 +596,7 @@ class PlayerController(
         supportedHoldRates = emptyList(); supportedQualities = emptyList(); qualityStatus = "Noch kein Video geprüft"
         activity.hidePlayerFullscreen(view)
         bindFullscreenCallbacks(view)
+        watchSlot = null
         generation++; source = if (id != null) "https://www.youtube.com/watch?v=$id" else url
         documentCommitted = false
         recoveryDocumentPending = recovery
@@ -639,12 +648,16 @@ class PlayerController(
         refreshSponsorBlock()
         pollEnhancements()
         pollDislikes()
+        val landscapeAtRequest = activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val sampleSlot = expanded && !mini && !systemPip
         val polledView = view
         val requestGeneration = generation
         val observationRevision = playbackObservationRevision
         view.evaluateJavascript("""
             (function(){var v=document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');
-              return JSON.stringify({mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
+              var r=v&&v.getBoundingClientRect();
+              var slot=r&&innerWidth>0&&innerHeight>0?[r.left/innerWidth,r.top/innerHeight,r.right/innerWidth,r.bottom/innerHeight]:null;
+              return JSON.stringify({slot:slot,mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
               playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,
               duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,
               title:h?h.textContent:(document.title||''),url:location.href});})()
@@ -666,6 +679,16 @@ class PlayerController(
                 // A temporary empty DOM during SPA updates is not an invalid renderer and must
                 // not replace the last valid content timestamp with the script's default zero.
                 if (!value.optBoolean("hasVideo")) return@runCatching
+                if (sampleSlot && expanded && !mini && !systemPip &&
+                    landscapeAtRequest == (activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)) {
+                    value.optJSONArray("slot")?.takeIf { it.length() == 4 }?.let { a ->
+                        val edges = (0..3).map { a.optDouble(it).toFloat() }
+                        if (edges.all { it.isFinite() && it in 0f..1.001f } && edges[2] > edges[0] && edges[3] > edges[1]) {
+                            sampledLandscape = landscapeAtRequest
+                            watchSlot = android.graphics.RectF(edges[0], edges[1], edges[2], edges[3])
+                        }
+                    }
+                }
                 // A snapshot requested before a newer play/pause event must not overwrite it.
                 if (observationRevision == playbackObservationRevision) {
                     playing = value.optBoolean("playing") && playbackAllowed && activity.playerMayRun &&
@@ -883,6 +906,7 @@ class PlayerController(
                 var isolated=mini||videoOnly;
                 if(isolated&&!wasIsolated){savedScroll=window.scrollY;window.scrollTo(0,0);}
                 videoOnlyMode=videoOnly;
+                root.setAttribute('data-weiktube-fullscreen',window.WeiktubeWatchNavigation&&videoOnly&&!mini&&!systemPip?'1':'0');
                 root.setAttribute('data-weiktube-mini',mini?'1':'0');
                 root.setAttribute('data-weiktube-system-pip',systemPip?'1':'0');
                 root.setAttribute('data-weiktube-video-only',videoOnly?'1':'0');root.style.colorScheme=dark?'dark':'light';
@@ -890,6 +914,8 @@ class PlayerController(
                 if(!document.getElementById('weiktube-watch-style')){
                   var style=document.createElement('style');style.id='weiktube-watch-style';
                   style.textContent='ytm-mobile-topbar-renderer,ytm-pivot-bar-renderer{display:none!important}'+
+                    'html[data-weiktube-fullscreen="1"] :is(button,[role=button]):is(.ytp-fullscreen-button,.fullscreen-icon,.fullscreen-button,:has(.fullscreen-icon),[aria-label*="fullscreen" i],[aria-label*="vollbild" i],[aria-label*="plein écran" i]) svg{visibility:hidden}'+
+                    'html[data-weiktube-fullscreen="1"] :is(button,[role=button]):is(.ytp-fullscreen-button,.fullscreen-icon,.fullscreen-button,:has(.fullscreen-icon),[aria-label*="fullscreen" i],[aria-label*="vollbild" i],[aria-label*="plein écran" i]){background-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27none%27 stroke=%27white%27 stroke-width=%272%27 d=%27M3 8h5V3m8 0v5h5M3 16h5v5m8 0v-5h5%27/%3E%3C/svg%3E")!important;background-position:center!important;background-size:24px!important;background-repeat:no-repeat!important}'+
                     'ytm-app{padding-top:0!important;padding-bottom:0!important}'+
                     '#player-container-id{top:0!important}'+
                     '.player-container .player-size,ytm-watch .player-size{height:var(--weiktube-watch-height)!important;max-height:none!important;padding-bottom:0!important;aspect-ratio:auto!important}'+

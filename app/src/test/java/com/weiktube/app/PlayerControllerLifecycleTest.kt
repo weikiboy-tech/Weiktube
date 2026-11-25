@@ -55,6 +55,23 @@ class PlayerControllerLifecycleTest {
         idle()
     }
 
+    @Test fun explicitFullscreenExitSurvivesRepeatedLandscapeSync() {
+        player.open(VIDEO_A)
+        val physicalLandscape = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        org.robolectric.util.ReflectionHelpers.setField(activity, "videoOrientation", physicalLandscape)
+        val resumed = org.robolectric.util.ReflectionHelpers.getField<androidx.compose.runtime.MutableState<Boolean>>(activity, "hostResumed\$delegate")
+        resumed.value = true
+        org.robolectric.RuntimeEnvironment.setQualifiers("land")
+        activity.syncPlayerPresentation()
+        activity.toggleWatchFullscreen()
+        repeat(10) { activity.syncPlayerPresentation() }
+        assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, activity.requestedOrientation)
+        org.robolectric.RuntimeEnvironment.setQualifiers("port")
+        activity.toggleWatchFullscreen()
+        assertEquals(physicalLandscape, activity.requestedOrientation)
+        assertEquals(VIDEO_A, player.source)
+    }
+
     @Test fun closeAndReopenFiftyTimesInEachOrientation() {
         val retained = player.view
         for (landscape in listOf(false, true)) {

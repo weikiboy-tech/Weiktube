@@ -38,6 +38,7 @@ internal class NativePipController(
     private var token = UUID.randomUUID().toString()
     private var source: String? = null
     private var last: Pair<Snapshot, Boolean>? = null
+    private var returnBounds: Rect? = null
     private var entered = false
     private var entering = false
     private var closed = false
@@ -83,7 +84,7 @@ internal class NativePipController(
     fun sync() {
         if (closed || !supported || activity.isFinishing || activity.isDestroyed) return
         val state = snapshot()
-        if (source != state.source) { source = state.source; token = UUID.randomUUID().toString() }
+        if (source != state.source) { source = state.source; returnBounds = null; token = UUID.randomUUID().toString() }
         val auto = eligible(state, automatic = true) && !entered
         val key = state to auto
         if (last == key) return
@@ -138,9 +139,12 @@ internal class NativePipController(
             !activity.isFinishing && !activity.isDestroyed
 
     private fun params(state: Snapshot, auto: Boolean): PictureInPictureParams {
+        // Android needs window coordinates of the source, including while actions update
+        // in PiP. A rectangle measured inside the floating window cannot describe it.
+        if (!entered && !entering) returnBounds = state.bounds?.let(::Rect)
         val builder = PictureInPictureParams.Builder()
             .setAspectRatio(aspectRatio(state.width, state.height))
-            .setSourceRectHint(state.bounds?.let(::Rect) ?: Rect())
+            .setSourceRectHint(returnBounds?.let(::Rect) ?: Rect())
             .setActions(if (state.source != null && state.ready) listOf(control(state.playing)) else emptyList())
         if (Build.VERSION.SDK_INT >= 31) builder.setAutoEnterEnabled(auto).setSeamlessResizeEnabled(false)
         if (Build.VERSION.SDK_INT >= 33) builder.setTitle("Weiktube")
