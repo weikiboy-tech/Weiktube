@@ -1,3 +1,9 @@
+# 1.3.22-rc1 – Player-Stabilität
+
+Der Player startet mit seiner vorgesehenen Größe. Beim Minimieren und Vergrößern teilen sich Videofenster, Rundung und Navigationsabstand einen unterbrechbaren Animationsfortschritt. In der Querformatansicht steht oben links der Minimieren-Pfeil zur Verfügung. Minimieren und Schließen geben die Vollbildfläche frei. Späte Vollbildanforderungen eines geschlossenen oder minimierten Players werden abgewiesen.
+
+[Prüfumfang und OnePlus-Abnahme](docs/PLAYER-STABILITY.md)
+
 # 1.3.21 – SponsorBlock
 
 Weiktube 1.3.21 ergänzt optionales SponsorBlock mit acht Kategorien, farbigen Markierungen und Rückgängig. Aktivierung unter Einstellungen → SponsorBlock. 403 JVM-Tests und 21 JavaScript-/Browser-Prüfprogramme bestanden. Die Geräteprüfung auf dem OnePlus steht aus.

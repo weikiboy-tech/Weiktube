@@ -95,6 +95,14 @@ fun WeiktubeApp(activity: MainActivity, model: WeiktubeModel) {
     }
 }
 
+/** Keep one clock for card bounds, corner radius and navigation space. */
+@Composable
+internal fun compactPlayerFraction(source: String?, pip: Boolean, orientation: Int, mini: Boolean): Float =
+    key(source, pip, orientation) {
+        val progress by animateFloatAsState(if (mini) 1f else 0f, tween(180), label = "compactPlayer")
+        progress
+    }
+
 @Composable
 private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Preferences) {
     val p = a.player
@@ -127,6 +135,8 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
         p.setPlaybackAllowed(!actions && a.playerMayRun && (a.tab != 1 || full || a.pip))
         a.syncOriginalHomeVisibility()
     }
+    val mini = hasPlayer && !full && !a.pip
+    val compactFraction = compactPlayerFraction(p.source, a.pip, orientation, mini)
     Column(Modifier.fillMaxSize().then(if (a.pip || landscapeVideo) Modifier else Modifier.safeDrawingPadding())) {
         if (!a.pip && !full && !personalHome && a.tab != 1 && !a.browser.searchActive) {
             Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -192,21 +202,20 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                 }
                 }
             }
-            val mini = hasPlayer && !full && !a.pip
             val playerVisible = hasPlayer && (a.tab != 1 || full || a.pip)
             val compactWidth = minOf(196.dp, (maxWidth - 24.dp).coerceAtLeast(1.dp))
-            val targetHeight = if (!playerVisible) 0.dp else if (full || a.pip) availableHeight else compactWidth * 9f / 16f
-            val playerWidth by animateDpAsState(if (full || a.pip) maxWidth else compactWidth, tween(180), label = "playerWidth")
-            val playerHeight by animateDpAsState(targetHeight, tween(180), label = "playerHeight")
-            val playerInset by animateDpAsState(if (mini) 12.dp else 0.dp, tween(180), label = "playerInset")
-            val corner by animateDpAsState(if (mini) 12.dp else 0.dp, tween(180), label = "playerCorner")
+            val playerWidth = androidx.compose.ui.unit.lerp(maxWidth, compactWidth, compactFraction)
+            val playerHeight = if (playerVisible) androidx.compose.ui.unit.lerp(
+                availableHeight, compactWidth * 9f / 16f, compactFraction) else 0.dp
+            val playerInset = 12.dp * compactFraction
+            val corner = playerInset
             val portrait = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
             val density = LocalDensity.current
             // Expansion must finish before the document can follow the host again;
             // otherwise its first expansion frame would still be a tiny web viewport.
             val stableViewport = BuildConfig.STABLE_PLAYER_VIEWPORT
             val expandingPlayer = stableViewport && full && !a.pip &&
-                (playerWidth != maxWidth || playerHeight != targetHeight)
+                compactFraction > 0f
             val retainViewport = stableViewport && (mini || a.pip || expandingPlayer)
             val normalViewportWidth = with(density) { maxWidth.roundToPx() }
             val normalViewportHeight = with(density) {
@@ -275,6 +284,10 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                         }
                     }
                 }
+                if (landscapeVideo && !a.fullscreen) {
+                    IconButton(onClick = a::minimizeWebVideo, modifier = Modifier.align(Alignment.TopStart)
+                        .displayCutoutPadding()) { Icon(Icons.Rounded.ExpandMore, "Video minimieren", tint = Color.White) }
+                }
                 if (full && !a.pip && playerVisible) SponsorBlockOverlay(p.sponsorBlock, Modifier.align(Alignment.TopEnd).padding(12.dp))
                 if (full && !a.pip) PlayerGestureHud(p.gestureFeedback, Modifier.align(Alignment.Center))
                 if (mini && playerVisible) {
@@ -307,8 +320,8 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                 }
             }
         }
-        if (!a.pip && !full) {
-            NavigationBar(Modifier.height(60.dp), containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp, windowInsets = WindowInsets(0, 0, 0, 0)) {
+        if (!a.pip && (!full || compactFraction > 0f)) {
+            NavigationBar(Modifier.height(if (hasPlayer) 60.dp * compactFraction else 60.dp).clipToBounds(), containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp, windowInsets = WindowInsets(0, 0, 0, 0)) {
                 listOf("Startseite" to Icons.Rounded.Home, "Shorts" to Icons.Rounded.SlowMotionVideo, "Adblock" to Icons.Rounded.Shield,
                     "Abos" to Icons.Rounded.Subscriptions, "Du" to Icons.Rounded.AccountCircle).forEachIndexed { index, item ->
                     NavigationBarItem(selected = a.tab == index, onClick = { if (index == 0) a.goHome() else a.selectTab(index) }, icon = { Icon(item.second, item.first, Modifier.size(24.dp)) }, label = { Text(item.first, maxLines = 1, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = true,
