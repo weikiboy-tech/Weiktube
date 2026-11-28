@@ -1,5 +1,9 @@
 # 1.3.28 – Videoseite nach dem ersten Bild
 
+## 1.3.31
+
+Bei der Rückkehr aus dem Hintergrund fordert Weiktube die Fensterabstände erneut an. Startseite und App-Navigation reservieren den Platz für die Systemleisten auch während des Einblendens.
+
 ## 1.3.30
 
 „Fortgesetzt“ erscheint erst nach überprüfter Wiedergabe an der gespeicherten Stelle und verschwindet nach sechs Sekunden. „Von vorne“ spult im laufenden Video zurück.

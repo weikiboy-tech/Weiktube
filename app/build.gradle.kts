@@ -11,8 +11,8 @@ android {
         applicationId = "com.weiktube.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 47
-        versionName = "1.3.30"
+        versionCode = 48
+        versionName = "1.3.31"
         if (!stableApks) ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

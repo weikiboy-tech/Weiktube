@@ -391,6 +391,7 @@ class MainActivity : ComponentActivity() {
         else if (playerMayRun && player.source == null && isWebTab && !isPersonalHome) activeBrowser.resume()
         syncOriginalHomeVisibility()
         if (::nativePip.isInitialized) nativePip.modeChanged(pip)
+        if (!pip) window.decorView.requestApplyInsets()
     }
     override fun onPause() {
         player.holdGesture(false)
@@ -446,6 +447,7 @@ class MainActivity : ComponentActivity() {
         reconcileScreenState(PlayerDiagnostics.ScreenSignal.ACTIVITY_RESUME, resumeIfAllowed = false)
         if (fullscreenOrientation.canDetectOrientation()) fullscreenOrientation.enable()
         syncPlayerPresentation()
+        window.decorView.requestApplyInsets()
         if (::updater.isInitialized) updater.onForeground()
         com.weiktube.filter.YoutubeAdBlock.checkForUpdates()
         if (::player.isInitialized) { player.resumeView(); if (isWebTab && !isPersonalHome) activeBrowser.resume() }
@@ -459,7 +461,10 @@ class MainActivity : ComponentActivity() {
         // Focus loss alone must never pause visible PiP.
         if (hasFocus) reconcileScreenState(PlayerDiagnostics.ScreenSignal.WINDOW_FOCUS)
         if (::originalHome.isInitialized) originalHome.onWindowFocusChanged(hasFocus)
-        if (hasFocus) updatePlayerSystemBars()
+        if (hasFocus) {
+            updatePlayerSystemBars()
+            window.decorView.requestApplyInsets()
+        }
     }
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -467,6 +472,7 @@ class MainActivity : ComponentActivity() {
         traceLifecycle(PlayerDiagnostics.Event.CONFIGURATION)
         syncPlayerPresentation()
         syncPipState()
+        window.decorView.requestApplyInsets()
     }
 
     /** Rotation changes only the presentation of the retained player, never its document. */
@@ -500,7 +506,10 @@ class MainActivity : ComponentActivity() {
             if (fullscreen || landscapeVideo) {
                 systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 hide(WindowInsetsCompat.Type.systemBars())
-            } else show(WindowInsetsCompat.Type.systemBars())
+            } else if (!pip) {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+                show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
     override fun onSaveInstanceState(outState: Bundle) {

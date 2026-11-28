@@ -103,6 +103,23 @@ internal fun compactPlayerFraction(source: String?, pip: Boolean, orientation: I
         progress
     }
 
+/** A restored configuration may already say landscape while the actual window is still tall. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ContentInsideSystemBars(
+    pip: Boolean,
+    landscapeMotion: Boolean,
+    visibleInsets: WindowInsets = WindowInsets.safeDrawing,
+    barBounds: WindowInsets = WindowInsets.systemBarsIgnoringVisibility,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val edgeToEdge = pip || (landscapeMotion && maxWidth > maxHeight)
+        val padding = if (edgeToEdge) Modifier else Modifier.windowInsetsPadding(visibleInsets.union(barBounds))
+        Column(Modifier.fillMaxSize().then(padding), content = content)
+    }
+}
+
 @Composable
 private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Preferences) {
     val p = a.player
@@ -142,7 +159,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
     LaunchedEffect(settledMini, cardId) { if (settledMini) a.cardSettled(cardId) }
     val landscapeMotion = orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE &&
         hasPlayer && compactFraction < 1f
-    Column(Modifier.fillMaxSize().then(if (a.pip || landscapeMotion) Modifier else Modifier.safeDrawingPadding())) {
+    ContentInsideSystemBars(a.pip, landscapeMotion) {
         if (!a.pip && !full && !personalHome && a.tab != 1 && !a.browser.searchActive) {
             Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.ic_weiktube), "Weiktube Logo", Modifier.size(28.dp))
