@@ -16,11 +16,15 @@ internal object ReturnDislikeScript {
             if(!button)return false;
             var span=document.getElementById('weiktube-ryd-count');
             if(!span){span=document.createElement('span');span.id='weiktube-ryd-count';
-              span.style.cssText='margin-inline-start:6px;font:inherit;color:inherit;pointer-events:none;white-space:nowrap';
+              span.style.cssText='margin-inline-start:6px;font:inherit;color:inherit;pointer-events:none;white-space:nowrap;display:inline-block;max-inline-size:8ch;overflow:hidden;text-overflow:ellipsis;vertical-align:middle';
               span.title='Return YouTube Dislike – teilweise geschätzte Daten';
             }
             span.dataset.video=id;
-            if(span.textContent!==label)span.textContent=label;
+            var digits=label.replace(/\./g,'');
+            var display=digits.length>6&&/^[0-9]+$/.test(digits)
+              ? new Intl.NumberFormat('de-DE',{notation:'compact',maximumFractionDigits:1}).format(Number(digits)):label;
+            if(span.textContent!==display)span.textContent=display;
+            span.title=label+' Dislikes · Return YouTube Dislike (Schätzung)';
             span.setAttribute('aria-label',label+' Dislikes, Schätzung von Return YouTube Dislike');
             if(span.parentElement!==button)button.appendChild(span);
             return true;

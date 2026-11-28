@@ -55,6 +55,41 @@ class PlayerControllerLifecycleTest {
         idle()
     }
 
+    @Test fun watchTitleCanArriveBeforeMediaAndIsClearedOnNextSelection() {
+        player.open(VIDEO_A)
+        finishPage()
+        player.poll()
+        shadowOf(player.view).lastEvaluatedJavascriptCallback.onReceiveValue(JSONObject.quote(JSONObject()
+            .put("url", WATCH_A).put("hasVideo", false).put("title", "Neuer Titel - YouTube").toString()))
+        assertEquals("Neuer Titel", player.title)
+        assertFalse(player.pictureReady)
+        player.open(VIDEO_B)
+        assertNotEquals("Neuer Titel", player.title)
+    }
+
+    @Test fun committedPageAndLateFrameOfPreviousSelectionDoNotUnlockTheNextVideo() {
+        player.open(VIDEO_A)
+        val web = player.view
+        assertFalse(player.pictureReady)
+        finishPage()
+        assertTrue(player.documentCommitted)
+        assertFalse(player.pictureReady)
+        player.poll()
+        val old = shadowOf(web).lastEvaluatedJavascriptCallback
+        fun decoded(url: String) = JSONObject.quote(JSONObject()
+            .put("url", url).put("hasVideo", true).put("mediaReady", 2)
+            .put("decodedFallback", true).put("width", 1920).put("height", 1080).toString())
+        player.open(VIDEO_B)
+        old.onReceiveValue(decoded(WATCH_A))
+        assertFalse(player.pictureReady)
+        assertFalse(player.documentCommitted)
+        finishPage()
+        player.poll()
+        shadowOf(web).lastEvaluatedJavascriptCallback.onReceiveValue(decoded(WATCH_B))
+        assertTrue(player.pictureReady)
+        assertSame(web, player.view)
+    }
+
     @Test fun earlierMinimizeCompletionCannotReleaseANewerTransition() {
         player.open(VIDEO_A)
         activity.minimizeWebVideo()

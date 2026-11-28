@@ -62,6 +62,18 @@ test('Explicit selection requests sound once; later user mute survives playing a
   assert.equal(unmuteCalls, 1);
 });
 
+test('Sound request received after playing uses the already running element once', () => {
+  const f = mediaFixture({ready: 4});
+  f.video.paused = false; f.video.muted = true;
+  f.context.weiktubeRequestAudibleStart();
+  f.context.weiktubeSetPlayback(true, true);
+  assert.equal(f.video.muted, false);
+  assert.equal(f.video.playCalls, 0, 'Already playing element gets no duplicate play call');
+  f.video.muted = true;
+  f.dispatch('playing', f.video);
+  assert.equal(f.video.muted, true);
+});
+
 test('Pause cancels pending sound; ordinary resume never unmutes', () => {
   const f = mediaFixture({ ready: 4 });
   f.video.muted = true;

@@ -11,19 +11,21 @@ import java.util.UUID
 internal object PlayerPlaybackObserver {
     private const val BRIDGE = "WeiktubePlaybackState"
     private val origins = setOf("https://m.youtube.com", "https://www.youtube.com", "https://youtube.com", "https://com.weiktube.app")
-    data class State(val playing: Boolean, val width: Int, val height: Int)
+    data class State(val playing: Boolean, val width: Int, val height: Int, val frame: Boolean = false)
 
     internal fun decode(raw: String, token: String): State? {
         if (raw.length > 512 || token.isEmpty()) return null
         return runCatching {
             val data = JSONObject(raw)
-            if (data.length() != 4 || data.opt("token") != token || data.opt("playing") !is Boolean) return null
+            val frame = data.has("frame")
+            if (frame && data.opt("frame") != true) return null
+            if (data.length() != (if (frame) 5 else 4) || data.opt("token") != token || data.opt("playing") !is Boolean) return null
             fun dimension(key: String): Int? {
                 val number = data.opt(key) as? Number ?: return null
                 val value = number.toDouble()
                 return if (value.isFinite() && value in 0.0..16384.0 && value == value.toInt().toDouble()) value.toInt() else null
             }
-            State(data.getBoolean("playing"), dimension("width") ?: return null, dimension("height") ?: return null)
+            State(data.getBoolean("playing"), dimension("width") ?: return null, dimension("height") ?: return null, frame)
         }.getOrNull()
     }
 
@@ -53,8 +55,8 @@ internal object PlayerPlaybackObserver {
         }
 
         /** Installs once per document; also reports current state when document-start is unavailable. */
-        fun apply() { if (!closed && supported && token.isNotEmpty()) web.evaluateJavascript(command(), null) }
-        private fun command() = SCRIPT + ";window.weiktubeObservePlayback&&window.weiktubeObservePlayback(${JSONObject.quote(token)});"
+        fun apply() { if (!closed && supported && token.isNotEmpty()) web.evaluateJavascript(command(refresh = true), null) }
+        private fun command(refresh: Boolean = false) = SCRIPT + ";window.weiktubeObservePlayback&&window.weiktubeObservePlayback(${JSONObject.quote(token)},$refresh);"
 
         fun close() {
             if (closed) return
@@ -68,22 +70,40 @@ internal object PlayerPlaybackObserver {
         (function(){
           if(window.top!==window||!['https://m.youtube.com','https://www.youtube.com','https://youtube.com','https://com.weiktube.app'].includes(location.origin))return;
           if(window.weiktubeObservePlayback)return;
-          var token='',last='';
+          var token='',last='',tracked=null,frame=false,ticket=0;
+          function watchFrame(v){
+            if(!v||!v.videoWidth||!v.videoHeight||v.readyState<2||tracked===v)return;
+            tracked=v;
+            var revision=++ticket;
+            if(typeof v.requestVideoFrameCallback==='function'){
+              v.requestVideoFrameCallback(function(){
+                if(ticket!==revision||document.querySelector('video')!==v)return;
+                frame=true;report();
+              });
+            }
+          }
           function report(){
             if(!token||!window.WeiktubePlaybackState)return;
             var v=document.querySelector('video');
             function size(value){return Number.isInteger(value)&&value>=0&&value<=16384?value:0;}
-            var raw=JSON.stringify({token:token,playing:!!v&&!v.paused&&!v.ended&&v.readyState>0,
-              width:v?size(v.videoWidth):0,height:v?size(v.videoHeight):0});
+            if(tracked!==v){frame=false;tracked=null;}
+            watchFrame(v);
+            var state={token:token,playing:!!v&&!v.paused&&!v.ended&&v.readyState>0,
+              width:v?size(v.videoWidth):0,height:v?size(v.videoHeight):0};
+            if(frame)state.frame=true;
+            var raw=JSON.stringify(state);
             if(raw===last)return;
             try{window.WeiktubePlaybackState.postMessage(raw);last=raw;}catch(ignore){}
           }
-          ['play','playing','pause','ended','loadedmetadata','emptied','resize'].forEach(function(type){
-            document.addEventListener(type,function(e){if(e.target&&e.target.tagName==='VIDEO')report();},true);
+          ['play','playing','pause','ended','loadedmetadata','emptied','loadeddata','resize'].forEach(function(type){
+            document.addEventListener(type,function(e){if(e.target&&e.target.tagName==='VIDEO'){
+                if(type==='emptied'){ticket++;tracked=null;frame=false;}
+                report();
+              }},true);
           });
           document.addEventListener('DOMContentLoaded',report);
           window.addEventListener('resize',report);
-          window.weiktubeObservePlayback=function(next){if(token!==next){token=next;last='';}report();};
+          window.weiktubeObservePlayback=function(next,refresh){if(token!==next){ticket++;tracked=null;frame=false;token=next;last='';}if(refresh)last='';report();};
         })();
     """.trimIndent()
 }

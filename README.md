@@ -1,4 +1,6 @@
-# Weiktube 1.3.25
+# Weiktube 1.3.26
+
+Der Videoplayer richtet die Videofläche früher aus, unterscheidet Dokument und erstes Bild und übernimmt verfügbare Titel früher. Die einmalige Tonfreigabe berücksichtigt bereits laufende Videos.
 
 „Jetzt nach Updates suchen“ steht direkt oben in den Einstellungen. Ist ein Update verfügbar, erscheint darunter der Download- oder Installationsbutton.
 

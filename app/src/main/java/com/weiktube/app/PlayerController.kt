@@ -64,7 +64,41 @@ class PlayerController(
     private var generation = 0L
     // A WebView can outlive several documents. Instance identity alone cannot reject callbacks
     // or JS results belonging to the document replaced by a newer explicit video selection.
-    private var documentCommitted = false
+    internal var documentCommitted by mutableStateOf(false)
+        private set
+    internal var pictureReady by mutableStateOf(false)
+        private set
+    private var selectedAt = 0L
+    private val startupEvents = mutableSetOf<String>()
+    private fun startup(stage: String) {
+        if (selectedAt > 0 && startupEvents.add(stage))
+            android.util.Log.i("WeiktubeStart", "session=$selectedAt stage=$stage elapsedMs=${android.os.SystemClock.elapsedRealtime() - selectedAt}")
+    }
+    private fun beginStartup() {
+        selectedAt = android.os.SystemClock.elapsedRealtime()
+        startupEvents.clear()
+        pictureReady = false
+        startup("selected")
+    }
+    internal fun startupHostLaidOut() = startup("host-laid-out")
+
+    private fun acceptWatchTitle(raw: String?) {
+        val text = raw?.removeSuffix(" - YouTube")?.trim().orEmpty()
+        if (text.isBlank() || text == "YouTube") return
+        title = text.take(300)
+        startup("title")
+        if (title != lastRecordedTitle) {
+            lastRecordedTitle = title
+            source?.let { activity.model.updateHistoryTitle(it, title) }
+        }
+    }
+    private fun cachedTitle(id: String?): String {
+        if (id == null) return "Video"
+        val prefs = activity.model.preferences.value
+        if (!prefs.saveHistory) return "Video"
+        return prefs.history.firstOrNull { it.url == "https://m.youtube.com/watch?v=$id" }
+            ?.title?.takeIf { it.isNotBlank() && !it.startsWith("https://") } ?: "Video"
+    }
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private data class Recovery(val url: String, val seconds: Double, val play: Boolean, val expanded: Boolean)
     private var pendingRecovery: Recovery? = null
@@ -197,6 +231,7 @@ class PlayerController(
     private fun pollDislikes() {
         val enabled = activity.model.preferences.value.player.dislikes
         val id = if (enabled && isYoutube) source?.let(Links::videoId) else null
+        if (id == null && dislikeId == null) return
         if (id != dislikeId || dislikeEpoch != generation) {
             dislikeJob?.cancel(); dislikeId = id; dislikeLabel = null; dislikeEpoch = generation
             dislikeStatus = if (id == null) "Ausgeschaltet" else "Daten werden abgefragt"
@@ -263,6 +298,10 @@ class PlayerController(
         // The browser view survives video changes. A callback object belongs to one selection.
         val callbacks = object : WebChromeClient() {
             private fun current() = alive(web) && web.webChromeClient === this && source != null
+            override fun onReceivedTitle(view: WebView, value: String?) {
+                if (view !== web || !current() || !documentCommitted || !selectedDocument(web.url)) return
+                if (isYoutube && value == web.title) acceptWatchTitle(value)
+            }
             override fun onShowCustomView(surface: android.view.View, callback: CustomViewCallback) {
                 if (current()) activity.showFullscreen(surface, callback, web)
                 else runCatching { callback.onCustomViewHidden() }
@@ -304,9 +343,18 @@ class PlayerController(
         diagnosticHooks[this] = PlayerPlaybackDiagnostics.install(this)
         playbackHooks[this] = PlayerPlaybackObserver.install(this) { state ->
             if (alive(playerWeb) && source != null && documentCommitted) {
+                if (state.width > 0 && state.height > 0) startup("media")
+                if (state.frame && state.width > 0 && state.height > 0 && !pictureReady) {
+                    pictureReady = true
+                    startup("frame-submitted")
+                }
                 playbackObservationRevision++
                 playing = state.playing && playbackAllowed && activity.playerMayRun &&
                     (!isYoutube || adHooks[playerWeb]?.canPlay == true)
+                if (playing) {
+                    explicitStartRequested = false
+                    startup("playing")
+                }
                 videoWidth = state.width; videoHeight = state.height
                 activity.syncPipState()
             }
@@ -314,6 +362,7 @@ class PlayerController(
         val ads = WebViewAdBlock(this,
             onReady = {
                 if (alive(playerWeb) && source != null && isYoutube) {
+                    startup("filter-ready")
                     applyPlayback(explicitStartRequested)
                     if (!loading && documentCommitted) explicitStartRequested = false
                     activity.syncPipState()
@@ -325,7 +374,7 @@ class PlayerController(
             } })
         adHooks[this] = ads
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(this, MEDIA_GUARD + WATCH_CHROME, setOf("https://m.youtube.com", "https://www.youtube.com", "https://youtube.com"))
+            WebViewCompat.addDocumentStartJavaScript(this, MEDIA_GUARD, setOf("https://m.youtube.com", "https://www.youtube.com", "https://youtube.com"))
         }
         navigationHooks[this] = WatchNavigationScript.install(this, toggleFullscreen = { id ->
             if (alive(playerWeb) && documentCommitted && source?.let(Links::videoId) == id)
@@ -353,11 +402,13 @@ class PlayerController(
                 return false
             }
             override fun onPageStarted(web: WebView, url: String, favicon: Bitmap?) {
-                if (alive(web)) { zoomScriptInstalled = false; zoomRevision++; pendingZoom = null; web.removeCallbacks(zoomFrame) }
                 if (!acceptsDocument(web, url)) return
+                zoomScriptInstalled = false; zoomRevision++; pendingZoom = null; web.removeCallbacks(zoomFrame)
                 sponsorBlock.reset()
                 generation++; playbackObservationRevision++
                 documentCommitted = false
+                pictureReady = false
+                startup("navigation")
                 ads.pageStarted(url)
                 loading = true; error = null
                 trace(PlayerDiagnostics.Event.NAVIGATION_STARTED)
@@ -365,6 +416,10 @@ class PlayerController(
             override fun onPageCommitVisible(web: WebView, url: String) {
                 if (!acceptsDocument(web, url)) return
                 documentCommitted = true
+                startup("commit")
+                if (isYoutube && selectedDocument(web.url)) acceptWatchTitle(web.title)
+                applyPresentation()
+                playbackHooks[web]?.apply()
                 trace(PlayerDiagnostics.Event.DOCUMENT_COMMITTED)
                 applyPlayback(explicitStartRequested)
                 if (!loading && lastPlaybackGate == true) explicitStartRequested = false
@@ -443,7 +498,20 @@ class PlayerController(
         }
     }
 
+    private var watchStyleScript: androidx.webkit.ScriptHandler? = null
+    private fun prepareWatchStyle() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+        watchStyleScript?.remove()
+        val pip = activity.pip
+        val landscape = activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val initial = "window.weiktubeInitialWatchMode=[false,$dark,${landscape || pip},$pip];"
+        watchStyleScript = WebViewCompat.addDocumentStartJavaScript(view, initial + WATCH_CHROME,
+            setOf("https://m.youtube.com", "https://www.youtube.com", "https://youtube.com"))
+    }
+
     private fun disposeView(web: WebView, force: Boolean = false) {
+        watchStyleScript?.remove()
+        watchStyleScript = null
         sponsorBlock.retire(web)
         web.removeCallbacks(zoomFrame)
         pendingZoom = null; zoomScriptInstalled = false; zoomRevision++
@@ -551,7 +619,13 @@ class PlayerController(
             sponsorBlock.reset()
             holdGesture(false); supportedHoldRates = emptyList(); supportedQualities = emptyList()
             saveProgress(); progressSampleValid = false; awaitingResumePosition = null
-            generation++; position = 0.0; duration = 0.0; title = "Video"; lastRecordedTitle = ""
+            beginStartup()
+            resumedAt = 0.0
+            invalidateGeometry()
+            clearVideoZoom()
+            playbackHooks[view]?.prepare()
+            playbackHooks[view]?.apply()
+            generation++; position = 0.0; duration = 0.0; title = cachedTitle(id); lastRecordedTitle = ""
             videoWidth = 0; videoHeight = 0
             adRecoveryVideo = id; adRecoveryAttempts = 0
         }
@@ -613,7 +687,8 @@ class PlayerController(
         position = (startAt ?: remembered ?: Links.startSeconds(url).toDouble()).takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
         resumedAt = remembered ?: 0.0
         awaitingResumePosition = position.takeIf { it > 0 }
-        duration = 0.0; playing = false; loading = true; title = "Video"; lastRecordedTitle = ""
+        beginStartup()
+        duration = 0.0; playing = false; loading = true; title = cachedTitle(id); lastRecordedTitle = ""
         videoWidth = 0; videoHeight = 0
         playbackHooks[view]?.prepare()
         diagnosticHooks[view]?.prepare()
@@ -622,6 +697,7 @@ class PlayerController(
         if (id != null) {
             val watchUrl = "https://m.youtube.com/watch?v=$id&t=${position.toInt()}"
             if (adHooks[view]?.prepare(watchUrl) != true) { loading = false; return }
+            prepareWatchStyle()
             view.loadUrl(watchUrl)
         }
         else {
@@ -671,10 +747,10 @@ class PlayerController(
             (function(){var v=document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');
               var r=v&&v.getBoundingClientRect();
               var slot=r&&innerWidth>0&&innerHeight>0?[r.left/innerWidth,r.top/innerHeight,r.right/innerWidth,r.bottom/innerHeight]:null;
-              return JSON.stringify({slot:slot,viewportAspect:innerWidth/innerHeight,mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
+              return JSON.stringify({slot:slot,viewportAspect:innerWidth/innerHeight,decodedFallback:!!v&&(typeof v.requestVideoFrameCallback!=='function'||v.paused||!window.WeiktubePlaybackState),mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
               playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,
               duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,
-              title:h?h.textContent:(document.title||''),url:location.href});})()
+              details:!!h&&!!document.querySelector('ytm-slim-owner-renderer,ytm-video-owner-renderer,.slim-owner-icon-and-title'),title:h?h.textContent:(document.title||''),url:location.href});})()
         """.trimIndent()) { raw ->
             if (requestGeneration != generation || !alive(polledView) || source == null) return@evaluateJavascript
             runCatching {
@@ -690,11 +766,18 @@ class PlayerController(
                     else trace(PlayerDiagnostics.Event.STALE_DOCUMENT_IGNORED)
                     return@runCatching
                 }
+                acceptWatchTitle(value.optString("title"))
+                if (value.optBoolean("details")) startup("watch-details")
                 // A temporary empty DOM during SPA updates is not an invalid renderer and must
                 // not replace the last valid content timestamp with the script's default zero.
                 if (!value.optBoolean("hasVideo")) return@runCatching
                 val nativeAspect = polledView.width.toDouble() / polledView.height
                 val cssAspect = value.optDouble("viewportAspect", Double.NaN)
+                if (!pictureReady && value.optBoolean("decodedFallback") && value.optInt("mediaReady") >= 2 &&
+                    value.optInt("width") > 0 && value.optInt("height") > 0) {
+                    pictureReady = true
+                    startup("decoded-frame-fallback")
+                }
                 if (sampledEpoch == geometryEpoch && nativeAspect.isFinite() && nativeAspect > 0 &&
                     kotlin.math.abs(cssAspect / nativeAspect - 1) < 0.03 &&
                     sampleSlot && expanded && !mini && !systemPip &&
@@ -704,6 +787,7 @@ class PlayerController(
                         if (edges.all { it.isFinite() && it in 0f..1.001f } && edges[2] > edges[0] && edges[3] > edges[1]) {
                             sampledLandscape = landscapeAtRequest
                             watchSlot = android.graphics.RectF(edges[0], edges[1], edges[2], edges[3])
+                            startup("geometry")
                         }
                     }
                 }
@@ -728,8 +812,6 @@ class PlayerController(
                         } else if (progressSampleValid) source?.let { activity.model.progress.save(it, position, duration) }
                     }
                 }
-                value.optString("title").removeSuffix(" - YouTube").trim().takeIf { it.isNotBlank() && it != "YouTube" }?.let { title = it.take(300) }
-                if (title != "Video" && title != lastRecordedTitle) { lastRecordedTitle = title; source?.let { activity.model.updateHistoryTitle(it, title) } }
             }
         }
     }
@@ -761,6 +843,7 @@ class PlayerController(
         val allowed = documentCommitted && playbackAllowed && activity.playerMayRun &&
             (!isYoutube || adHooks[view]?.canPlay == true)
         if (lastPlaybackGate != allowed) {
+            if (allowed) startup("playback-authorized")
             lastPlaybackGate = allowed
             trace(if (allowed) PlayerDiagnostics.Event.GATE_ALLOWED else when {
                 !activity.playerMayRun -> PlayerDiagnostics.Event.GATE_HOST_BLOCKED
@@ -884,26 +967,37 @@ class PlayerController(
         internal val MEDIA_GUARD = """
             (function(){
               if(window.weiktubeSetPlayback)return;
-              var allowed=false,pending=false,audible=false;
+              var allowed=false,pending=false,audible=false,starting=null;
               // One explicit selection may request sound. Never reassert mute/volume on
               // presentation changes, resume, or subsequent user mute/pause operations.
               window.weiktubeRequestAudibleStart=function(){audible=true;};
-              document.addEventListener('playing',function(e){
-                var v=e.target;if(!allowed||!audible||!v||v.tagName!=='VIDEO')return;
+              function applySound(v){
+                if(!allowed||!audible||!v||v.tagName!=='VIDEO')return;
                 audible=false;
                 var p=document.getElementById&&document.getElementById('movie_player');
                 if(p&&typeof p.unMute==='function')p.unMute();
                 v.muted=false;
-              },true);
+              }
+              document.addEventListener('playing',function(e){applySound(e.target);},true);
               function pause(m){if(window.weiktubePlaybackScope)window.weiktubePlaybackScope('APP_GUARD',function(){m.pause();});else m.pause();}
-              function start(v){if(allowed&&pending&&v){pending=false;v.play().catch(function(){});}}
+              function start(v){
+                if(!allowed||!pending||!v)return;
+                pending=false;
+                if(starting===v||(v.paused===false&&!v.ended))return;
+                starting=v;
+                function settled(){if(starting===v)starting=null;}
+                v.play().then(settled,settled);
+              }
               document.addEventListener('play',function(e){if(!allowed&&e.target&&e.target.pause)pause(e.target);},true);
               document.addEventListener('loadedmetadata',function(e){if(e.target&&e.target.tagName==='VIDEO')start(e.target);},true);
               window.weiktubeSetPlayback=function(next,requestStart){
-                allowed=next;if(!allowed){pending=false;audible=false;}else if(requestStart)pending=true;
+                allowed=next;if(!allowed){pending=false;audible=false;starting=null;}else if(requestStart)pending=true;
                 var v=document.querySelector('video');
                 if(!allowed)document.querySelectorAll('video,audio').forEach(pause);
-                else if(v&&v.readyState>0)start(v);
+                else if(v&&v.readyState>0){
+                  if(requestStart&&v.paused===false&&!v.ended&&v.readyState>=2)applySound(v);
+                  start(v);
+                }
               };
             })();
         """.trimIndent()
@@ -957,7 +1051,19 @@ class PlayerController(
                 }
                 if(!isolated&&wasIsolated)window.scrollTo(0,savedScroll);wasIsolated=isolated;
               };
-              window.weiktubeWatchPresentation(false,true,false);
+              function initialPresentation(){
+                var mode=window.weiktubeInitialWatchMode||[false,true,false,false];
+                window.weiktubeWatchPresentation(mode[0],mode[1],mode[2],mode[3]);
+              }
+              if(document.documentElement)initialPresentation();
+              else {
+                var rootObserver=new MutationObserver(function(){
+                  if(!document.documentElement)return;
+                  rootObserver.disconnect();
+                  if(!document.getElementById('weiktube-watch-style'))initialPresentation();
+                });
+                rootObserver.observe(document,{childList:true});
+              }
             })();
         """.trimIndent()
     }

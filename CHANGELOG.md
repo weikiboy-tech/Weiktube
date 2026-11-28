@@ -1,3 +1,7 @@
+# 1.3.26 – Start normaler Videos
+
+Der Videoplayer richtet die Videofläche früher aus, unterscheidet Dokument und erstes Bild und übernimmt verfügbare Titel früher. Die einmalige Tonfreigabe berücksichtigt bereits laufende Videos. [Messungen und Gerätetest](RELEASE-1.3.26.md)
+
 # 1.3.25 – App-Update oben in den Einstellungen
 
 „Jetzt nach Updates suchen“ steht direkt oben in den Einstellungen. Ist ein Update verfügbar, erscheint darunter der Download- oder Installationsbutton.

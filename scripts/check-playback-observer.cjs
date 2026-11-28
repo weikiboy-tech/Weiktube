@@ -90,4 +90,16 @@ test('Missing bridge and malformed dimensions never create playback or leak othe
   f.video.videoWidth = 16385; f.video.videoHeight = 3.5; f.emit('resize');
   assert.equal(f.messages.length, 1);
 });
+test('Only the selected document and current video can confirm a submitted frame', () => {
+  const f = fixture();
+  const callbacks = [];
+  f.video.requestVideoFrameCallback = cb => callbacks.push(cb);
+  f.start('first'); f.start('second');
+  callbacks[0](); assert.equal(f.latest().frame, undefined);
+  callbacks[1](); assert.equal(f.latest().frame, true);
+  f.replace({...f.video}); f.emit('loadeddata');
+  assert.equal(f.latest().frame, undefined);
+  callbacks[2](); assert.equal(f.latest().frame, true);
+});
+
 console.log(`PASS ${passed} playback observer script fixtures. Native bridge/parser and real Android behavior require their separate tests.`);

@@ -240,42 +240,69 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
             val normalViewportHeight = with(density) {
                 (availableHeight - if (landscapeVideo) 0.dp else 44.dp).coerceAtLeast(1.dp).roundToPx()
             }
-            var dragPixels by remember { mutableFloatStateOf(0f) }
-            val dragVisual by animateFloatAsState(dragPixels, tween(if (dragPixels > 0f) 0 else 120), label = "playerDrag")
+            var dragPixels by remember(p.source) { mutableFloatStateOf(0f) }
+            val dragVisual by key(p.source) { animateFloatAsState(dragPixels, tween(if (dragPixels > 0f) 0 else 120), label = "playerDrag") }
             LaunchedEffect(full, p.source, a.pip) { dragPixels = 0f }
             val shape = RoundedCornerShape(if (a.pip) 0.dp else corner)
             // PiP uses the retained view immediately, without a compact-card animation frame.
             
             Box(Modifier.align(Alignment.BottomEnd).padding(end = endInset, bottom = bottomInset)
                 .width(if (a.pip) maxWidth else playerWidth).height(if (a.pip) availableHeight else playerHeight)
-                .onGloballyPositioned { playerBounds = it.boundsInWindow() }
+                .onGloballyPositioned {
+                    playerBounds = it.boundsInWindow()
+                    if (hasPlayer && playerVisible && it.size.width > 0 && it.size.height > 0) p.startupHostLaidOut()
+                }
                 .graphicsLayer { translationY = if (!a.pip) dragVisual * (1f - compactFraction) else 0f }
                 .shadow(if (mini) 8.dp else 0.dp, shape).clip(shape).background(Color.Black)) {
                 Column(Modifier.fillMaxSize()) {
                     key(p.view) {
-                        AndroidView(factory = { context -> PlayerGestureLayout(context).also { it.attach(p.view) } },
-                            modifier = Modifier.fillMaxWidth().weight(1f).clipToBounds(), update = {
-                                it.visibility = if (playerVisible) android.view.View.VISIBLE else android.view.View.INVISIBLE
-                                // PiP has no in-window system bars. Clear old phone/cutout insets there too.
-                                it.setSystemInsetsHandledByHost(!landscapeVideo)
-                                it.setViewportPresentation(retainViewport, p.source, p.videoWidth, p.videoHeight,
-                                    normalViewportWidth, normalViewportHeight)
-                                it.configure(enabled = full && portrait && !a.fullscreen && !a.pip,
-                                    youtube = p.isYoutube, onDrag = { distance -> dragPixels = distance },
-                                    onMinimize = a::minimizeWebVideo)
-                                it.configureZoom(full && !expandingPlayer && !a.pip && playerVisible,
-                                    landscapeVideo, "${p.source}:${p.zoomRevision}", p::setVideoZoom)
-                                it.configureAdvanced(landscapeVideo && full && !expandingPlayer && !a.pip && playerVisible,
-                                    "${p.source}:${p.zoomRevision}", p, prefs.player)
-                                p.setPresentation(mini || expandingPlayer, dark, landscapeVideo || a.pip, systemPip = a.pip)
-                            })
+                        Box(Modifier.fillMaxWidth().weight(1f)) {
+                            AndroidView(factory = { context -> PlayerGestureLayout(context).also { it.attach(p.view) } },
+                                modifier = Modifier.fillMaxSize().clipToBounds(), update = {
+                                    it.visibility = if (playerVisible) android.view.View.VISIBLE else android.view.View.INVISIBLE
+                                    // PiP has no in-window system bars. Clear old phone/cutout insets there too.
+                                    it.setSystemInsetsHandledByHost(!landscapeVideo)
+                                    it.setViewportPresentation(retainViewport, p.source, p.videoWidth, p.videoHeight,
+                                        normalViewportWidth, normalViewportHeight)
+                                    it.configure(enabled = full && portrait && !a.fullscreen && !a.pip,
+                                        youtube = p.isYoutube, onDrag = { distance -> dragPixels = distance },
+                                        onMinimize = a::minimizeWebVideo)
+                                    it.configureZoom(full && !expandingPlayer && !a.pip && playerVisible,
+                                        landscapeVideo, "${p.source}:${p.zoomRevision}", p::setVideoZoom)
+                                    it.configureAdvanced(landscapeVideo && full && !expandingPlayer && !a.pip && playerVisible,
+                                        "${p.source}:${p.zoomRevision}", p, prefs.player)
+                                    p.setPresentation(mini || expandingPlayer, dark, landscapeVideo || a.pip, systemPip = a.pip)
+                                })
+                            if (full && !movingCard && !a.pip && p.isYoutube && p.error == null) {
+                                if (!p.documentCommitted && p.loading) {
+                                    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                                        Box(Modifier.fillMaxWidth().then(if (landscapeVideo) Modifier.fillMaxHeight()
+                                            else Modifier.aspectRatio(16f / 9f)).background(Color.Black),
+                                            contentAlignment = Alignment.Center) {
+                                            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                                        }
+                                        if (!landscapeVideo) Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Spacer(Modifier.fillMaxWidth(.72f).height(16.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)))
+                                            Spacer(Modifier.fillMaxWidth(.4f).height(12.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)))
+                                        }
+                                    }
+                                } else if (p.documentCommitted && !p.pictureReady) {
+                                    LinearProgressIndicator(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp))
+                                }
+                            }
+                            if (full && !movingCard && !a.pip && !landscapeVideo && p.resumedAt > 0) {
+                                Surface(Modifier.align(Alignment.BottomStart).padding(8.dp), shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainer) {
+                                    Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("An letzter Stelle fortgesetzt", style = MaterialTheme.typography.labelSmall)
+                                        TextButton(onClick = p::restartFromBeginning) { Text("Von vorne") }
+                                    }
+                                }
+                            }
+                        }
                     }
                     if (hasPlayer && full && !movingCard && !a.pip && !landscapeVideo) {
-                        if (p.loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
-                        if (p.resumedAt > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("An letzter Stelle fortgesetzt", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
-                            TextButton(onClick = p::restartFromBeginning) { Text("Von vorne") }
-                        }
+                        if (!p.isYoutube && p.loading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
                         p.error?.let { error ->
                             Surface(color = MaterialTheme.colorScheme.errorContainer) {
                                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -293,7 +320,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                     }) { change, dy -> change.consume(); drag += dy }
                                 }, verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(onClick = a::minimizeWebVideo) { Icon(Icons.Rounded.ExpandMore, "Video minimieren") }
-                                Text(p.title, Modifier.weight(1f).clickable(onClick = a::minimizeWebVideo), maxLines = 1,
+                                Text(if (p.isYoutube && p.title == "Video" && !p.pictureReady) "Video wird geladen …" else if (p.isYoutube && p.title == "Video") "Titel wird geladen …" else p.title, Modifier.weight(1f).clickable(onClick = a::minimizeWebVideo), maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
                                 if (p.isYoutube) IconButton(onClick = { p.pauseFor(PlayerDiagnostics.PauseReason.ACCOUNT_ACTION); actions = true }) { Icon(Icons.Rounded.AccountCircle, "Gefällt mir, Abos und Kommentare mit deinem Konto") }
                                 IconButton(onClick = a::share) { Icon(Icons.Rounded.Share, "Video teilen") }

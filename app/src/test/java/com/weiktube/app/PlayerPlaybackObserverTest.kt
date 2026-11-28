@@ -8,6 +8,13 @@ class PlayerPlaybackObserverTest {
     private fun payload(playing: String = "true", width: String = "1920", height: String = "1080") =
         """{"token":"$token","playing":$playing,"width":$width,"height":$height}"""
 
+    @Test fun frameNotificationIsTypedAndBoundToTheSelectedDocument() {
+        val frame = payload().dropLast(1) + ""","frame":true}"""
+        assertEquals(true, PlayerPlaybackObserver.decode(frame, token)?.frame)
+        assertNull(PlayerPlaybackObserver.decode(frame, "old"))
+        assertNull(PlayerPlaybackObserver.decode(frame.replace("true}", "1}"), token))
+    }
+
     @Test fun acceptsOnlyBoundedTypedPlaybackState() {
         assertEquals(PlayerPlaybackObserver.State(true, 1920, 1080), PlayerPlaybackObserver.decode(payload(), token))
         assertEquals(PlayerPlaybackObserver.State(false, 0, 16384), PlayerPlaybackObserver.decode(payload("false", "0", "16384"), token))

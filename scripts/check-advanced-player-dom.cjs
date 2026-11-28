@@ -16,6 +16,18 @@ await page.locator('#dislike').click();assert.equal(await page.evaluate(()=>clic
 assert.equal(await page.locator('#weiktube-ryd-count').innerText(),'1.234');
 for(let i=0;i<10;i++)await page.evaluate(()=>weiktubeDislikes('abcdefghijk','1.234'));
 assert.equal(await page.locator('#weiktube-ryd-count').count(),1);
+await page.setViewportSize({width:320,height:640});
+const fits = await page.evaluate(() => {
+  const bar=document.querySelector('ytm-slim-video-action-bar-renderer');
+  bar.style.cssText='display:flex;width:320px';
+  for (const label of ['Like','Teilen','Speichern']) {
+    const button=document.createElement('button');button.textContent=label;bar.append(button);
+  }
+  weiktubeDislikes('abcdefghijk','12.345.678');
+  return bar.scrollWidth<=bar.clientWidth &&
+    document.querySelector('#weiktube-ryd-count').getAttribute('aria-label').includes('12.345.678');
+});
+assert(fits, 'Narrow action bar fits with a long estimated dislike count');
 console.log('PASS dislike label idempotent and original vote button remains clickable');
 await page.evaluate(()=>{history.pushState({},'', '/watch?v=zzzzzzzzzzz');weiktubeDislikes('zzzzzzzzzzz',null)});
 assert.equal(await page.evaluate(()=>weiktubeDislikes('abcdefghijk','999')),false);
