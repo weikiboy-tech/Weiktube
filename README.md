@@ -1,4 +1,6 @@
-# Weiktube 1.3.27
+# Weiktube 1.3.28
+
+Im Hochformat wird auch der äußere Player-Container an die Videofläche angepasst. Beim ersten Bild prüft Weiktube die Videodetails separat. Ein langsamer Start blendet das Cover nicht mehr pauschal nach vier Sekunden aus.
 
 Beim Videostart zeigt Weiktube das Vorschaubild des gewählten Videos. Eine verlorene Filter-Bereitmeldung wird bereits beim Dokument-Commit erneut angefordert. Bei längerem Warten lässt sich der Player manuell erneut laden.
 

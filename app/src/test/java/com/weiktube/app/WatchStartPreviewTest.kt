@@ -37,7 +37,7 @@ class WatchStartPreviewTest {
         compose.onNodeWithText("Video wird geladen").assertExists()
         compose.mainClock.advanceTimeBy(4100)
         compose.waitForIdle()
-        compose.onNodeWithText("Video wird geladen").assertDoesNotExist()
+        compose.onNodeWithText("Video wird geladen").assertExists()
         compose.mainClock.advanceTimeBy(6100)
         compose.waitForIdle()
         compose.onNodeWithText("Erneut laden").performClick()

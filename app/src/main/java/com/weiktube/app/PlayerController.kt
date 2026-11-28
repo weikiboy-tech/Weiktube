@@ -33,6 +33,7 @@ class PlayerController(
         private set
     internal fun invalidateGeometry() {
         geometryEpoch++
+        emptyDetailsTop = null
         watchSlot = null
     }
     private var sampledLandscape = false
@@ -70,6 +71,15 @@ class PlayerController(
         private set
     internal var startupSequence by mutableLongStateOf(0L)
         private set
+    // Present only while the selected watch page has a verified empty region below its player.
+    internal var emptyDetailsTop by mutableStateOf<Float?>(null)
+        private set
+    internal var webNeedsInput by mutableStateOf(false)
+        private set
+    internal var watchAuthor by mutableStateOf("")
+        private set
+    internal var watchDescription by mutableStateOf("")
+        private set
     private var selectedAt = 0L
     private val startupEvents = mutableSetOf<String>()
     private fun startup(stage: String) {
@@ -80,7 +90,11 @@ class PlayerController(
         startupSequence++
         selectedAt = android.os.SystemClock.elapsedRealtime()
         startupEvents.clear()
+        webNeedsInput = false
         pictureReady = false
+        emptyDetailsTop = null
+        watchAuthor = ""
+        watchDescription = ""
         startup("selected")
     }
     internal fun startupHostLaidOut() = startup("host-laid-out")
@@ -413,6 +427,8 @@ class PlayerController(
                 pictureReady = false
                 startup("navigation")
                 ads.pageStarted(url)
+                emptyDetailsTop = null
+                webNeedsInput = false
                 loading = true; error = null
                 trace(PlayerDiagnostics.Event.NAVIGATION_STARTED)
             }
@@ -721,6 +737,7 @@ class PlayerController(
         if (mini != minimized || this.videoOnly != videoOnly || this.systemPip != systemPip) {
             // Freeze the last good expanded slot for the compact animation, reject its pending reads.
             geometryEpoch++
+            emptyDetailsTop = null
             holdGesture(false)
             clearVideoZoom()
         }
@@ -749,10 +766,27 @@ class PlayerController(
         val requestGeneration = generation
         val observationRevision = playbackObservationRevision
         view.evaluateJavascript("""
-            (function(){var v=document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');
+            (function(){var v=document.querySelector('#player-container-id video')||document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');
               var r=v&&v.getBoundingClientRect();
               var slot=r&&innerWidth>0&&innerHeight>0?[r.left/innerWidth,r.top/innerHeight,r.right/innerWidth,r.bottom/innerHeight]:null;
-              return JSON.stringify({slot:slot,viewportAspect:innerWidth/innerHeight,decodedFallback:!!v&&(typeof v.requestVideoFrameCallback!=='function'||v.paused||!window.WeiktubePlaybackState),mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
+              var blank=window.weiktubeEmptyWatchSpace&&window.weiktubeEmptyWatchSpace(v);
+              var player=document.getElementById('movie_player'),data;
+              if(blank!=null&&player&&typeof player.getVideoData==='function'){
+                try{data=player.getVideoData();}catch(ignore){}
+              }
+              var selectedId=new URL(location.href).searchParams.get('v');
+              var metadata=blank!=null&&window.ytInitialPlayerResponse&&window.ytInitialPlayerResponse.videoDetails;
+              if(!metadata||!selectedId||metadata.videoId!==selectedId)metadata=null;
+              var matched=selectedId&&data&&data.video_id===selectedId;
+              var input=!$pictureReady&&Array.from(document.querySelectorAll('dialog[open],[role="dialog"],[role="alert"],.ytp-error,.ytp-large-play-button,ytm-player-error-message-renderer')).some(function(el){
+                var box=el.getBoundingClientRect(),css=getComputedStyle(el);
+                if(!box.width||!box.height||box.top>=innerHeight||box.bottom<=0||css.visibility==='hidden'||Number(css.opacity)===0)return false;
+                var hit=document.elementFromPoint(Math.max(0,Math.min(innerWidth-1,box.left+box.width/2)),Math.max(0,Math.min(innerHeight-1,box.top+box.height/2)));
+                return !!hit&&el.contains(hit);
+              });
+              return JSON.stringify({needsInput:input,detailsTop:blank,author:String((matched&&data.author)||(metadata&&metadata.author)||'').slice(0,160),
+                description:metadata?String(metadata.shortDescription||'').slice(0,400):'',
+                mediaTitle:String((matched&&data.title)||(metadata&&metadata.title)||'').slice(0,300),slot:slot,viewportAspect:innerWidth/innerHeight,decodedFallback:!!v&&(typeof v.requestVideoFrameCallback!=='function'||v.paused||!window.WeiktubePlaybackState),mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
               playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,
               duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,
               details:!!h&&!!document.querySelector('ytm-slim-owner-renderer,ytm-video-owner-renderer,.slim-owner-icon-and-title'),title:h?h.textContent:(document.title||''),url:location.href});})()
@@ -771,7 +805,14 @@ class PlayerController(
                     else trace(PlayerDiagnostics.Event.STALE_DOCUMENT_IGNORED)
                     return@runCatching
                 }
-                acceptWatchTitle(value.optString("title"))
+                webNeedsInput = value.optBoolean("needsInput")
+                val detailsTop = value.optDouble("detailsTop", Double.NaN)
+                if (sampledEpoch == geometryEpoch && sampleSlot && expanded && !mini && !systemPip) {
+                    emptyDetailsTop = detailsTop.takeIf { it.isFinite() && it in 0.05..0.85 }?.toFloat()
+                    watchAuthor = value.optString("author").take(160)
+                    watchDescription = value.optString("description").trim().take(400)
+                }
+                acceptWatchTitle(value.optString("mediaTitle").ifBlank { value.optString("title") })
                 if (value.optBoolean("details")) startup("watch-details")
                 // A temporary empty DOM during SPA updates is not an invalid renderer and must
                 // not replace the last valid content timestamp with the script's default zero.
@@ -1035,6 +1076,9 @@ class PlayerController(
                     'html[data-weiktube-fullscreen="1"] :is(button,[role=button]):is(.ytp-fullscreen-button,.fullscreen-icon,.fullscreen-button,:has(.fullscreen-icon),[aria-label*="fullscreen" i],[aria-label*="vollbild" i],[aria-label*="plein écran" i]){background-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27none%27 stroke=%27white%27 stroke-width=%272%27 d=%27M3 8h5V3m8 0v5h5M3 16h5v5m8 0v-5h5%27/%3E%3C/svg%3E")!important;background-position:center!important;background-size:24px!important;background-repeat:no-repeat!important}'+
                     'ytm-app{padding-top:0!important;padding-bottom:0!important}'+
                     '#player-container-id{top:0!important}'+
+                    // A fixed/sticky outer wrapper can retain a fullscreen height even when its video is small.
+                    'html[data-weiktube-video-only="0"] #player-container-id,html[data-weiktube-video-only="0"] #player-container-id #player{height:var(--weiktube-watch-height)!important;max-height:var(--weiktube-watch-height)!important;box-sizing:border-box!important;padding-block:0!important}'+
+                    'html[data-weiktube-video-only="0"] #player-container-id :is(#player,#movie_player,.html5-video-container){top:0!important;left:0!important}'+
                     '.player-container .player-size,ytm-watch .player-size{height:var(--weiktube-watch-height)!important;max-height:none!important;padding-bottom:0!important;aspect-ratio:auto!important}'+
                     // YouTube can retain inline centering offsets from the previous viewport.
                     // Normalize only the retained player's media box, including the portrait return.
@@ -1055,6 +1099,32 @@ class PlayerController(
                   (document.head||root).appendChild(style);
                 }
                 if(!isolated&&wasIsolated)window.scrollTo(0,savedScroll);wasIsolated=isolated;
+              };
+              window.weiktubeEmptyWatchSpace=function(v){
+                var container=(v&&v.closest('#player-container-id,ytm-player,.player-container'))||document.getElementById('player-container-id')||(v&&v.closest('#movie_player'));
+                if(videoOnlyMode||!container||(v&&!container.contains(v))||location.pathname!=='/watch'||window.scrollY>4)return null;
+                var r=container.getBoundingClientRect(),w=innerWidth,h=innerHeight;
+                if(w<1||h<1||r.bottom<=0||r.width<w*.6||h-r.bottom<100)return null;
+                var content='button,a[href],input,iframe,canvas,img,svg,[role="button"],[role="dialog"],[role="alert"],ytm-slim-video-metadata-section-renderer,ytm-video-owner-renderer,.ytVideoMetadataViewModelTitle';
+                var end=Math.min(h,r.bottom+180);
+                var occupied=document.querySelectorAll('dialog[open],[role="dialog"],[role="alert"],ytm-slim-video-metadata-section-renderer,.ytVideoMetadataViewModelTitle,ytm-video-owner-renderer,h1');
+                for(var item of occupied){
+                  var box=item.getBoundingClientRect();
+                  if(box.width>0&&box.height>0&&box.right>0&&box.left<w&&box.top<end&&box.bottom>r.bottom&&getComputedStyle(item).visibility!=='hidden')return null;
+                }
+                // Check only where the native summary would be drawn. Leave other pages, visible
+                // controls, consent prompts and unfamiliar text layouts entirely interactive.
+                for(var dy of [8,28,54,82,112,150]){
+                  for(var x of [.06,.28,.55,.85]){
+                    var y=r.bottom+dy;if(y>=h)return null;
+                    var el=document.elementFromPoint(w*x,y);
+                    if(!el||el.closest(content))return null;
+                    for(var node of el.childNodes){
+                      if(node.nodeType===3&&node.textContent.trim())return null;
+                    }
+                  }
+                }
+                return r.bottom/h;
               };
               function initialPresentation(){
                 var mode=window.weiktubeInitialWatchMode||[false,true,false,false];

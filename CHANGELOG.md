@@ -1,3 +1,7 @@
+# 1.3.28 – Videoseite nach dem ersten Bild
+
+Im Hochformat wird auch der äußere Player-Container an die Videofläche angepasst. Beim ersten Bild prüft Weiktube die Videodetails separat. Ein langsamer Start blendet das Cover nicht mehr pauschal nach vier Sekunden aus. [Release und Testumfang](RELEASE-1.3.28.md)
+
 # 1.3.27 – Vorschau und frühere Startfreigabe
 
 Beim Videostart zeigt Weiktube das Vorschaubild des gewählten Videos. Eine verlorene Filter-Bereitmeldung wird bereits beim Dokument-Commit erneut angefordert. Bei längerem Warten lässt sich der Player manuell erneut laden. [Release und Testumfang](RELEASE-1.3.27.md)

@@ -276,8 +276,25 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                             if (full && !movingCard && !a.pip && p.isYoutube && p.error == null) {
                                 key(p.source, p.startupSequence) {
                                     val videoId = remember(p.source) { p.source?.let(Links::videoId) }
-                                    if (videoId != null && !p.pictureReady && (p.loading || p.documentCommitted)) {
+                                    if (videoId != null && !p.webNeedsInput && !p.pictureReady && (p.loading || p.documentCommitted)) {
                                         WatchStartPreview(videoId, p.title, p.documentCommitted, landscapeVideo, p::retry)
+                                    }
+                                }
+                            }
+                            if (full && !movingCard && !a.pip && !landscapeVideo && p.isYoutube && p.error == null) {
+                                p.emptyDetailsTop?.let { top ->
+                                    // Match the actual media bottom, including videos wider or taller than 16:9.
+                                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                                        Column(Modifier.offset(y = maxHeight * top).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                            if (p.title != "Video") Text(p.title, maxLines = 2,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.titleMedium)
+                                            if (p.watchAuthor.isNotBlank()) Text(p.watchAuthor, style = MaterialTheme.typography.bodySmall)
+                                            if (p.watchDescription.isNotBlank()) Text(p.watchDescription, maxLines = 2,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.bodySmall)
+                                            WatchDetailsStatus(p.startupSequence, p::retry)
+                                        }
                                     }
                                 }
                             }
@@ -415,6 +432,18 @@ private fun HistoryScreen(prefs: Preferences, model: WeiktubeModel, a: MainActiv
     })
 }
 
+@Composable
+private fun WatchDetailsStatus(selection: Long, retry: () -> Unit) {
+    var delayed by remember(selection) { mutableStateOf(false) }
+    LaunchedEffect(selection) { delay(6000); delayed = true }
+    if (delayed) {
+        TextButton(onClick = retry) { Text("Videoseite neu laden") }
+    } else {
+        Text("Videodetails werden geladen …", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
 /** The web document stays attached and loads independently underneath the selected video's poster. */
 @Composable
 internal fun BoxScope.WatchStartPreview(
@@ -430,29 +459,17 @@ internal fun BoxScope.WatchStartPreview(
 ) {
     var showPoster by remember(videoId) { mutableStateOf(true) }
     var slow by remember(videoId) { mutableStateOf(false) }
-    // Expose consent, manual Play and website errors even when no media frame ever arrives.
     LaunchedEffect(videoId, committed) {
         slow = false
-        if (committed) {
-            delay(4000)
-            showPoster = false
-            delay(6000)
-        } else {
-            showPoster = true
-            delay(10000)
-        }
+        delay(10000)
         slow = true
     }
-    if (slow) {
-        Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), shape = RoundedCornerShape(12.dp)) {
-            Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Start dauert länger", style = MaterialTheme.typography.labelMedium)
-                TextButton(onClick = retry) { Text("Erneut laden") }
-            }
+    if (!showPoster && committed) {
+        if (slow) Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), shape = RoundedCornerShape(12.dp)) {
+            TextButton(onClick = retry) { Text("Erneut laden") }
         }
         return
     }
-    if (!showPoster && committed) return
     Column(if (committed) Modifier.fillMaxWidth() else Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         val bounds = if (landscape) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f)
         Box(bounds.then(if (committed) Modifier.clickable(onClickLabel = "Player anzeigen") { showPoster = false } else Modifier)) {
@@ -462,7 +479,8 @@ internal fun BoxScope.WatchStartPreview(
             Row(Modifier.align(Alignment.BottomStart).padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                Text("Video wird geladen", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                Text(if (slow) "Start dauert länger" else "Video wird geladen", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                if (slow) TextButton(onClick = retry) { Text("Erneut laden", color = Color.White) }
             }
         }
         if (!committed && !landscape) {
