@@ -408,6 +408,7 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(if (shieldsOnly) "Adblock" else "Einstellungen", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            if (!shieldsOnly) UpdateSettings(a.updater)
             Text("Datenschutz und Wiedergabe", style = MaterialTheme.typography.bodyLarge)
             if (shieldsOnly) {
             Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp)) {
@@ -451,7 +452,6 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
             }
             PlayerSettings(model, prefs.player, a)
             SponsorBlockSettings(model, prefs.sponsor, a)
-            UpdateSettings(a.updater)
             TextButton(onClick = a::shareRotationReport) { Text("Lokale Rotationsdiagnose teilen") }
             HorizontalDivider()
             Text("Darstellung", style = MaterialTheme.typography.titleLarge)

@@ -1,4 +1,6 @@
-# Weiktube 1.3.24
+# Weiktube 1.3.25
+
+„Jetzt nach Updates suchen“ steht direkt oben in den Einstellungen. Ist ein Update verfügbar, erscheint darunter der Download- oder Installationsbutton.
 
 1.3.24 verwirft verspätete Messungen der Videofläche bei schnellen Drehungen und setzt ungültige Miniplayer-Transformationen zurück. Die lokale Rotationsdiagnose lässt sich nach einem Neustart teilen. Die Geräteabnahme steht aus. [Details und Gerätetest](RELEASE-1.3.24.md)
 

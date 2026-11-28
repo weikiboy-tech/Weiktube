@@ -15,6 +15,12 @@ fun UpdateSettings(controller: UpdateController) {
     var advanced by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("App-Updates", style = MaterialTheme.typography.titleLarge)
+        OutlinedButton(onClick = controller::check, enabled = !controller.busy) { Text("Jetzt nach Updates suchen") }
+        controller.release?.let { release ->
+            if (controller.ready) Button(onClick = controller::install, enabled = !controller.busy) { Text("Update installieren") }
+            else Button(onClick = controller::downloadUpdate, enabled = !controller.busy) { Text("${release.versionName} herunterladen") }
+            if (release.notes.isNotBlank()) Text(release.notes, style = MaterialTheme.typography.bodySmall)
+        }
         Text("Installiert: Weiktube ${controller.installedVersion}", style = MaterialTheme.typography.bodyMedium)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -25,12 +31,6 @@ fun UpdateSettings(controller: UpdateController) {
         }
         Text(controller.status, style = MaterialTheme.typography.bodyMedium)
         if (controller.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        controller.release?.let { release ->
-            if (release.notes.isNotBlank()) Text(release.notes, style = MaterialTheme.typography.bodySmall)
-            if (controller.ready) Button(onClick = controller::install, enabled = !controller.busy) { Text("Update installieren") }
-            else Button(onClick = controller::downloadUpdate, enabled = !controller.busy) { Text("${release.versionName} herunterladen") }
-        }
-        OutlinedButton(onClick = controller::check, enabled = !controller.busy) { Text("Jetzt nach Updates suchen") }
         Text("Downloads starten erst nach deinem Tippen. Vor der Installation werden Prüfsumme, App-Paket, Version und Signierschlüssel kontrolliert. Android verlangt deine Bestätigung.", style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Updatequelle ausblenden" else "Updatequelle ändern") }
         if (advanced) {

@@ -1,0 +1,37 @@
+{
+  "app/build.gradle.kts": {
+    "previousSha256": "629fe02ce985937200d87e5fa2e22fba954a86f571439bea49434a73a6d2e6d4",
+    "changes": [
+      {
+        "previous": "        applicationId = \"com.weiktube.app\"\n        minSdk = 26\n        targetSdk = 36\n        versionCode = 41\n        versionName = \"1.3.24\"\n        if (!stableApks) ndk { abiFilters += listOf(\"arm64-v8a\", \"x86_64\") }\n        testInstrumentationRunner = \"androidx.test.runner.AndroidJUnitRunner\"\n    }\n",
+        "current": "        applicationId = \"com.weiktube.app\"\n        minSdk = 26\n        targetSdk = 36\n        versionCode = 42\n        versionName = \"1.3.25\"\n        if (!stableApks) ndk { abiFilters += listOf(\"arm64-v8a\", \"x86_64\") }\n        testInstrumentationRunner = \"androidx.test.runner.AndroidJUnitRunner\"\n    }\n"
+      }
+    ]
+  },
+  "app/src/main/java/com/weiktube/app/WeiktubeUi.kt": {
+    "previousSha256": "89d5e0addc4c98d66d6f32275f6483433d4b8d1124519c3b4ed4a80e33d6e419",
+    "changes": [
+      {
+        "previous": "    Surface(Modifier.fillMaxSize()) {\n        Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {\n            Text(if (shieldsOnly) \"Adblock\" else \"Einstellungen\", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)\n            Text(\"Datenschutz und Wiedergabe\", style = MaterialTheme.typography.bodyLarge)\n            if (shieldsOnly) {\n            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp)) {\n",
+        "current": "    Surface(Modifier.fillMaxSize()) {\n        Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {\n            Text(if (shieldsOnly) \"Adblock\" else \"Einstellungen\", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)\n            if (!shieldsOnly) UpdateSettings(a.updater)\n            Text(\"Datenschutz und Wiedergabe\", style = MaterialTheme.typography.bodyLarge)\n            if (shieldsOnly) {\n            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp)) {\n"
+      },
+      {
+        "previous": "            }\n            PlayerSettings(model, prefs.player, a)\n            SponsorBlockSettings(model, prefs.sponsor, a)\n            UpdateSettings(a.updater)\n            TextButton(onClick = a::shareRotationReport) { Text(\"Lokale Rotationsdiagnose teilen\") }\n            HorizontalDivider()\n            Text(\"Darstellung\", style = MaterialTheme.typography.titleLarge)\n",
+        "current": "            }\n            PlayerSettings(model, prefs.player, a)\n            SponsorBlockSettings(model, prefs.sponsor, a)\n            TextButton(onClick = a::shareRotationReport) { Text(\"Lokale Rotationsdiagnose teilen\") }\n            HorizontalDivider()\n            Text(\"Darstellung\", style = MaterialTheme.typography.titleLarge)\n"
+      }
+    ]
+  },
+  "app/src/main/java/com/weiktube/app/UpdateUi.kt": {
+    "previousSha256": "8a3f207e8f7bb6000428fad210c4e1f7b068c39ca5d9b7ad192fb545e1c4b0bd",
+    "changes": [
+      {
+        "previous": "    var advanced by remember { mutableStateOf(false) }\n    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {\n        Text(\"App-Updates\", style = MaterialTheme.typography.titleLarge)\n        Text(\"Installiert: Weiktube ${controller.installedVersion}\", style = MaterialTheme.typography.bodyMedium)\n        Row(verticalAlignment = Alignment.CenterVertically) {\n            Column(Modifier.weight(1f)) {\n",
+        "current": "    var advanced by remember { mutableStateOf(false) }\n    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {\n        Text(\"App-Updates\", style = MaterialTheme.typography.titleLarge)\n        OutlinedButton(onClick = controller::check, enabled = !controller.busy) { Text(\"Jetzt nach Updates suchen\") }\n        controller.release?.let { release ->\n            if (controller.ready) Button(onClick = controller::install, enabled = !controller.busy) { Text(\"Update installieren\") }\n            else Button(onClick = controller::downloadUpdate, enabled = !controller.busy) { Text(\"${release.versionName} herunterladen\") }\n            if (release.notes.isNotBlank()) Text(release.notes, style = MaterialTheme.typography.bodySmall)\n        }\n        Text(\"Installiert: Weiktube ${controller.installedVersion}\", style = MaterialTheme.typography.bodyMedium)\n        Row(verticalAlignment = Alignment.CenterVertically) {\n            Column(Modifier.weight(1f)) {\n"
+      },
+      {
+        "previous": "        }\n        Text(controller.status, style = MaterialTheme.typography.bodyMedium)\n        if (controller.busy) LinearProgressIndicator(Modifier.fillMaxWidth())\n        controller.release?.let { release ->\n            if (release.notes.isNotBlank()) Text(release.notes, style = MaterialTheme.typography.bodySmall)\n            if (controller.ready) Button(onClick = controller::install, enabled = !controller.busy) { Text(\"Update installieren\") }\n            else Button(onClick = controller::downloadUpdate, enabled = !controller.busy) { Text(\"${release.versionName} herunterladen\") }\n        }\n        OutlinedButton(onClick = controller::check, enabled = !controller.busy) { Text(\"Jetzt nach Updates suchen\") }\n        Text(\"Downloads starten erst nach deinem Tippen. Vor der Installation werden Prüfsumme, App-Paket, Version und Signierschlüssel kontrolliert. Android verlangt deine Bestätigung.\", style = MaterialTheme.typography.bodySmall)\n        TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) \"Updatequelle ausblenden\" else \"Updatequelle ändern\") }\n        if (advanced) {\n",
+        "current": "        }\n        Text(controller.status, style = MaterialTheme.typography.bodyMedium)\n        if (controller.busy) LinearProgressIndicator(Modifier.fillMaxWidth())\n        Text(\"Downloads starten erst nach deinem Tippen. Vor der Installation werden Prüfsumme, App-Paket, Version und Signierschlüssel kontrolliert. Android verlangt deine Bestätigung.\", style = MaterialTheme.typography.bodySmall)\n        TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) \"Updatequelle ausblenden\" else \"Updatequelle ändern\") }\n        if (advanced) {\n"
+      }
+    ]
+  }
+}

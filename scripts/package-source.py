@@ -12,7 +12,7 @@ REQUIRED_FILES = {
 OPTIONAL_FILES = {"UPDATES.md", "AUDIT.md", "CHANGELOG.md", "PRIVACY.md", "RESTORATION.md", "HOME-CONNECTION-TEST.md", "ORIGINAL-HOME-TEST.md", "WEBSITE-FIRST-TEST.md", "PLAYER-HANDOFF-TEST.md", "PLAYER-RETURN-TEST.md", "GECKO-RETURN-TEST.md", "HOME-TAB-TEST.md", "WEBSITE-LOGIN-TEST.md", "home-data/build.gradle.kts"}
 SOURCE_DIRECTORIES = {"gradle", "scripts", ".github", "app/src", "home-data/src", "content-filter/src", "content-filter/vendor"}
 OPTIONAL_FILES.update({"RELEASE-1.3.21.md", "RELEASE-1.3.22.md", "docs/PLAYER-STABILITY.md"})
-OPTIONAL_FILES.update({"RELEASE-1.3.23.md", "RELEASE-1.3.24.md"})
+OPTIONAL_FILES.update({"RELEASE-1.3.23.md", "RELEASE-1.3.24.md", "RELEASE-1.3.25.md"})
 OPTIONAL_FILES.add("RELEASE-1.3.2.md")
 OPTIONAL_FILES.add("RELEASE-1.3.5.md")
 OPTIONAL_FILES.add("RELEASE-1.3.6.md")
