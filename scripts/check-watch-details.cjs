@@ -26,10 +26,7 @@ const presentation = source.match(/internal val WATCH_CHROME = """([\s\S]*?)"""/
     console.log('Current fixture: video y=' + await top('video') + ', title y=' + await top('h1'));
     assert.equal(await top('video'),0);
     assert((await top('h1'))>=225 && (await top('h1'))<275);
-    const missing = () => page.evaluate(() => weiktubeEmptyWatchSpace(document.querySelector('video')));
-    assert.equal(await missing(),null);
     await page.locator('h1').evaluate(el => el.remove());
-    assert.equal(await missing(),225/800);
     const poll = source.split('val observationRevision = playbackObservationRevision')[1]
       .match(/view\.evaluateJavascript\("""([\s\S]*?)"""/)[1].replace('$pictureReady','true');
     await page.evaluate(() => {
@@ -37,21 +34,20 @@ const presentation = source.match(/internal val WATCH_CHROME = """([\s\S]*?)"""/
     });
     let snapshot=JSON.parse(await page.evaluate(poll));
     assert.equal(snapshot.mediaTitle,'');
-    assert.equal(snapshot.author,'');
-    assert.equal(snapshot.description,'');
     await page.evaluate(() => {window.ytInitialPlayerResponse.videoDetails.videoId='abcdefghijk';});
     snapshot=JSON.parse(await page.evaluate(poll));
-    assert.equal(snapshot.detailsTop,225/800);
-    assert.equal(snapshot.author,'old');
+    assert.equal(snapshot.mediaTitle,'old');
     await page.evaluate(() => document.body.insertAdjacentHTML('beforeend','<div role="dialog">Anmelden</div>'));
-    assert.equal(await missing(),null);
     await page.locator('[role=dialog]').evaluate(el => el.remove());
     await page.evaluate(() => weiktubeWatchPresentation(true,true,true,false));
-    assert.equal(await missing(),null);
     await page.evaluate(() => weiktubeWatchPresentation(false,true,false,false));
-    assert.equal(await missing(),225/800);
-    await page.evaluate(() => document.body.insertAdjacentHTML('beforeend','<h1>Später geladene Videodetails</h1>'));
-    assert.equal(await missing(),null);
+    await page.evaluate(() => document.body.insertAdjacentHTML('beforeend','<ytm-slim-video-information-renderer></ytm-slim-video-information-renderer>'));
+    const details = page.locator('ytm-slim-video-information-renderer');
+    assert.equal(await details.evaluate(el => getComputedStyle(el,'::before').display),'block');
+    await details.evaluate(el => { el.innerHTML='<h1>Originaltitel</h1>'; });
+    assert.equal(await details.evaluate(el => getComputedStyle(el,'::before').content),'none');
+    assert((await top('h1'))<275);
+    assert.equal(await page.locator('h1').count(),1);
     console.log('PASS portrait wrapper, first media offset, visible details, delayed details, dialog and mini/restore (offline Chromium)');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; });

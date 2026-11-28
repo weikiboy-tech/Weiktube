@@ -55,27 +55,23 @@ class PlayerControllerLifecycleTest {
         idle()
     }
 
-    @Test fun firstPictureAndWatchDetailsHaveIndependentLifetimes() {
+    @Test fun firstPictureAndSelectedTitleAreResetForNextVideo() {
         player.open(VIDEO_A)
         finishPage()
         fun sample(empty: Boolean) {
             player.poll()
             val state = JSONObject().put("url", WATCH_A).put("hasVideo", true).put("mediaReady", 2)
                 .put("decodedFallback", true).put("width", 1920).put("height", 1080)
-            if (empty) state.put("detailsTop", .31).put("author", "Kanal A").put("mediaTitle", "Titel A")
+            if (empty) state.put("mediaTitle", "Titel A")
             shadowOf(player.view).lastEvaluatedJavascriptCallback.onReceiveValue(JSONObject.quote(state.toString()))
         }
         sample(true)
         assertTrue(player.pictureReady)
-        assertEquals(.31f, player.emptyDetailsTop!!, .001f)
         assertEquals("Titel A", player.title)
-        assertEquals("Kanal A", player.watchAuthor)
         sample(false)
-        assertNull(player.emptyDetailsTop)
         sample(true)
         player.open(VIDEO_B)
-        assertNull(player.emptyDetailsTop)
-        assertEquals("", player.watchAuthor)
+        assertFalse(player.pictureReady)
     }
 
     @Test fun lostEarlyFilterAcknowledgementIsRequestedAtCommitWithoutReleasingPlayback() {

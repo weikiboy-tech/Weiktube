@@ -53,7 +53,7 @@ assert.match(ui, /p\.setPresentation\(mini \|\| expandingPlayer, dark, landscape
 assert.match(ui, /val retainViewport = stableViewport && \(mini \|\| a\.pip \|\| expandingPlayer\)/);
 assert.match(ui, /it\.setViewportPresentation\(retainViewport, p\.source, p\.videoWidth, p\.videoHeight,/);
 assert.match(ui, /p\.setPlaybackAllowed\(!actions && a\.playerMayRun/);
-const miniControls = block(ui, 'if (mini && playerVisible)', 'if (p.error != null)');
+const miniControls = block(ui, 'if (settledMini && playerVisible)', 'if (p.error != null)');
 assert.match(miniControls, /val miniPlaying = p\.playing/);
 assert.match(miniControls, /onClick = if \(miniPlaying\) p::pause else p::play/,
   'the rendered Mini action sends explicit Play/Pause even if DOM state changes before the click');

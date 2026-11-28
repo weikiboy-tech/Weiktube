@@ -221,12 +221,17 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
             val imageHeight = imageWidth / aspect
             val imageRight = maxWidth * (slot?.left ?: 0f) + (slotWidth + imageWidth) / 2
             val imageBottom = documentHeight * (slot?.top ?: 0f) + (slotHeight + imageHeight) / 2
-            val playerWidth = if (movingCard) androidx.compose.ui.unit.lerp(imageWidth, compactWidth, compactFraction) else maxWidth
+            // Native compact presentation can change the DOM slot while the card is moving.
+            // Interpolate from the last expanded picture in host coordinates for the whole trip.
+            val measuredPicture = androidx.compose.ui.unit.DpRect(imageRight - imageWidth, imageBottom - imageHeight, imageRight, imageBottom)
+            var expandedPicture by remember(p.source, orientation, maxWidth) { mutableStateOf(measuredPicture) }
+            if (full && !movingCard && !a.pip) SideEffect { expandedPicture = measuredPicture }
+            val playerWidth = if (movingCard) androidx.compose.ui.unit.lerp(expandedPicture.right - expandedPicture.left, compactWidth, compactFraction) else maxWidth
             val playerHeight = if (!playerVisible) 0.dp else if (movingCard)
-                androidx.compose.ui.unit.lerp(imageHeight, compactWidth * 9f / 16f, compactFraction) else availableHeight
+                androidx.compose.ui.unit.lerp(expandedPicture.bottom - expandedPicture.top, compactWidth * 9f / 16f, compactFraction) else availableHeight
             val playerInset = 12.dp * compactFraction
-            val endInset = if (movingCard) androidx.compose.ui.unit.lerp((maxWidth - imageRight).coerceAtLeast(0.dp), 12.dp, compactFraction) else 0.dp
-            val bottomInset = if (movingCard) androidx.compose.ui.unit.lerp((availableHeight - imageBottom).coerceAtLeast(0.dp), 12.dp, compactFraction) else 0.dp
+            val endInset = if (movingCard) androidx.compose.ui.unit.lerp((maxWidth - expandedPicture.right).coerceAtLeast(0.dp), 12.dp, compactFraction) else 0.dp
+            val bottomInset = if (movingCard) androidx.compose.ui.unit.lerp((availableHeight - expandedPicture.bottom).coerceAtLeast(0.dp), 12.dp, compactFraction) else 0.dp
             val corner = playerInset
             val portrait = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
             val density = LocalDensity.current
@@ -242,7 +247,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
             }
             var dragPixels by remember(p.source) { mutableFloatStateOf(0f) }
             val dragVisual by key(p.source) { animateFloatAsState(dragPixels, tween(if (dragPixels > 0f) 0 else 120), label = "playerDrag") }
-            LaunchedEffect(full, p.source, a.pip) { dragPixels = 0f }
+            LaunchedEffect(settledMini, a.pip, full) { if (settledMini || a.pip || full) dragPixels = 0f }
             val shape = RoundedCornerShape(if (a.pip) 0.dp else corner)
             // PiP uses the retained view immediately, without a compact-card animation frame.
             
@@ -278,23 +283,6 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                     val videoId = remember(p.source) { p.source?.let(Links::videoId) }
                                     if (videoId != null && !p.webNeedsInput && !p.pictureReady && (p.loading || p.documentCommitted)) {
                                         WatchStartPreview(videoId, p.title, p.documentCommitted, landscapeVideo, p::retry)
-                                    }
-                                }
-                            }
-                            if (full && !movingCard && !a.pip && !landscapeVideo && p.isYoutube && p.error == null) {
-                                p.emptyDetailsTop?.let { top ->
-                                    // Match the actual media bottom, including videos wider or taller than 16:9.
-                                    BoxWithConstraints(Modifier.fillMaxSize()) {
-                                        Column(Modifier.offset(y = maxHeight * top).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                            if (p.title != "Video") Text(p.title, maxLines = 2,
-                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                                style = MaterialTheme.typography.titleMedium)
-                                            if (p.watchAuthor.isNotBlank()) Text(p.watchAuthor, style = MaterialTheme.typography.bodySmall)
-                                            if (p.watchDescription.isNotBlank()) Text(p.watchDescription, maxLines = 2,
-                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                                style = MaterialTheme.typography.bodySmall)
-                                            WatchDetailsStatus(p.startupSequence, p::retry)
-                                        }
                                     }
                                 }
                             }
@@ -344,7 +332,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                 }
                 if (full && !a.pip && playerVisible) SponsorBlockOverlay(p.sponsorBlock, Modifier.align(Alignment.TopEnd).padding(12.dp))
                 if (full && !a.pip) PlayerGestureHud(p.gestureFeedback, Modifier.align(Alignment.Center))
-                if (mini && playerVisible) {
+                if (settledMini && playerVisible) {
                     val miniPlaying = p.playing
                     // Native controls cover only the small video. The surrounding feed stays touchable.
                     Box(Modifier.fillMaxSize().semantics { contentDescription = p.title }
@@ -430,18 +418,6 @@ private fun HistoryScreen(prefs: Preferences, model: WeiktubeModel, a: MainActiv
         confirmDelete = false
         model.clearHistory()
     })
-}
-
-@Composable
-private fun WatchDetailsStatus(selection: Long, retry: () -> Unit) {
-    var delayed by remember(selection) { mutableStateOf(false) }
-    LaunchedEffect(selection) { delay(6000); delayed = true }
-    if (delayed) {
-        TextButton(onClick = retry) { Text("Videoseite neu laden") }
-    } else {
-        Text("Videodetails werden geladen …", style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
 }
 
 /** The web document stays attached and loads independently underneath the selected video's poster. */

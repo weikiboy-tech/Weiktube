@@ -1,5 +1,9 @@
 # 1.3.28 – Videoseite nach dem ersten Bild
 
+## 1.3.29
+
+Beim Videostart liefert die YouTube-Seite die Details direkt. Der interne Miniplayer übernimmt beim Loslassen die aktuelle Ziehposition und animiert aus dem letzten großen Videorechteck. Seine Bedienelemente erscheinen beim Einrasten.
+
 Im Hochformat wird auch der äußere Player-Container an die Videofläche angepasst. Beim ersten Bild prüft Weiktube die Videodetails separat. Ein langsamer Start blendet das Cover nicht mehr pauschal nach vier Sekunden aus. [Release und Testumfang](RELEASE-1.3.28.md)
 
 # 1.3.27 – Vorschau und frühere Startfreigabe

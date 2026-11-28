@@ -320,7 +320,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
             MotionEvent.ACTION_UP -> {
                 tracker?.computeCurrentVelocity(1000)
                 val minimize = gestureEnabled && gesture.finish(event.rawX, event.rawY, tracker?.yVelocity ?: 0f)
-                reset()
+                reset(clearTranslation = !minimize)
                 if (minimize) onMinimize()
             }
             MotionEvent.ACTION_CANCEL -> reset()
@@ -337,7 +337,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
         screenEvent.recycle()
     }
 
-    private fun reset() {
+    private fun reset(clearTranslation: Boolean = true) {
         val hadDrag = ownsTouch || gesture.dragging
         gesture.cancel()
         tracker?.recycle()
@@ -345,7 +345,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
         ownsTouch = false
         childDisallowed = false
         super.requestDisallowInterceptTouchEvent(false)
-        if (hadDrag) onDrag(0f)
+        if (hadDrag && clearTranslation) onDrag(0f)
     }
 
     override fun onDetachedFromWindow() {

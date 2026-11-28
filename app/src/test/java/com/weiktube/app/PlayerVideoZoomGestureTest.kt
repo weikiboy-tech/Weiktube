@@ -63,6 +63,19 @@ class PlayerVideoZoomGestureTest {
         f.event(MotionEvent.ACTION_UP,300f to 450f)
         assertEquals(1,f.minimized)
     }
+    @Test fun committedDragHandsOffsetToCardWhileCancelledDragReturnsToOrigin() {
+        for (commit in listOf(true, false)) {
+            val f = Fixture()
+            val offsets = mutableListOf<Float>()
+            f.host.configure(true, true, { offsets.add(it) }, { f.minimized++ })
+            f.event(MotionEvent.ACTION_DOWN,300f to 200f)
+            f.event(MotionEvent.ACTION_MOVE,300f to 420f)
+            f.event(if (commit) MotionEvent.ACTION_UP else MotionEvent.ACTION_CANCEL,300f to 450f)
+            assertTrue(offsets.any { it > 0f })
+            assertEquals(commit, offsets.last() > 0f)
+            assertEquals(if (commit) 1 else 0, f.minimized)
+        }
+    }
     @Test fun pinchingBackRestoresOneAndFullscreenAcceptsLowerVideoArea() {
         val f=Fixture();f.pinch()
         f.event(MotionEvent.ACTION_MOVE,300f to 200f,700f to 200f)
