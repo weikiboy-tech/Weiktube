@@ -29,6 +29,12 @@ class PlayerController(
     // CSS viewport fractions sampled only from the expanded document before isolation.
     internal var watchSlot by mutableStateOf<android.graphics.RectF?>(null)
         private set
+    internal var geometryEpoch = 0L
+        private set
+    internal fun invalidateGeometry() {
+        geometryEpoch++
+        watchSlot = null
+    }
     private var sampledLandscape = false
     internal fun mediaSlot(landscape: Boolean) = watchSlot.takeIf { sampledLandscape == landscape }
     var loading by mutableStateOf(false); private set
@@ -291,7 +297,8 @@ class PlayerController(
             override fun onViewAttachedToWindow(v: android.view.View) { trace(PlayerDiagnostics.Event.VIEW_ATTACHED, playerWeb) }
             override fun onViewDetachedFromWindow(v: android.view.View) { trace(PlayerDiagnostics.Event.VIEW_DETACHED, playerWeb) }
         }.also { addOnAttachStateChangeListener(it) }
-        layoutListeners[this] = android.view.View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        layoutListeners[this] = android.view.View.OnLayoutChangeListener { _, l, t, r, b, oldL, oldT, oldR, oldB ->
+            if (alive(playerWeb) && (r-l != oldR-oldL || b-t != oldB-oldT)) invalidateGeometry()
             traceViewIfChanged(playerWeb)
         }.also { addOnLayoutChangeListener(it) }
         diagnosticHooks[this] = PlayerPlaybackDiagnostics.install(this)
@@ -464,6 +471,7 @@ class PlayerController(
         documentCommitted = false
         loading = false; playing = false; explicitStartRequested = false
         trace(if (crashed) PlayerDiagnostics.Event.RENDERER_CRASHED else PlayerDiagnostics.Event.RENDERER_KILLED)
+        activity.recordRotationEvent(if (crashed) "renderer-crashed" else "renderer-killed")
         activity.releasePlayerFullscreen(web)
         disposeView(web)
         if (saved != null && automaticRecoveries < 1) {
@@ -630,7 +638,12 @@ class PlayerController(
     fun setPresentation(minimized: Boolean, darkTheme: Boolean, videoOnly: Boolean = false, systemPip: Boolean = false) {
         if (destroyed) return
         if (mini == minimized && dark == darkTheme && this.videoOnly == videoOnly && this.systemPip == systemPip) return
-        if (mini != minimized || this.videoOnly != videoOnly || this.systemPip != systemPip) { holdGesture(false); clearVideoZoom() }
+        if (mini != minimized || this.videoOnly != videoOnly || this.systemPip != systemPip) {
+            // Freeze the last good expanded slot for the compact animation, reject its pending reads.
+            geometryEpoch++
+            holdGesture(false)
+            clearVideoZoom()
+        }
         mini = minimized; dark = darkTheme; this.videoOnly = videoOnly; this.systemPip = systemPip; applyPresentation()
         trace(if (systemPip) PlayerDiagnostics.Event.PRESENTATION_PIP else if (mini) PlayerDiagnostics.Event.PRESENTATION_MINI else PlayerDiagnostics.Event.PRESENTATION_NORMAL)
         if (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) android.util.Log.d("WeiktubePlayback", "presentation session=$generation mini=$mini")
@@ -649,6 +662,7 @@ class PlayerController(
         pollEnhancements()
         pollDislikes()
         val landscapeAtRequest = activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val sampledEpoch = geometryEpoch
         val sampleSlot = expanded && !mini && !systemPip
         val polledView = view
         val requestGeneration = generation
@@ -657,7 +671,7 @@ class PlayerController(
             (function(){var v=document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');
               var r=v&&v.getBoundingClientRect();
               var slot=r&&innerWidth>0&&innerHeight>0?[r.left/innerWidth,r.top/innerHeight,r.right/innerWidth,r.bottom/innerHeight]:null;
-              return JSON.stringify({slot:slot,mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
+              return JSON.stringify({slot:slot,viewportAspect:innerWidth/innerHeight,mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
               playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,
               duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,
               title:h?h.textContent:(document.title||''),url:location.href});})()
@@ -679,7 +693,11 @@ class PlayerController(
                 // A temporary empty DOM during SPA updates is not an invalid renderer and must
                 // not replace the last valid content timestamp with the script's default zero.
                 if (!value.optBoolean("hasVideo")) return@runCatching
-                if (sampleSlot && expanded && !mini && !systemPip &&
+                val nativeAspect = polledView.width.toDouble() / polledView.height
+                val cssAspect = value.optDouble("viewportAspect", Double.NaN)
+                if (sampledEpoch == geometryEpoch && nativeAspect.isFinite() && nativeAspect > 0 &&
+                    kotlin.math.abs(cssAspect / nativeAspect - 1) < 0.03 &&
+                    sampleSlot && expanded && !mini && !systemPip &&
                     landscapeAtRequest == (activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)) {
                     value.optJSONArray("slot")?.takeIf { it.length() == 4 }?.let { a ->
                         val edges = (0..3).map { a.optDouble(it).toFloat() }

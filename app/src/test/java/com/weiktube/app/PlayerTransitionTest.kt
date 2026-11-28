@@ -16,6 +16,36 @@ class PlayerTransitionTest {
 
     @org.junit.After fun restoreClock() { compose.mainClock.autoAdvance = true }
 
+    @Test fun oneHundredInterruptedCardAnimationsFollowTheLatestWindowAndMode() {
+        var mini by mutableStateOf(false)
+        var pip by mutableStateOf(false)
+        var orientation by mutableIntStateOf(1)
+        var fraction = 0f
+        compose.setContent {
+            val frame = compactPlayerFraction("watch", pip, orientation, mini)
+            SideEffect { fraction = frame }
+        }
+        compose.mainClock.autoAdvance = false
+        fun frame() {
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+            assertTrue(fraction.isFinite() && fraction in 0f..1f)
+        }
+        repeat(100) { cycle ->
+            mini = true
+            repeat(5) { frame() }
+            assertTrue(fraction > 0f && fraction < 1f)
+            orientation = 3 - orientation
+            pip = cycle % 2 == 0
+            mini = false
+            repeat(2) { frame() }
+            assertEquals(0f, fraction, 0f)
+            pip = false
+            repeat(2) { frame() }
+        }
+    }
+
     @Test fun reversalUsesIntermediateFrameAndNewSessionsStartAtTheirDestination() {
         var source by mutableStateOf<String?>("first")
         var mini by mutableStateOf(false)

@@ -1,4 +1,6 @@
-# Weiktube 1.3.23
+# Weiktube 1.3.24
+
+1.3.24 verwirft verspätete Messungen der Videofläche bei schnellen Drehungen und setzt ungültige Miniplayer-Transformationen zurück. Die lokale Rotationsdiagnose lässt sich nach einem Neustart teilen. Die Geräteabnahme steht aus. [Details und Gerätetest](RELEASE-1.3.24.md)
 
 1.3.23 korrigiert die Startfläche der Miniplayer-Bewegung, den Android-PiP-Bildausschnitt und die Bedienung des Vollbildknopfs bei automatischer Rotation. Die visuelle Abnahme auf dem OnePlus 15R steht aus.
 

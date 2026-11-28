@@ -42,6 +42,31 @@ class PlayerViewportInsetsTest {
         web.destroy()
     }
 
+    @Test fun interruptedCompactLayoutsRecoverOnEveryFrameAcrossOneHundredRotations() {
+        val insets = landscapeInsets(41)
+        repeat(100) { cycle ->
+            val w = if (cycle % 2 == 0) 420 else 900
+            val h = if (cycle % 2 == 0) 900 else 420
+            player.setViewportPresentation(false, "source", 1920, 1080, w, h)
+            resizeAndDispatch(w, h, insets)
+            assertEquals(1f, web.scaleX, 0f)
+            player.setViewportPresentation(true, "source", 1920, 1080, w, h)
+            for (target in listOf(w / 2, 160, 0, 190, w / 2)) {
+                resizeAndDispatch(target, target * 9 / 16, insets)
+                assertSame(web, player.getChildAt(0))
+                assertEquals(1, player.childCount)
+                assertEquals(w, web.measuredWidth)
+                assertEquals(h, web.measuredHeight)
+                assertTrue(web.scaleX.isFinite() && web.scaleX > 0f)
+                assertTrue(web.translationX.isFinite() && web.translationY.isFinite())
+                if (target == 0) {
+                    assertEquals(1f, web.scaleX, 0f)
+                    assertEquals(0f, web.translationY, 0f)
+                }
+            }
+        }
+    }
+
     @Test fun portraitReturnDeliversExplicitZerosInsteadOfRetainingLandscapeSafeArea() {
         val original = landscapeInsets(leftCutout = 41)
         player.setSystemInsetsHandledByHost(false)

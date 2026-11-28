@@ -142,7 +142,7 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
     }
 
     private fun clearViewportTransform() {
-        getChildAt(0)?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f }
+        getChildAt(0)?.apply { scaleX = 1f; scaleY = 1f; translationX = 0f; translationY = 0f; pivotX = 0f; pivotY = 0f }
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -215,12 +215,14 @@ class PlayerGestureLayout(context: Context) : FrameLayout(context) {
             getChildAt(0)?.apply {
                 layout(0, 0, logicalWidth, logicalHeight)
                 pivotX = 0f; pivotY = 0f
-                PlayerViewportTransform.fit(logicalWidth, logicalHeight, this@PlayerGestureLayout.width,
-                    this@PlayerGestureLayout.height, mediaWidth, mediaHeight)?.let {
-                    scaleX = it.scale; scaleY = it.scale; translationX = it.x; translationY = it.y
+                val transform = PlayerViewportTransform.fit(logicalWidth, logicalHeight, this@PlayerGestureLayout.width,
+                    this@PlayerGestureLayout.height, mediaWidth, mediaHeight)
+                if (transform == null) clearViewportTransform() else {
+                    scaleX = transform.scale; scaleY = transform.scale
+                    translationX = transform.x; translationY = transform.y
                 }
             }
-        } else if (!stableCompact) {
+        } else {
             clearViewportTransform()
             super.onLayout(changed, left, top, right, bottom)
         }

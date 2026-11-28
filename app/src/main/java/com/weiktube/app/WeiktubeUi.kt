@@ -138,7 +138,8 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
     val mini = hasPlayer && !full && !a.pip
     val compactFraction = compactPlayerFraction(p.source, a.pip, orientation, mini)
     val settledMini = mini && compactFraction == 1f
-    LaunchedEffect(settledMini) { if (settledMini) a.cardSettled() }
+    val cardId = a.cardTransitionId
+    LaunchedEffect(settledMini, cardId) { if (settledMini) a.cardSettled(cardId) }
     val landscapeMotion = orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE &&
         hasPlayer && compactFraction < 1f
     Column(Modifier.fillMaxSize().then(if (a.pip || landscapeMotion) Modifier else Modifier.safeDrawingPadding())) {
@@ -451,6 +452,7 @@ private fun SettingsScreen(prefs: Preferences, model: WeiktubeModel, a: MainActi
             PlayerSettings(model, prefs.player, a)
             SponsorBlockSettings(model, prefs.sponsor, a)
             UpdateSettings(a.updater)
+            TextButton(onClick = a::shareRotationReport) { Text("Lokale Rotationsdiagnose teilen") }
             HorizontalDivider()
             Text("Darstellung", style = MaterialTheme.typography.titleLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

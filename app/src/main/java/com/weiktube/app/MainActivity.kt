@@ -23,8 +23,40 @@ import com.weiktube.home.OriginalHomeReturn
 
 class MainActivity : ComponentActivity() {
     internal val diagnosticActivityId = PlayerDiagnostics.nextActivityId()
-    private fun traceLifecycle(event: PlayerDiagnostics.Event, state: String = "HOST") =
+    private fun traceLifecycle(event: PlayerDiagnostics.Event, state: String = "HOST") {
         PlayerDiagnostics.record(event, state = state, activityId = diagnosticActivityId)
+        recordRotationEvent(event.name)
+    }
+
+    internal fun recordRotationEvent(event: String) {
+        val web = if (::player.isInitialized) player.view else null
+        val host = web?.parent as? PlayerGestureLayout
+        val line = "${System.currentTimeMillis()} $event activity=$diagnosticActivityId " +
+            "epoch=${if (web == null) 0 else player.geometryEpoch} orientation=${resources.configuration.orientation} " +
+            "card=$cardTransitionId request=$requestedOrientation full=$fullscreen compact=${host?.compactViewport} pip=$pip " +
+            "host=${host?.width}x${host?.height} web=${web?.width}x${web?.height} " +
+            "scale=${web?.scaleX},${web?.scaleY} offset=${web?.translationX},${web?.translationY}"
+        val journal = getSharedPreferences("rotation_diagnostics", MODE_PRIVATE)
+        val index = journal.getLong("next", 0L)
+        journal.edit().putString("event${index % 64}", line).putLong("next", index + 1).apply()
+    }
+
+    internal fun shareRotationReport() {
+        val journal = getSharedPreferences("rotation_diagnostics", MODE_PRIVATE)
+        val next = journal.getLong("next", 0L)
+        val report = buildString {
+            appendLine("Weiktube ${BuildConfig.VERSION_NAME}")
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                getSystemService(android.app.ActivityManager::class.java)
+                    .getHistoricalProcessExitReasons(packageName, 0, 16)
+                    .filter { it.processName == applicationInfo.processName }.take(4)
+                    .forEach { appendLine("process-exit time=${it.timestamp} reason=${it.reason} status=${it.status}") }
+            }
+            for (i in (next - 64).coerceAtLeast(0) until next) appendLine(journal.getString("event${i % 64}", ""))
+        }
+        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(Intent.EXTRA_TEXT, report), "Rotationsdiagnose teilen"))
+    }
 
     val model: WeiktubeModel by viewModels()
     val shield = ShieldEngine()
@@ -227,12 +259,20 @@ class MainActivity : ComponentActivity() {
         syncOriginalHomeVisibility()
     }
     private var settlingCardSource: String? = null
-    internal fun cardSettled() {
+    internal var cardTransitionId by androidx.compose.runtime.mutableLongStateOf(0L)
+        private set
+    internal fun cardSettled(id: Long) {
+        if (id != cardTransitionId || settlingCardSource == null || settlingCardSource != player.source || player.expanded || pip) return
+        recordRotationEvent("card-settled")
         settlingCardSource = null
         syncPlayerPresentation()
     }
     fun minimizeWebVideo() {
-        if (player.expanded && !pip) settlingCardSource = player.source
+        if (player.expanded && !pip) {
+            cardTransitionId++
+            settlingCardSource = player.source
+            recordRotationEvent("card-start")
+        }
         player.expanded = false
         hidePlayerFullscreen(player.view)
         syncPlayerPresentation()
@@ -423,6 +463,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        if (::player.isInitialized) player.invalidateGeometry()
         traceLifecycle(PlayerDiagnostics.Event.CONFIGURATION)
         syncPlayerPresentation()
         syncPipState()
@@ -431,15 +472,21 @@ class MainActivity : ComponentActivity() {
     /** Rotation changes only the presentation of the retained player, never its document. */
     fun syncPlayerPresentation() {
         if (!::player.isInitialized) return
-        if (player.expanded || pip || settlingCardSource != player.source) settlingCardSource = null
+        if (settlingCardSource != null && (player.expanded || pip || settlingCardSource != player.source)) {
+            recordRotationEvent("card-cancel")
+            settlingCardSource = null
+        }
         if (orientationChoiceSource != player.source || !player.expanded) orientationChoice = null
         val desiredOrientation = orientationChoice ?: videoOrientation
         val expanded = player.source != null && player.expanded && !pip && !isFinishing && !isDestroyed
         if (expanded) {
             if (orientationBeforePlayer == null) orientationBeforePlayer =
                 if (customView == null) requestedOrientation else orientationBeforeFullscreen
-            if (customView == null && requestedOrientation != desiredOrientation)
+            if (customView == null && requestedOrientation != desiredOrientation) {
+                player.invalidateGeometry()
                 requestedOrientation = desiredOrientation
+                recordRotationEvent("rotation-request")
+            }
         } else if (customView == null && settlingCardSource == null) {
             orientationBeforePlayer?.let { requestedOrientation = UprightVideoOrientation.safe(it) }
             orientationBeforePlayer = null
@@ -472,7 +519,10 @@ class MainActivity : ComponentActivity() {
     }
     fun showFullscreen(view: View, callback: WebChromeClient.CustomViewCallback, owner: android.webkit.WebView? = null) {
         val playerCannotEnter = owner === player.view && (player.source == null || !player.expanded || pip)
-        if (customView != null || playerCannotEnter) {
+        // Chromium can redeliver a surface while its preceding hide is in flight.
+        if (customView === view && customCallback === callback) return
+        if (view.parent != null || customView != null || playerCannotEnter) {
+            if (view.parent != null) recordRotationEvent("fullscreen-already-attached")
             callback.onCustomViewHidden()
             return
         }
@@ -491,8 +541,8 @@ class MainActivity : ComponentActivity() {
         customView?.let { (window.decorView as FrameLayout).removeView(it) }
         val callback = customCallback
         customView = null; customCallback = null; customViewOwner = null; fullscreen = false
-        callback?.onCustomViewHidden()
         if (wasFullscreen) requestedOrientation = UprightVideoOrientation.safe(orientationBeforeFullscreen)
+        callback?.onCustomViewHidden()
         syncPlayerPresentation()
     }
     internal fun hidePlayerFullscreen(owner: android.webkit.WebView) {

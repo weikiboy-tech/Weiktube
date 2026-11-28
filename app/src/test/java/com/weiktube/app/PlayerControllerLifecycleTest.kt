@@ -55,6 +55,65 @@ class PlayerControllerLifecycleTest {
         idle()
     }
 
+    @Test fun earlierMinimizeCompletionCannotReleaseANewerTransition() {
+        player.open(VIDEO_A)
+        activity.minimizeWebVideo()
+        val previous = activity.cardTransitionId
+        player.expanded = true
+        activity.syncPlayerPresentation()
+        activity.minimizeWebVideo()
+        activity.cardSettled(previous)
+        assertEquals(VIDEO_A, ReflectionHelpers.getField<String>(activity, "settlingCardSource"))
+        activity.cardSettled(activity.cardTransitionId)
+        assertNull(ReflectionHelpers.getField<String?>(activity, "settlingCardSource"))
+    }
+
+    @Test fun lateFullscreenRequestForAnAttachedSurfaceCannotCrashTheActivity() {
+        player.open(VIDEO_A)
+        val surface = View(activity)
+        val parent = android.widget.FrameLayout(activity)
+        parent.addView(surface)
+        // Exercise the old unconditional Android addView call with this same surface.
+        assertThrows(IllegalStateException::class.java) {
+            (activity.window.decorView as android.widget.FrameLayout).addView(surface)
+        }
+        var rejected = false
+        activity.showFullscreen(surface, WebChromeClient.CustomViewCallback { rejected = true }, player.view)
+        assertTrue(rejected)
+        assertFalse(activity.fullscreen)
+        assertSame(parent, surface.parent)
+    }
+
+    @Test fun delayedGeometryCannotSurviveARoundTripToTheSameOrientation() {
+        player.open(VIDEO_A)
+        finishPage()
+        val web = player.view
+        web.right = 400
+        web.bottom = 800
+        repeat(100) { cycle ->
+            fun sample(aspect: Double) = JSONObject.quote(JSONObject()
+                .put("url", WATCH_A).put("hasVideo", true).put("playing", cycle % 2 == 0)
+                .put("viewportAspect", aspect).put("slot", org.json.JSONArray("[0,0,1,0.28]")).toString())
+            player.poll()
+            val old = shadowOf(web).lastEvaluatedJavascriptCallback
+            player.invalidateGeometry()
+            web.right = 800
+            web.bottom = 400
+            player.invalidateGeometry()
+            web.right = 400
+            web.bottom = 800
+            old.onReceiveValue(sample(0.5))
+            assertNull(player.watchSlot)
+            player.poll()
+            shadowOf(web).lastEvaluatedJavascriptCallback.onReceiveValue(sample(2.0))
+            assertNull(player.watchSlot)
+            player.poll()
+            shadowOf(web).lastEvaluatedJavascriptCallback.onReceiveValue(sample(0.5))
+            assertNotNull(player.watchSlot)
+            assertSame(web, player.view)
+        }
+    }
+
     @Test fun explicitFullscreenExitSurvivesRepeatedLandscapeSync() {
         player.open(VIDEO_A)
         val physicalLandscape = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
