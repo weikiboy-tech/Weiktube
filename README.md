@@ -1,4 +1,6 @@
-# Weiktube 1.3.31
+# Weiktube 1.3.32
+
+Beim Videostart können andere Videoelemente die Startanforderung des Watch-Players nicht mehr verbrauchen. Wird dessen Element beim Start ausgetauscht, übernimmt der Ersatz einen abgebrochenen Start einmal. Bei Stillstand bietet der Player „Erneut laden“ an. Im Hochformat gibt der Videoplayer eine aus dem Vollbild übernommene Mindesthöhe frei. Nachgeladene Videodetails können so direkt unter dem Bild erscheinen.
 
 Bei der Rückkehr aus dem Hintergrund fordert Weiktube die Fensterabstände erneut an. Startseite und App-Navigation reservieren den Platz für die Systemleisten auch während des Einblendens.
 

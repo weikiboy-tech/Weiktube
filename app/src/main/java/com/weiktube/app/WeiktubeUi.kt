@@ -303,6 +303,15 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                     }
                                 }
                             }
+                            if (full && !movingCard && !a.pip && p.isYoutube && p.playbackStalled && p.error == null && !p.webNeedsInput) {
+                                Surface(Modifier.align(Alignment.Center), shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainer) {
+                                    Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Wiedergabe hängt", style = MaterialTheme.typography.labelMedium)
+                                        TextButton(onClick = p::retry) { Text("Erneut laden") }
+                                    }
+                                }
+                            }
                             if (full && !movingCard && !a.pip && !landscapeVideo && p.resumedAt > 0 && p.pictureReady) {
                                 Surface(Modifier.align(Alignment.BottomStart).padding(8.dp), shape = RoundedCornerShape(12.dp),
                                     color = MaterialTheme.colorScheme.surfaceContainer) {

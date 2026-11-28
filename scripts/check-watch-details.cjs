@@ -50,6 +50,37 @@ const presentation = source.match(/internal val WATCH_CHROME = """([\s\S]*?)"""/
     assert.equal(await details.evaluate(el => getComputedStyle(el,'::before').content),'none');
     assert((await top('h1'))<275);
     assert.equal(await page.locator('h1').count(),1);
+    // A dedicated outer player shell can retain fullscreen minimum height even after
+    // its inner video is correctly sized. Reproduce both with the released stylesheet.
+    await page.evaluate(() => {
+      const slot=document.querySelector('#player-container-id'), details=document.querySelector('ytm-slim-video-information-renderer');
+      const watch=document.createElement('ytm-watch'), shell=document.createElement('div');
+      watch.style.display='block';shell.className='player-container';
+      shell.style.cssText='height:100vh;min-height:100vh';slot.style.minHeight='100vh';
+      document.body.append(watch); watch.append(shell,details); shell.append(slot);
+    });
+    const sheet=await page.locator('#weiktube-watch-style').textContent();
+    if (process.env.WEIKTUBE_PREVIOUS_WATCH) {
+      const previous=fs.readFileSync(process.env.WEIKTUBE_PREVIOUS_WATCH,'utf8').match(/internal val WATCH_CHROME = """([\s\S]*?)"""/)[1];
+      await page.evaluate(() => {
+        document.querySelector('#weiktube-watch-style').remove();
+        delete window.weiktubeWatchPresentation;
+      });
+      await page.evaluate(previous);
+      assert((await top('h1'))>=800);
+      console.log('1.3.31 nested fullscreen minimum: title y='+await top('h1'));
+      await page.locator('#weiktube-watch-style').evaluate((el,css)=>{el.textContent=css;},sheet);
+    }
+    assert((await top('h1'))<275);
+    console.log('Corrected nested fullscreen minimum: title y='+await top('h1'));
+    await details.evaluate(el=>el.remove());
+    const placeholder=()=>page.locator('ytm-watch').evaluate(el=>getComputedStyle(el,'::after').content);
+    assert.equal(await placeholder(),'""');
+    await page.evaluate(()=>weiktubeWatchPresentation(true,true,true,false));
+    assert.equal(await placeholder(),'none');
+    await page.evaluate(()=>weiktubeWatchPresentation(false,true,false,false));
+    await page.locator('ytm-watch').evaluate(el=>el.insertAdjacentHTML('beforeend','<h1>Originaltitel</h1>'));
+    assert.equal(await placeholder(),'none');
     // Drive the production poll with controlled media events, including an old frame after seeking.
     await page.evaluate(() => {
       const v=document.querySelector('video');
@@ -64,6 +95,22 @@ const presentation = source.match(/internal val WATCH_CHROME = """([\s\S]*?)"""/
     assert.equal(await sampleResume(),null);
     await page.evaluate(() => window.frameCallback(0,{mediaTime:135.2}));
     assert.equal(await sampleResume(),135.2);
+    await page.evaluate(() => {
+      window.sampleClock=100;
+      Object.defineProperty(performance,'now',{value:()=>window.sampleClock});
+      Object.defineProperty(document.querySelector('video'),'paused',{value:false,configurable:true});
+    });
+    const stalled=async()=>JSON.parse(await page.evaluate(poll)).stalled;
+    assert.equal(await stalled(),false);
+    for(let i=1;i<=8;i++){
+      await page.evaluate(()=>{window.sampleClock+=1000;});
+      assert.equal(await stalled(),i===8);
+    }
+    await page.locator('video').evaluate(v=>Object.defineProperty(v,'currentTime',{value:136,configurable:true}));
+    assert.equal(await stalled(),false);
+    await page.locator('video').evaluate(v=>Object.defineProperty(v,'paused',{value:true}));
+    await page.evaluate(()=>{window.sampleClock+=10000;});
+    assert.equal(await stalled(),false);
     const restart=source.split('fun restartFromBeginning()')[1].match(/evaluateJavascript\("""([\s\S]*?)"""/)[1]
       .replace('${JSONObject.quote(id)}','"abcdefghijk"');
     await page.evaluate(() => {

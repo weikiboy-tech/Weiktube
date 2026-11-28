@@ -66,6 +66,8 @@ class PlayerController(
     // or JS results belonging to the document replaced by a newer explicit video selection.
     internal var documentCommitted by mutableStateOf(false)
         private set
+    internal var playbackStalled by mutableStateOf(false)
+        private set
     internal var pictureReady by mutableStateOf(false)
         private set
     internal var startupSequence by mutableLongStateOf(0L)
@@ -88,6 +90,7 @@ class PlayerController(
         startupEvents.clear()
         webNeedsInput = false
         pictureReady = false
+        playbackStalled = false
         startup("selected")
     }
     internal fun startupHostLaidOut() = startup("host-laid-out")
@@ -452,6 +455,7 @@ class PlayerController(
                 firstPlaybackPosition = null
                 documentCommitted = false
                 pictureReady = false
+                playbackStalled = false
                 startup("navigation")
                 ads.pageStarted(url)
                 webNeedsInput = false
@@ -828,13 +832,24 @@ class PlayerController(
                   }
                 }else if(!v.paused&&v.videoWidth&&v.videoHeight){frameTime=v.currentTime;}
               }
+              var stalled=false;
+              if(v&&document.visibilityState!=='hidden'&&!v.ended){
+                var sample=v.weiktubeProgressSample,now=performance.now(),t=v.currentTime;
+                if(!v.paused||v.seeking||v.error||window.weiktubeStartFailed===true){
+                  if(!sample||sample.generation!==$requestGeneration||now-sample.last>3500||Math.abs(t-sample.time)>.04){
+                    sample=v.weiktubeProgressSample={generation:$requestGeneration,time:t,since:now,last:now};
+                  }
+                  sample.last=now;
+                  stalled=!!v.error||window.weiktubeStartFailed===true||now-sample.since>=8000;
+                }else v.weiktubeProgressSample=null;
+              }
               var input=!$pictureReady&&Array.from(document.querySelectorAll('dialog[open],[role="dialog"],[role="alert"],.ytp-error,.ytp-large-play-button,ytm-player-error-message-renderer')).some(function(el){
                 var box=el.getBoundingClientRect(),css=getComputedStyle(el);
                 if(!box.width||!box.height||box.top>=innerHeight||box.bottom<=0||css.visibility==='hidden'||Number(css.opacity)===0)return false;
                 var hit=document.elementFromPoint(Math.max(0,Math.min(innerWidth-1,box.left+box.width/2)),Math.max(0,Math.min(innerHeight-1,box.top+box.height/2)));
                 return !!hit&&el.contains(hit);
               });
-              return JSON.stringify({needsInput:input,resumeFrameTime:frameTime,mediaTitle:String((matched&&data.title)||(metadata&&metadata.title)||'').slice(0,300),slot:slot,viewportAspect:innerWidth/innerHeight,decodedFallback:!!v&&(typeof v.requestVideoFrameCallback!=='function'||v.paused||!window.WeiktubePlaybackState),mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
+              return JSON.stringify({needsInput:input,stalled:stalled,resumeFrameTime:frameTime,mediaTitle:String((matched&&data.title)||(metadata&&metadata.title)||'').slice(0,300),slot:slot,viewportAspect:innerWidth/innerHeight,decodedFallback:!!v&&(typeof v.requestVideoFrameCallback!=='function'||v.paused||!window.WeiktubePlaybackState),mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
               playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,
               duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,
               details:!!h&&!!document.querySelector('ytm-slim-owner-renderer,ytm-video-owner-renderer,.slim-owner-icon-and-title'),title:h?h.textContent:(document.title||''),url:location.href});})()
@@ -853,6 +868,7 @@ class PlayerController(
                     else trace(PlayerDiagnostics.Event.STALE_DOCUMENT_IGNORED)
                     return@runCatching
                 }
+                playbackStalled = playbackAllowed && activity.playerMayRun && adHooks[view]?.canPlay == true && value.optBoolean("stalled")
                 webNeedsInput = value.optBoolean("needsInput")
                 acceptWatchTitle(value.optString("mediaTitle").ifBlank { value.optString("title") })
                 if (value.optBoolean("details")) startup("watch-details")
@@ -1034,7 +1050,7 @@ class PlayerController(
         if (destroyed) return
         val url = source ?: return
         adRecoveryAttempts = 0
-        val wasExpanded = expanded; val seconds = position.toInt(); source = null
+        val wasExpanded = expanded; val seconds = (awaitingResumePosition ?: position).toInt(); source = null
         open(if (isYoutube) "$url&t=$seconds" else url); expanded = wasExpanded
     }
     fun close() {
@@ -1076,7 +1092,11 @@ class PlayerController(
         internal val MEDIA_GUARD = """
             (function(){
               if(window.weiktubeSetPlayback)return;
-              var allowed=false,pending=false,audible=false,starting=null;
+              var allowed=false,pending=false,audible=false,starting=null,retryReplacement=false;
+              function activeVideo(){
+                var host=document.getElementById&&document.getElementById('player-container-id');
+                return host&&host.querySelector?host.querySelector('video'):document.querySelector('video');
+              }
               // One explicit selection may request sound. Never reassert mute/volume on
               // presentation changes, resume, or subsequent user mute/pause operations.
               window.weiktubeRequestAudibleStart=function(){audible=true;};
@@ -1087,21 +1107,32 @@ class PlayerController(
                 if(p&&typeof p.unMute==='function')p.unMute();
                 v.muted=false;
               }
-              document.addEventListener('playing',function(e){applySound(e.target);},true);
+              document.addEventListener('playing',function(e){if(e.target===activeVideo()){window.weiktubeStartFailed=false;applySound(e.target);}},true);
               function pause(m){if(window.weiktubePlaybackScope)window.weiktubePlaybackScope('APP_GUARD',function(){m.pause();});else m.pause();}
               function start(v){
-                if(!allowed||!pending||!v)return;
+                if(!allowed||!pending||!v||v!==activeVideo())return;
                 pending=false;
-                if(starting===v||(v.paused===false&&!v.ended))return;
-                starting=v;
-                function settled(){if(starting===v)starting=null;}
-                v.play().then(settled,settled);
+                if((starting&&starting.video===v)||(v.paused===false&&!v.ended))return;
+                var attempt={video:v};
+                starting=attempt;
+                v.play().then(function(){
+                  if(starting===attempt)starting=null;
+                },function(error){
+                  if(starting!==attempt||!allowed)return;
+                  starting=null;
+                  var replacement=activeVideo();
+                  if(error&&error.name==='AbortError'&&retryReplacement&&replacement!==v){
+                    retryReplacement=false;pending=true;
+                    if(replacement&&replacement.readyState>0)start(replacement);
+                  }else window.weiktubeStartFailed=true;
+                });
               }
               document.addEventListener('play',function(e){if(!allowed&&e.target&&e.target.pause)pause(e.target);},true);
               document.addEventListener('loadedmetadata',function(e){if(e.target&&e.target.tagName==='VIDEO')start(e.target);},true);
               window.weiktubeSetPlayback=function(next,requestStart){
-                allowed=next;if(!allowed){pending=false;audible=false;starting=null;}else if(requestStart)pending=true;
-                var v=document.querySelector('video');
+                allowed=next;if(!allowed){pending=false;audible=false;starting=null;window.weiktubeStartFailed=false;}
+                else if(requestStart){pending=true;retryReplacement=true;window.weiktubeStartFailed=false;}
+                var v=activeVideo();
                 if(!allowed)document.querySelectorAll('video,audio').forEach(pause);
                 else if(v&&v.readyState>0){
                   if(requestStart&&v.paused===false&&!v.ended&&v.readyState>=2)applySound(v);
@@ -1141,6 +1172,13 @@ class PlayerController(
                     '#player-container-id{top:0!important}'+
                     // A fixed/sticky outer wrapper can retain a fullscreen height even when its video is small.
                     'html[data-weiktube-video-only="0"] ytm-slim-video-information-renderer:empty::before{content:"";display:block;height:12px;width:56%;margin:16px;border-radius:6px;background:currentColor;opacity:.12;pointer-events:none}'+
+                    // A retained fullscreen min-height wins over max-height in CSS. Constrain only
+                    // the player and its dedicated wrapper, never a parent containing watch details.
+                    'html[data-weiktube-video-only="0"] :is(#player-container-id,#player-container-id #player,.player-container:has(> #player-container-id:only-child)){min-height:0!important;min-block-size:0!important}'+
+                    'html[data-weiktube-video-only="0"] .player-container:has(> #player-container-id:only-child){height:var(--weiktube-watch-height)!important;max-height:var(--weiktube-watch-height)!important;padding-block:0!important;box-sizing:border-box!important}'+
+                    // Some documents create the title renderer only after playback begins. These
+                    // placeholders occupy regular document flow and disappear in the same paint.
+                    'html[data-weiktube-video-only="0"] ytm-watch:has(#player-container-id):not(:has(ytm-slim-video-information-renderer,ytm-slim-video-metadata-section-renderer,h1,.ytVideoMetadataViewModelTitle,.slim-video-information-title,ytm-item-section-renderer,[role=dialog]))::after{content:"";display:block;margin:16px;height:36px;pointer-events:none;opacity:.12;background:linear-gradient(currentColor,currentColor) left top/64% 12px no-repeat,linear-gradient(currentColor,currentColor) left bottom/32% 9px no-repeat}'+
                     'html[data-weiktube-video-only="0"] #player-container-id,html[data-weiktube-video-only="0"] #player-container-id #player{height:var(--weiktube-watch-height)!important;max-height:var(--weiktube-watch-height)!important;box-sizing:border-box!important;padding-block:0!important}'+
                     'html[data-weiktube-video-only="0"] #player-container-id :is(#player,#movie_player,.html5-video-container){top:0!important;left:0!important}'+
                     '.player-container .player-size,ytm-watch .player-size{height:var(--weiktube-watch-height)!important;max-height:none!important;padding-bottom:0!important;aspect-ratio:auto!important}'+

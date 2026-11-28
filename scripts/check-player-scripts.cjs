@@ -45,6 +45,32 @@ function mediaFixture({ initialVideo = true, ready = 0 } = {}) {
   return { context, video, audio, dispatch, listeners, install, insert() { present = true; } };
 }
 
+test('A recommendation preview cannot consume the selected watch video start', () => {
+  const f=mediaFixture({ready:0});
+  let mounted=false;
+  f.context.document.getElementById=id=>id==='player-container-id'?{querySelector:()=>mounted?f.video:null}:null;
+  f.context.weiktubeSetPlayback(true,true);
+  const preview={...f.video};
+  f.dispatch('loadedmetadata',preview);
+  assert.equal(preview.playCalls,0);
+  mounted=true;
+  f.dispatch('loadedmetadata',f.video);
+  assert.equal(f.video.playCalls,1);
+});
+test('An interrupted start transfers once to the replacement, never past Pause', () => {
+  for(const pause of [false,true]){
+    const f=mediaFixture({ready:4});
+    let active=f.video, reject;
+    const replacement={...active};
+    f.context.document.getElementById=id=>id==='player-container-id'?{querySelector:()=>active}:null;
+    active.play=()=>({then:(ok,fail)=>{reject=fail;}});
+    f.context.weiktubeSetPlayback(true,true);
+    active=replacement;
+    if(pause)f.context.weiktubeSetPlayback(false,false);
+    reject({name:'AbortError'});f.dispatch('loadedmetadata',replacement);
+    assert.equal(replacement.playCalls,pause?0:1);
+  }
+});
 test('Explicit selection requests sound once; later user mute survives playing and mode updates', () => {
   const f = mediaFixture({ ready: 4 });
   f.video.muted = true;

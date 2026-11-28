@@ -1,6 +1,6 @@
 param(
-    [int]$VersionCode = 48,
-    [string]$VersionName = '1.3.31',
+    [int]$VersionCode = 49,
+    [string]$VersionName = '1.3.32',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
     [switch]$Publish,
@@ -12,7 +12,7 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = if ($Preview) { "v$VersionName-preview" } else { "v$VersionName" }
-$expectedMain = '9d50283848d4ff2317e58a98ee9f1f01dfdfe8d4'
+$expectedMain = 'fa3955a50c352ee23e8e9d8c5343f73d2b89149f'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
 $channel = if ($Preview) { 'preview' } else { 'stable' }
 $output = Join-Path $project "dist/$channel-$VersionName"
@@ -25,7 +25,7 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Bei der Rückkehr aus dem Hintergrund fordert Weiktube die Fensterabstände erneut an. Startseite und App-Navigation reservieren den Platz für die Systemleisten auch während des Einblendens.'
+$updateNotes = 'Beim Videostart können andere Videoelemente die Startanforderung des Watch-Players nicht mehr verbrauchen. Wird dessen Element beim Start ausgetauscht, übernimmt der Ersatz einen abgebrochenen Start einmal. Bei Stillstand bietet der Player „Erneut laden“ an. Im Hochformat gibt der Videoplayer eine aus dem Vollbild übernommene Mindesthöhe frei. Nachgeladene Videodetails können so direkt unter dem Bild erscheinen.'
 if ($Preview) { $updateNotes += ' Dies ist eine Vorabveröffentlichung ohne Änderung des regulären Updatekanals.' }
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or
