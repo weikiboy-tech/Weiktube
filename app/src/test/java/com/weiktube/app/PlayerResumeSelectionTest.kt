@@ -31,11 +31,11 @@ class PlayerResumeSelectionTest {
             activity.model.progress.clear()
             player.open(url)
             fun commit() { shadowOf(player.view).webViewClient.onPageCommitVisible(player.view, shadowOf(player.view).lastLoadedUrl) }
-            fun sample(seconds: Double, ready: Int = 4) {
+            fun sample(seconds: Double, ready: Int = 4, frame: Double = -1.0, seeking: Boolean = false) {
                 player.poll()
                 shadowOf(player.view).lastEvaluatedJavascriptCallback.onReceiveValue(org.json.JSONObject.quote(org.json.JSONObject()
                     .put("url", url).put("hasVideo", true).put("mediaReady", ready).put("position", seconds)
-                    .put("duration", 600).put("playing", true).toString()))
+                    .put("resumeFrameTime", frame).put("seeking", seeking).put("duration", 600).put("playing", true).toString()))
             }
             commit(); sample(123.0)
             assertEquals(123.0, activity.model.progress.get(url)!!.seconds, 0.0)
@@ -47,6 +47,15 @@ class PlayerResumeSelectionTest {
             late.onReceiveValue(org.json.JSONObject.quote(org.json.JSONObject().put("url", url).put("hasVideo", true)
                 .put("mediaReady", 4).put("position", 500).put("duration", 600).toString()))
             assertEquals(123.0, activity.model.progress.get(url)!!.seconds, 0.0)
+            assertEquals(0.0, player.resumedAt, 0.0)
+            sample(123.0, frame = 123.0, seeking = true)
+            sample(123.0)
+            sample(123.0, frame = 123.0)
+            assertEquals(0.0, player.resumedAt, 0.0)
+            sample(124.0, frame = 123.2)
+            assertEquals(123.0, player.resumedAt, 0.0)
+            shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(6))
+            assertEquals(0.0, player.resumedAt, 0.0)
             sample(130.0)
             assertEquals(130.0, activity.model.progress.get(url)!!.seconds, 0.0)
             activity.model.clearHistory()
@@ -74,7 +83,18 @@ class PlayerResumeSelectionTest {
             player.close()
             player.open(url)
             assertEquals(123.5, player.position, 0.0)
+            val web = player.view
+            val shadow = shadowOf(web)
+            val loaded = shadow.lastLoadedUrl
+            shadow.webViewClient.onPageCommitVisible(web, loaded)
             player.restartFromBeginning()
+            shadow.lastEvaluatedJavascriptCallback.onReceiveValue("false")
+            assertNotNull(activity.model.progress.get(url))
+            player.restartFromBeginning()
+            assertTrue(shadow.lastEvaluatedJavascript.contains("v.currentTime=0"))
+            shadow.lastEvaluatedJavascriptCallback.onReceiveValue("true")
+            assertSame(web, player.view)
+            assertEquals(loaded, shadow.lastLoadedUrl)
             assertEquals(0.0, player.position, 0.0)
             assertNull(activity.model.progress.get(url))
             player.close(); player.open(url)

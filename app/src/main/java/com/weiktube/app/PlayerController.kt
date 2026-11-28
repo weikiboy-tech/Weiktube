@@ -79,6 +79,10 @@ class PlayerController(
             android.util.Log.i("WeiktubeStart", "session=$selectedAt stage=$stage elapsedMs=${android.os.SystemClock.elapsedRealtime() - selectedAt}")
     }
     private fun beginStartup() {
+        mainHandler.removeCallbacks(hideResumeNotice)
+        resumedAt = 0.0
+        restartInFlight = false
+        firstPlaybackPosition = null
         startupSequence++
         selectedAt = android.os.SystemClock.elapsedRealtime()
         startupEvents.clear()
@@ -146,6 +150,12 @@ class PlayerController(
     private var systemPip = false
     private var lastRecordedTitle = ""
     private var progressSampleValid = false
+    private var pendingStartTarget: Double? = null
+    private var showSavedPositionNotice = false
+    private var firstPlaybackPosition: Double? = null
+    private var restartRevision = 0L
+    private var restartInFlight = false
+    private val hideResumeNotice = Runnable { resumedAt = 0.0 }
     private var awaitingResumePosition: Double? = null
     private var historyRevision = 0
     var resumedAt by mutableDoubleStateOf(0.0); private set
@@ -267,9 +277,35 @@ class PlayerController(
     }
     fun restartFromBeginning() {
         val url = source ?: return
-        activity.model.progress.remove(url)
-        progressSampleValid = false
-        openSelected(url, userInitiated = true, startAt = 0.0)
+        val id = Links.videoId(url) ?: return
+        if (!alive(view) || !documentCommitted || restartInFlight || adHooks[view]?.canPlay != true) return
+        val web = view
+        val document = generation
+        val revision = ++restartRevision
+        restartInFlight = true
+        web.evaluateJavascript("""
+            (function(){
+              if(new URL(location.href).searchParams.get('v')!==${JSONObject.quote(id)})return false;
+              var v=document.querySelector('#player-container-id video')||document.querySelector('video');
+              if(!v||!v.seekable.length||v.seekable.start(0)>0||v.seekable.end(0)<=0)return false;
+              try{v.currentTime=0;return true;}catch(e){return false;}
+            })()
+        """.trimIndent()) { result ->
+            if (!alive(web) || generation != document || restartRevision != revision) return@evaluateJavascript
+            restartRevision++
+            restartInFlight = false
+            if (result != "true") {
+                activity.message("Dieses Video lässt sich gerade nicht zum Anfang spulen.")
+                return@evaluateJavascript
+            }
+            activity.model.progress.remove(url)
+            pendingStartTarget = null
+            resumedAt = 0.0
+            awaitingResumePosition = null
+            firstPlaybackPosition = null
+            progressSampleValid = false
+            position = 0.0
+        }
     }
     val pipReady: Boolean
         get() = !destroyed && rendererAlive && !rendererUnresponsive && documentCommitted && source != null && !loading && error == null &&
@@ -412,6 +448,8 @@ class PlayerController(
                 zoomScriptInstalled = false; zoomRevision++; pendingZoom = null; web.removeCallbacks(zoomFrame)
                 sponsorBlock.reset()
                 generation++; playbackObservationRevision++
+                restartInFlight = false
+                firstPlaybackPosition = null
                 documentCommitted = false
                 pictureReady = false
                 startup("navigation")
@@ -628,7 +666,7 @@ class PlayerController(
             holdGesture(false); supportedHoldRates = emptyList(); supportedQualities = emptyList()
             saveProgress(); progressSampleValid = false; awaitingResumePosition = null
             beginStartup()
-            resumedAt = 0.0
+            pendingStartTarget = null
             invalidateGeometry()
             clearVideoZoom()
             playbackHooks[view]?.prepare()
@@ -693,9 +731,16 @@ class PlayerController(
         isYoutube = id != null; expanded = true; mini = false; error = null
         val remembered = if (startAt == null && !Links.hasStartTime(url)) activity.model.progress.get(url)?.seconds else null
         position = (startAt ?: remembered ?: Links.startSeconds(url).toDouble()).takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
-        resumedAt = remembered ?: 0.0
+        pendingStartTarget = if (id != null) position else null
+        showSavedPositionNotice = remembered != null
         awaitingResumePosition = position.takeIf { it > 0 }
         beginStartup()
+        startup(when {
+            recovery -> "start-recovery"
+            remembered != null -> "start-saved"
+            Links.hasStartTime(url) -> "start-link"
+            else -> "start-default"
+        })
         duration = 0.0; playing = false; loading = true; title = cachedTitle(id); lastRecordedTitle = ""
         videoWidth = 0; videoHeight = 0
         playbackHooks[view]?.prepare()
@@ -751,6 +796,8 @@ class PlayerController(
         val sampleSlot = expanded && !mini && !systemPip
         val polledView = view
         val requestGeneration = generation
+        val sampledRestart = restartRevision
+        val target = pendingStartTarget
         val observationRevision = playbackObservationRevision
         view.evaluateJavascript("""
             (function(){var v=document.querySelector('#player-container-id video')||document.querySelector('video');var h=document.querySelector('.ytVideoMetadataViewModelTitle,h1,.slim-video-information-title');
@@ -764,13 +811,30 @@ class PlayerController(
               var metadata=!h&&window.ytInitialPlayerResponse&&window.ytInitialPlayerResponse.videoDetails;
               if(!metadata||!selectedId||metadata.videoId!==selectedId)metadata=null;
               var matched=selectedId&&data&&data.video_id===selectedId;
+              var target=${target ?: "null"}, frameTime=null;
+              if(target!==null&&v&&!v.seeking&&v.readyState>=2&&Math.abs(v.currentTime-target)<=8){
+                if(typeof v.requestVideoFrameCallback==='function'){
+                  var stamp=v.weiktubeResumeFrame;
+                  if(!stamp||stamp.generation!==$requestGeneration||stamp.target!==target){
+                    stamp=v.weiktubeResumeFrame={generation:$requestGeneration,target:target,pending:false,time:null};
+                  }
+                  frameTime=stamp.time;
+                  if(!stamp.pending&&frameTime===null){
+                    stamp.pending=true;
+                    v.requestVideoFrameCallback(function(now,frame){
+                      stamp.pending=false;
+                      if(!v.seeking&&frame.mediaTime>=target-1&&frame.mediaTime<=target+8)stamp.time=frame.mediaTime;
+                    });
+                  }
+                }else if(!v.paused&&v.videoWidth&&v.videoHeight){frameTime=v.currentTime;}
+              }
               var input=!$pictureReady&&Array.from(document.querySelectorAll('dialog[open],[role="dialog"],[role="alert"],.ytp-error,.ytp-large-play-button,ytm-player-error-message-renderer')).some(function(el){
                 var box=el.getBoundingClientRect(),css=getComputedStyle(el);
                 if(!box.width||!box.height||box.top>=innerHeight||box.bottom<=0||css.visibility==='hidden'||Number(css.opacity)===0)return false;
                 var hit=document.elementFromPoint(Math.max(0,Math.min(innerWidth-1,box.left+box.width/2)),Math.max(0,Math.min(innerHeight-1,box.top+box.height/2)));
                 return !!hit&&el.contains(hit);
               });
-              return JSON.stringify({needsInput:input,mediaTitle:String((matched&&data.title)||(metadata&&metadata.title)||'').slice(0,300),slot:slot,viewportAspect:innerWidth/innerHeight,decodedFallback:!!v&&(typeof v.requestVideoFrameCallback!=='function'||v.paused||!window.WeiktubePlaybackState),mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
+              return JSON.stringify({needsInput:input,resumeFrameTime:frameTime,mediaTitle:String((matched&&data.title)||(metadata&&metadata.title)||'').slice(0,300),slot:slot,viewportAspect:innerWidth/innerHeight,decodedFallback:!!v&&(typeof v.requestVideoFrameCallback!=='function'||v.paused||!window.WeiktubePlaybackState),mediaReady:v?v.readyState:0,seeking:!!v&&v.seeking,ended:!!v&&v.ended,hasVideo:!!v&&v.isConnected,readyState:document.readyState,bodyEmpty:!document.body||document.body.childElementCount===0,
               playing:!!v&&!v.paused&&!v.ended,position:v&&isFinite(v.currentTime)?v.currentTime:0,
               duration:v&&isFinite(v.duration)?v.duration:0,width:v?v.videoWidth:0,height:v?v.videoHeight:0,
               details:!!h&&!!document.querySelector('ytm-slim-owner-renderer,ytm-video-owner-renderer,.slim-owner-icon-and-title'),title:h?h.textContent:(document.title||''),url:location.href});})()
@@ -823,10 +887,30 @@ class PlayerController(
                     videoHeight = value.optInt("height").coerceIn(0, 16384)
                 }
                 // A recognized advertisement must not replace the last content timestamp.
-                if (!isYoutube || adHooks[view]?.blocked != true) {
+                if (sampledRestart == restartRevision && !restartInFlight && (!isYoutube || adHooks[view]?.blocked != true)) {
                     position = value.optDouble("position", position).coerceAtLeast(0.0)
                     duration = value.optDouble("duration", 0.0).coerceAtLeast(0.0)
-                    if (awaitingResumePosition?.let { position >= it - 2 } == true) awaitingResumePosition = null
+                    val validContent = !value.optBoolean("seeking") && value.optInt("mediaReady") >= 2 &&
+                        position.isFinite() && (!isYoutube || adHooks[view]?.canPlay == true)
+                    if (validContent && value.optBoolean("playing")) {
+                        val before = firstPlaybackPosition
+                        if (before != null && position > before && position - before <= 8) {
+                            startup("time-advancing")
+                            val frame = value.optDouble("resumeFrameTime", Double.NaN)
+                            if (target != null && target == pendingStartTarget &&
+                                frame in target - 1..target + 8 && position in target - 1..target + 8 &&
+                                before in target - 1..target + 8) {
+                                pendingStartTarget = null
+                                startup("target-playing")
+                                if (showSavedPositionNotice) {
+                                    resumedAt = target
+                                    mainHandler.postDelayed(hideResumeNotice, 6000)
+                                }
+                            }
+                        }
+                        firstPlaybackPosition = position
+                    } else firstPlaybackPosition = null
+                    if (validContent && awaitingResumePosition?.let { position >= it - 2 } == true) awaitingResumePosition = null
                     progressSampleValid = awaitingResumePosition == null && value.optInt("mediaReady") >= 2 && !value.optBoolean("seeking") &&
                         position.isFinite() && duration.isFinite() && position >= 1 && duration > position &&
                         (!isYoutube || adHooks[view]?.canPlay == true)
@@ -956,6 +1040,7 @@ class PlayerController(
     fun close() {
         if (destroyed || source == null) return
         clearVideoZoom()
+        mainHandler.removeCallbacks(hideResumeNotice)
         mainHandler.removeCallbacks(clearFeedback)
         gestureFeedback = null
         dislikeJob?.cancel()

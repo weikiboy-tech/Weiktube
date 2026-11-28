@@ -1,5 +1,9 @@
 # 1.3.28 – Videoseite nach dem ersten Bild
 
+## 1.3.30
+
+„Fortgesetzt“ erscheint erst nach überprüfter Wiedergabe an der gespeicherten Stelle und verschwindet nach sechs Sekunden. „Von vorne“ spult im laufenden Video zurück.
+
 ## 1.3.29
 
 Beim Videostart liefert die YouTube-Seite die Details direkt. Der interne Miniplayer übernimmt beim Loslassen die aktuelle Ziehposition und animiert aus dem letzten großen Videorechteck. Seine Bedienelemente erscheinen beim Einrasten.

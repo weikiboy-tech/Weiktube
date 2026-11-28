@@ -27,11 +27,13 @@ const presentation = source.match(/internal val WATCH_CHROME = """([\s\S]*?)"""/
     assert.equal(await top('video'),0);
     assert((await top('h1'))>=225 && (await top('h1'))<275);
     await page.locator('h1').evaluate(el => el.remove());
-    const poll = source.split('val observationRevision = playbackObservationRevision')[1]
-      .match(/view\.evaluateJavascript\("""([\s\S]*?)"""/)[1].replace('$pictureReady','true');
+    const pollFor = target => source.split('val observationRevision = playbackObservationRevision')[1]
+      .match(/view\.evaluateJavascript\("""([\s\S]*?)"""/)[1].replace('$pictureReady','true')
+      .replace('${target ?: "null"}',String(target)).replaceAll('$requestGeneration','1');
     await page.evaluate(() => {
       window.ytInitialPlayerResponse={videoDetails:{videoId:'wrong-video',title:'old',author:'old',shortDescription:'old'}};
     });
+    const poll = pollFor(null);
     let snapshot=JSON.parse(await page.evaluate(poll));
     assert.equal(snapshot.mediaTitle,'');
     await page.evaluate(() => {window.ytInitialPlayerResponse.videoDetails.videoId='abcdefghijk';});
@@ -48,6 +50,30 @@ const presentation = source.match(/internal val WATCH_CHROME = """([\s\S]*?)"""/
     assert.equal(await details.evaluate(el => getComputedStyle(el,'::before').content),'none');
     assert((await top('h1'))<275);
     assert.equal(await page.locator('h1').count(),1);
+    // Drive the production poll with controlled media events, including an old frame after seeking.
+    await page.evaluate(() => {
+      const v=document.querySelector('video');
+      for(const [key,value] of Object.entries({currentTime:135, readyState:4, seeking:false})) {
+        Object.defineProperty(v,key,{value,configurable:true});
+      }
+      v.requestVideoFrameCallback=cb=>{window.frameCallback=cb;};
+    });
+    const sampleResume=async () => JSON.parse(await page.evaluate(pollFor(135))).resumeFrameTime;
+    assert.equal(await sampleResume(),null);
+    await page.evaluate(() => window.frameCallback(0,{mediaTime:0}));
+    assert.equal(await sampleResume(),null);
+    await page.evaluate(() => window.frameCallback(0,{mediaTime:135.2}));
+    assert.equal(await sampleResume(),135.2);
+    const restart=source.split('fun restartFromBeginning()')[1].match(/evaluateJavascript\("""([\s\S]*?)"""/)[1]
+      .replace('${JSONObject.quote(id)}','"abcdefghijk"');
+    await page.evaluate(() => {
+      const v=document.querySelector('video');
+      Object.defineProperty(v,'currentTime',{value:135,writable:true});
+      Object.defineProperty(v,'seekable',{value:{length:1,start:()=>0,end:()=>300}});
+    });
+    assert.equal(await page.evaluate(restart),true);
+    assert.equal(await page.locator('video').evaluate(v=>v.currentTime),0);
+    assert.equal(await page.evaluate(restart.replace('abcdefghijk','another-id')),false);
     console.log('PASS portrait wrapper, first media offset, visible details, delayed details, dialog and mini/restore (offline Chromium)');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; });

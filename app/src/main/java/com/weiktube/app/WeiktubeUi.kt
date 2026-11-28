@@ -290,7 +290,7 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                 Surface(Modifier.align(Alignment.BottomStart).padding(8.dp), shape = RoundedCornerShape(12.dp),
                                     color = MaterialTheme.colorScheme.surfaceContainer) {
                                     Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text("An letzter Stelle fortgesetzt", style = MaterialTheme.typography.labelSmall)
+                                        Text("Bei ${PlaybackProgressStore.Entry(p.resumedAt, p.duration).label} fortgesetzt", style = MaterialTheme.typography.labelSmall)
                                         TextButton(onClick = p::restartFromBeginning) { Text("Von vorne") }
                                     }
                                 }
