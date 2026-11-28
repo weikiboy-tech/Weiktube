@@ -1,4 +1,6 @@
-# Weiktube 1.3.26
+# Weiktube 1.3.27
+
+Beim Videostart zeigt Weiktube das Vorschaubild des gewählten Videos. Eine verlorene Filter-Bereitmeldung wird bereits beim Dokument-Commit erneut angefordert. Bei längerem Warten lässt sich der Player manuell erneut laden.
 
 Der Videoplayer richtet die Videofläche früher aus, unterscheidet Dokument und erstes Bild und übernimmt verfügbare Titel früher. Die einmalige Tonfreigabe berücksichtigt bereits laufende Videos.
 

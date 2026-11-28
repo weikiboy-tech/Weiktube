@@ -1,6 +1,6 @@
 param(
-    [int]$VersionCode = 43,
-    [string]$VersionName = '1.3.26',
+    [int]$VersionCode = 44,
+    [string]$VersionName = '1.3.27',
     [string]$ReleaseNotesFile = '',
     [string]$Repository = 'weikiboy-tech/Weiktube',
     [switch]$Publish,
@@ -12,7 +12,7 @@ $project = Split-Path -Parent $PSScriptRoot
 if ($VersionCode -lt 1 -or $VersionName -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw 'A stable version and positive version code are required.' }
 if ($Repository -ne 'weikiboy-tech/Weiktube') { throw 'This reviewed publisher is restricted to weikiboy-tech/Weiktube.' }
 $tag = if ($Preview) { "v$VersionName-preview" } else { "v$VersionName" }
-$expectedMain = 'd19c8022d0b3fb9a2669805e7285c75d1a75fc8b'
+$expectedMain = '15b0b94f1a4903877d4b3ae0a373f5cf965e2aa6'
 $expectedCertificate = 'f484083f7ee443d598c9216c76c3cd028d76d59ad73d6f5abc8ad6ded84eabc3'
 $channel = if ($Preview) { 'preview' } else { 'stable' }
 $output = Join-Path $project "dist/$channel-$VersionName"
@@ -25,7 +25,7 @@ foreach ($file in @($source, $verificationPath, $ReleaseNotesFile)) {
 }
 $notes = Get-Content -LiteralPath $ReleaseNotesFile -Raw -Encoding utf8
 if ([string]::IsNullOrWhiteSpace($notes) -or $notes.Length -gt 10000) { throw 'Release notes must contain 1 to 10000 characters.' }
-$updateNotes = 'Der Videoplayer richtet die Videofläche früher aus, unterscheidet Dokument und erstes Bild und übernimmt verfügbare Titel früher. Die einmalige Tonfreigabe berücksichtigt bereits laufende Videos.'
+$updateNotes = 'Beim Videostart zeigt Weiktube das Vorschaubild des gewählten Videos. Eine verlorene Filter-Bereitmeldung wird bereits beim Dokument-Commit erneut angefordert. Bei längerem Warten lässt sich der Player manuell erneut laden.'
 if ($Preview) { $updateNotes += ' Dies ist eine Vorabveröffentlichung ohne Änderung des regulären Updatekanals.' }
 $build = Get-Content -LiteralPath (Join-Path $project 'app/build.gradle.kts') -Raw -Encoding utf8
 if ($build -notmatch "(?m)^\s*versionCode\s*=\s*$VersionCode\s*$" -or

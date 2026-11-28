@@ -55,6 +55,35 @@ class PlayerControllerLifecycleTest {
         idle()
     }
 
+    @Test fun lostEarlyFilterAcknowledgementIsRequestedAtCommitWithoutReleasingPlayback() {
+        player.destroy()
+        val scripts = mutableListOf<String>()
+        player = PlayerController(activity, webViewFactory = { context -> object : WebView(context) {
+            override fun evaluateJavascript(script: String, resultCallback: android.webkit.ValueCallback<String>?) {
+                scripts += script
+                super.evaluateJavascript(script, resultCallback)
+            }
+        } })
+        activity.player = player
+        player.open(VIDEO_A)
+        val web = player.view
+        val hooks = ReflectionHelpers.getField<Map<WebView, WebViewAdBlock>>(player, "adHooks").getValue(web)
+        ReflectionHelpers.setField(hooks, "active", true)
+        ReflectionHelpers.setField(hooks, "ready", true)
+        client(web).onPageStarted(web, WATCH_A, null)
+        assertFalse(hooks.canPlay)
+        scripts.clear()
+        client(web).onPageCommitVisible(web, WATCH_A)
+        assertTrue(scripts.any { it.contains("weiktube-ad-status-request") })
+        assertFalse(hooks.canPlay)
+        assertFalse(lastScriptRequestsStart())
+        ReflectionHelpers.setField(hooks, "blocked", true)
+        scripts.clear()
+        hooks.requestPendingStatus()
+        assertTrue(scripts.isEmpty())
+        assertFalse(hooks.canPlay)
+    }
+
     @Test fun watchTitleCanArriveBeforeMediaAndIsClearedOnNextSelection() {
         player.open(VIDEO_A)
         finishPage()

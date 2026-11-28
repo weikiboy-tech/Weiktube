@@ -274,23 +274,14 @@ private fun WeiktubeContent(a: MainActivity, model: WeiktubeModel, prefs: Prefer
                                     p.setPresentation(mini || expandingPlayer, dark, landscapeVideo || a.pip, systemPip = a.pip)
                                 })
                             if (full && !movingCard && !a.pip && p.isYoutube && p.error == null) {
-                                if (!p.documentCommitted && p.loading) {
-                                    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-                                        Box(Modifier.fillMaxWidth().then(if (landscapeVideo) Modifier.fillMaxHeight()
-                                            else Modifier.aspectRatio(16f / 9f)).background(Color.Black),
-                                            contentAlignment = Alignment.Center) {
-                                            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                                        }
-                                        if (!landscapeVideo) Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Spacer(Modifier.fillMaxWidth(.72f).height(16.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)))
-                                            Spacer(Modifier.fillMaxWidth(.4f).height(12.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)))
-                                        }
+                                key(p.source, p.startupSequence) {
+                                    val videoId = remember(p.source) { p.source?.let(Links::videoId) }
+                                    if (videoId != null && !p.pictureReady && (p.loading || p.documentCommitted)) {
+                                        WatchStartPreview(videoId, p.title, p.documentCommitted, landscapeVideo, p::retry)
                                     }
-                                } else if (p.documentCommitted && !p.pictureReady) {
-                                    LinearProgressIndicator(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(2.dp))
                                 }
                             }
-                            if (full && !movingCard && !a.pip && !landscapeVideo && p.resumedAt > 0) {
+                            if (full && !movingCard && !a.pip && !landscapeVideo && p.resumedAt > 0 && p.pictureReady) {
                                 Surface(Modifier.align(Alignment.BottomStart).padding(8.dp), shape = RoundedCornerShape(12.dp),
                                     color = MaterialTheme.colorScheme.surfaceContainer) {
                                     Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -422,6 +413,67 @@ private fun HistoryScreen(prefs: Preferences, model: WeiktubeModel, a: MainActiv
         confirmDelete = false
         model.clearHistory()
     })
+}
+
+/** The web document stays attached and loads independently underneath the selected video's poster. */
+@Composable
+internal fun BoxScope.WatchStartPreview(
+    videoId: String,
+    title: String,
+    committed: Boolean,
+    landscape: Boolean,
+    retry: () -> Unit,
+    poster: @Composable () -> Unit = {
+        RemoteThumbnail("https://i.ytimg.com/vi/$videoId/hqdefault.jpg", null, Modifier.fillMaxSize(),
+            shape = RoundedCornerShape(0.dp), fallback = null)
+    },
+) {
+    var showPoster by remember(videoId) { mutableStateOf(true) }
+    var slow by remember(videoId) { mutableStateOf(false) }
+    // Expose consent, manual Play and website errors even when no media frame ever arrives.
+    LaunchedEffect(videoId, committed) {
+        slow = false
+        if (committed) {
+            delay(4000)
+            showPoster = false
+            delay(6000)
+        } else {
+            showPoster = true
+            delay(10000)
+        }
+        slow = true
+    }
+    if (slow) {
+        Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp), shape = RoundedCornerShape(12.dp)) {
+            Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Start dauert länger", style = MaterialTheme.typography.labelMedium)
+                TextButton(onClick = retry) { Text("Erneut laden") }
+            }
+        }
+        return
+    }
+    if (!showPoster && committed) return
+    Column(if (committed) Modifier.fillMaxWidth() else Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+        val bounds = if (landscape) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+        Box(bounds.then(if (committed) Modifier.clickable(onClickLabel = "Player anzeigen") { showPoster = false } else Modifier)) {
+            poster()
+            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.verticalGradient(
+                listOf(Color.Transparent, Color.Black.copy(alpha = .72f)))))
+            Row(Modifier.align(Alignment.BottomStart).padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                Text("Video wird geladen", color = Color.White, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        if (!committed && !landscape) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (title.isNotBlank() && title != "Video") Text(title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleMedium)
+                else Spacer(Modifier.fillMaxWidth(.72f).height(16.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)))
+                Spacer(Modifier.fillMaxWidth(.36f).height(12.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)))
+            }
+        }
+    }
 }
 
 @Composable

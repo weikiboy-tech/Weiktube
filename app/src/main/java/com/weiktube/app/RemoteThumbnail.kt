@@ -125,7 +125,7 @@ fun RemoteThumbnail(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(8.dp),
     contentScale: ContentScale = ContentScale.Crop,
-    fallback: ImageVector = Icons.Rounded.Image
+    fallback: ImageVector? = Icons.Rounded.Image
 ) {
     val bitmap by produceState<Bitmap?>(RemoteImages.cached(url), url) {
         value = RemoteImages.cached(url)
@@ -133,6 +133,6 @@ fun RemoteThumbnail(
     }
     Box(modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
         if (bitmap != null) Image(bitmap!!.asImageBitmap(), description, Modifier.fillMaxSize(), contentScale = contentScale)
-        else Icon(fallback, description, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        else if (fallback != null) Icon(fallback, description, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

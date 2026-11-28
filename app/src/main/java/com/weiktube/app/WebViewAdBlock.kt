@@ -43,7 +43,7 @@ internal class WebViewAdBlock(
                 val event = JSONObject(raw)
                 if (event.optString("token") != token || event.optInt("version") != snapshot.version) return@runCatching
                 when (event.optString("type")) {
-                    "ready" -> if (!blocked) { ready = true; YoutubeAdBlock.engineReady("webview"); onReady() }
+                    "ready" -> if (!blocked && !ready) { ready = true; YoutubeAdBlock.engineReady("webview"); onReady() }
                     "data", "cosmetic" -> if (active) {
                         val count = event.optInt("count", 0)
                         if (count in 1..10000) YoutubeAdBlock.report(event.getString("type"), count)
@@ -93,12 +93,15 @@ internal class WebViewAdBlock(
         blocked = false
     }
 
+    fun requestPendingStatus() {
+        if (!disposed && active && protectedDocument && !ready && !blocked)
+            web.evaluateJavascript("window.dispatchEvent(new CustomEvent('weiktube-ad-status-request'));", null)
+    }
+
     fun pageFinished() {
         val attempt = epoch
         if (active && protectedDocument && !blocked) {
-            // A document-start message can race the platform's onPageStarted callback.
-            // Ask the already-installed runtime for status; never reinstall its hooks here.
-            web.evaluateJavascript("window.dispatchEvent(new CustomEvent('weiktube-ad-status-request'));", null)
+            requestPendingStatus()
             web.postDelayed({
                 if (!disposed && epoch == attempt && !ready && !blocked)
                     fail("YouTube-Werbeschutz ist nicht bereit. Bitte Filter aktualisieren und das Video erneut laden.")

@@ -5,10 +5,24 @@ import json
 
 root = Path(__file__).resolve().parents[1]
 
+preview_review = json.loads((root / "scripts/watch-preview-reviewed-changes.json").read_text(encoding="utf-8"))
+
+def before_watch_preview(name):
+    content = (root / name).read_text(encoding="utf-8")
+    if name in preview_review:
+        review = preview_review[name]
+        for change in review["changes"]:
+            if content.count(change["current"]) != 1:
+                raise SystemExit(name + " watch preview change missing or duplicated")
+            content = content.replace(change["current"], change["previous"], 1)
+        if hashlib.sha256(content.encode()).hexdigest() != review["previousSha256"]:
+            raise SystemExit(name + " differs outside reviewed watch preview changes")
+    return content
+
 start_review = json.loads((root / "scripts/watch-start-reviewed-changes.json").read_text(encoding="utf-8"))
 
 def before_watch_start(name):
-    content = (root / name).read_text(encoding="utf-8")
+    content = before_watch_preview(name)
     if name in start_review:
         review = start_review[name]
         for change in review["changes"]:

@@ -1,3 +1,7 @@
+# 1.3.27 – Vorschau und frühere Startfreigabe
+
+Beim Videostart zeigt Weiktube das Vorschaubild des gewählten Videos. Eine verlorene Filter-Bereitmeldung wird bereits beim Dokument-Commit erneut angefordert. Bei längerem Warten lässt sich der Player manuell erneut laden. [Release und Testumfang](RELEASE-1.3.27.md)
+
 # 1.3.26 – Start normaler Videos
 
 Der Videoplayer richtet die Videofläche früher aus, unterscheidet Dokument und erstes Bild und übernimmt verfügbare Titel früher. Die einmalige Tonfreigabe berücksichtigt bereits laufende Videos. [Messungen und Gerätetest](RELEASE-1.3.26.md)

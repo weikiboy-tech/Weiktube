@@ -68,6 +68,8 @@ class PlayerController(
         private set
     internal var pictureReady by mutableStateOf(false)
         private set
+    internal var startupSequence by mutableLongStateOf(0L)
+        private set
     private var selectedAt = 0L
     private val startupEvents = mutableSetOf<String>()
     private fun startup(stage: String) {
@@ -75,6 +77,7 @@ class PlayerController(
             android.util.Log.i("WeiktubeStart", "session=$selectedAt stage=$stage elapsedMs=${android.os.SystemClock.elapsedRealtime() - selectedAt}")
     }
     private fun beginStartup() {
+        startupSequence++
         selectedAt = android.os.SystemClock.elapsedRealtime()
         startupEvents.clear()
         pictureReady = false
@@ -417,6 +420,7 @@ class PlayerController(
                 if (!acceptsDocument(web, url)) return
                 documentCommitted = true
                 startup("commit")
+                ads.requestPendingStatus()
                 if (isYoutube && selectedDocument(web.url)) acceptWatchTitle(web.title)
                 applyPresentation()
                 playbackHooks[web]?.apply()
@@ -735,7 +739,8 @@ class PlayerController(
     fun poll() {
         if (destroyed || !rendererAlive || source == null || !documentCommitted) return
         refreshSponsorBlock()
-        pollEnhancements()
+        // Quality and rate queries have no media target while the document is still empty.
+        if (videoWidth > 0 && videoHeight > 0) pollEnhancements()
         pollDislikes()
         val landscapeAtRequest = activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val sampledEpoch = geometryEpoch
